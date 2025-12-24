@@ -1,0 +1,8 @@
+[tool.poetry]
+name = "legalcore"
+version = "0.1.0"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.95"
+uvicorn = {extras = ["standard"], version = "^0.22"}

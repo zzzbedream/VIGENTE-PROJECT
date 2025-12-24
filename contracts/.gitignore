@@ -1,0 +1,7 @@
+# .gitignore
+.env
+admin.toml
+.soroban/
+serviceAccountKey.json
+node_modules/
+target/

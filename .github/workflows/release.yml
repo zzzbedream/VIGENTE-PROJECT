@@ -1,0 +1,112 @@
+name: Build and Release (SEP-0055)
+
+on:
+  push:
+    # 1️⃣ Se activa automáticamente al subir un tag (ej: v1.0.1)
+    tags:
+      - "v*"
+  
+  # 2️⃣ O permite dispararlo manualmente desde la pestaña Actions
+  workflow_dispatch:
+    inputs:
+      release_name:
+        description: "Release Version (e.g. v1.0.0)"
+        required: true
+        type: string
+
+# 🔐 PERMISOS CRÍTICOS (Requeridos por SEP-0055)
+permissions:
+  id-token: write
+  contents: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust
+        run: |
+          rustup update
+          rustup target add wasm32-unknown-unknown
+
+      # 3️⃣ Configurar Variables de Entorno (Ajustado para MONOREPO)
+      - name: Set up env vars
+        run: |
+          # Ruta dentro de tu monorepo
+          echo "WASM_FILE=contracts/target/wasm32-unknown-unknown/release/pyme_token_v1.wasm" >> $GITHUB_ENV
+          
+          if [ -n "${{ github.event.inputs.release_name }}" ]; then
+            echo "TAG_NAME=${{ github.event.inputs.release_name }}" >> $GITHUB_ENV
+          else
+            echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
+      # 4️⃣ Instalar Stellar CLI
+      - uses: stellar/stellar-cli@v22.8.1
+        with:
+          version: 22.8.1
+
+      # 5️⃣ Compilar e Inyectar Metadatos (Corazón del SEP-0055)
+      - name: Build and Optimize contract
+        run: |
+          cd contracts
+          
+          # Inyectamos metadatos en el binario
+          stellar contract build \
+            --package pyme_token_v1 \
+            --meta home_domain=vigente.lat \
+            --meta source_repo=github:${{ github.repository }}
+          
+          # Optimizamos el binario para producción
+          stellar contract optimize --wasm target/wasm32-unknown-unknown/release/pyme_token_v1.wasm
+          
+          cd ..
+
+      # 6️⃣ Subir artefacto temporal
+      - name: Upload to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyme_token_v1.wasm
+          path: ${{ env.WASM_FILE }}
+
+      # 7️⃣ Generar la Attestation (La Firma Criptográfica de GitHub)
+      - name: Build Attestation for Release
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: pyme_token_v1.wasm
+          subject-path: ${{ env.WASM_FILE }}
+
+      # 8️⃣ Crear Release en GitHub
+      - name: Make a new Release
+        id: release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const response = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: '${{ env.TAG_NAME }}',
+              target_commitish: '${{ github.sha }}',
+              make_latest: 'true'
+            });
+            const { data } = response;
+            core.setOutput('release_id', data.id);
+
+      # 9️⃣ Subir el WASM compilado al Release
+      - name: Upload to Release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            await github.rest.repos.uploadReleaseAsset({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: '${{ steps.release.outputs.release_id }}',
+              name: path.basename('${{ env.WASM_FILE }}'),
+              data: fs.readFileSync('${{ env.WASM_FILE }}'),
+            });
