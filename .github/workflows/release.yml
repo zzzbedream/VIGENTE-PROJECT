@@ -35,8 +35,8 @@ jobs:
       # 3️⃣ Configurar Variables de Entorno (Ajustado para MONOREPO)
       - name: Set up env vars
         run: |
-          # Ruta dentro de tu monorepo
-          echo "WASM_FILE=contracts/target/wasm32-unknown-unknown/release/pyme_token_v1.wasm" >> $GITHUB_ENV
+          # Ruta dentro de tu monorepo (wasm32v1-none es el nuevo target de Stellar CLI v22+)
+          echo "WASM_FILE=contracts/target/wasm32v1-none/release/pyme_token_v1.wasm" >> $GITHUB_ENV
           
           if [ -n "${{ github.event.inputs.release_name }}" ]; then
             echo "TAG_NAME=${{ github.event.inputs.release_name }}" >> $GITHUB_ENV
@@ -61,7 +61,7 @@ jobs:
             --meta source_repo=github:${{ github.repository }}
           
           # Optimizamos el binario para producción
-          stellar contract optimize --wasm target/wasm32-unknown-unknown/release/pyme_token_v1.wasm
+          stellar contract optimize --wasm target/wasm32v1-none/release/pyme_token_v1.wasm
           
           cd ..
 
