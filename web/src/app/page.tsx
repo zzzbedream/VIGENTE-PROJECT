@@ -1,6 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import { jsPDF } from "jspdf";
+import Image from "next/image";
 
 // Validador de RUT (misma lógica que el backend)
 const RutValidator = {
@@ -87,26 +88,43 @@ export default function Home() {
 
   const addLog = (msg: string) => setLogs(prev => [...prev, `> ${msg}`]);
 
-  const generateCertificate = () => {
+  const generateCertificate = async () => {
     if (!txHash || !scoring) return;
     
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     
-    // Header con fondo verde
-    doc.setFillColor(34, 197, 94);
-    doc.rect(0, 0, pageWidth, 40, 'F');
-    
-    // Logo/Título
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(28);
-    doc.setFont('helvetica', 'bold');
-    doc.text('VIGENTE', pageWidth / 2, 25, { align: 'center' });
-    
-    // Subtítulo
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Certificado de Registro en Blockchain', pageWidth / 2, 33, { align: 'center' });
+    // Cargar logo como base64
+    try {
+      const logoResponse = await fetch('/logo-vigente.png');
+      const logoBlob = await logoResponse.blob();
+      const logoBase64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(logoBlob);
+      });
+      
+      // Header con fondo blanco/gris claro
+      doc.setFillColor(248, 250, 252);
+      doc.rect(0, 0, pageWidth, 50, 'F');
+      
+      // Logo centrado en header
+      doc.addImage(logoBase64, 'PNG', pageWidth / 2 - 35, 8, 70, 25);
+      
+      // Subtítulo
+      doc.setTextColor(100, 100, 100);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Certificado de Registro en Blockchain', pageWidth / 2, 42, { align: 'center' });
+    } catch (e) {
+      // Fallback sin logo
+      doc.setFillColor(34, 197, 94);
+      doc.rect(0, 0, pageWidth, 40, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(28);
+      doc.setFont('helvetica', 'bold');
+      doc.text('VIGENTE', pageWidth / 2, 25, { align: 'center' });
+    }
     
     // Contenido principal
     doc.setTextColor(50, 50, 50);
@@ -249,9 +267,8 @@ const handleBlockchainMint = async () => {
     <div className="min-h-screen bg-[#0d0f11] text-slate-300 font-sans selection:bg-green-500/30">
       {/* NAVBAR AL ESTILO DE LA IMAGEN */}
       <nav className="border-b border-white/5 bg-[#121417] px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-green-500 rounded flex items-center justify-center font-black text-black italic">V</div>
-          <span className="text-xl font-bold tracking-tighter text-white">VIGENTE</span>
+        <div className="flex items-center gap-3">
+          <Image src="/logo-vigente.png" alt="VIGENTE" width={120} height={40} className="h-10 w-auto" />
         </div>
         <div className="flex gap-4 items-center">
             <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10"></div>
@@ -265,13 +282,8 @@ const handleBlockchainMint = async () => {
         
         {/* LOGO CENTRAL Y TÍTULO */}
         <div className="flex flex-col items-center mb-12 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-             <div className="text-6xl mb-4 text-green-500">
-                <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-             </div>
-             <h2 className="text-5xl font-black text-white tracking-tight">VIGENTE</h2>
-             <p className="text-slate-500 mt-2 font-medium tracking-wide">Viblide agoles • Operación Digital</p>
+             <Image src="/logo-vigente.png" alt="VIGENTE" width={280} height={100} className="mb-4" priority />
+             <p className="text-slate-500 mt-2 font-medium tracking-wide">Validación Digital • Operación Blockchain</p>
         </div>
 
         <div className="grid gap-6">
