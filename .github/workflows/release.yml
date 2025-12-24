@@ -72,7 +72,13 @@ jobs:
           name: pyme_token_v1.wasm
           path: ${{ env.WASM_FILE }}
 
-      # 7️⃣ Crear Release en VIGENTE-RELEASES (repo público)
+      # 7️⃣ Generar Attestation (SEP-0055 - CRÍTICO)
+      - name: Generate Build Attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ env.WASM_FILE }}
+
+      # 8️⃣ Crear Release en VIGENTE-RELEASES (repo público)
       - name: Create Release in Public Repo
         id: release
         uses: actions/github-script@v7
@@ -84,7 +90,7 @@ jobs:
               repo: 'VIGENTE-RELEASES',
               tag_name: '${{ env.TAG_NAME }}',
               name: 'VIGENTE Smart Contract ${{ env.TAG_NAME }}',
-              body: `## 🚀 Release ${{ env.TAG_NAME }}\n\n**Build Info:**\n- Compiled with Stellar CLI v22.8.1\n- SEP-0055 Compliant\n- Source commit: ${{ github.sha }}\n\n**Verification:**\nThis release includes GitHub attestation for build provenance.`,
+              body: `## 🚀 Release ${{ env.TAG_NAME }}\n\n**Build Info:**\n- Compiled with Stellar CLI v22.8.1\n- SEP-0055 Compliant\n- Source commit: ${{ github.sha }}\n\n**Verification:**\nThis release includes GitHub attestation for build provenance.\n\n**WASM Hash:** Check attestation in the source repo.`,
               make_latest: 'true'
             });
             core.setOutput('release_id', response.data.id);
