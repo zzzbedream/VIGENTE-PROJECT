@@ -1,0 +1,191 @@
+# =============================================================================
+# PymeToken v2.0 - Build, Attest & Release Workflow
+# =============================================================================
+# Este workflow implementa SEP para verificación de contratos Soroban.
+# Genera attestations criptográficas que prueban que el WASM fue compilado
+# desde este repositorio específico.
+#
+# TRIGGERS:
+#   - Push de tags como v0.0.0, v1.0.0, etc.
+#   - Dispatch manual desde GitHub UI
+# =============================================================================
+
+name: Build and Release
+
+on:
+  push:
+    # 1️⃣ Crear release cuando se pushea un tag como `v0.0.0`
+    tags:
+      - "v*"
+
+  # 2️⃣ Crear release manualmente desde la UI de GitHub
+  workflow_dispatch:
+    inputs:
+      release_name:
+        description: "Release Version (e.g. v0.0.0)"
+        required: true
+        type: string
+
+# 3️⃣ Permisos necesarios para attestations y releases
+permissions:
+  id-token: write
+  contents: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup target add wasm32v1-none
+          cargo version
+          rustc --version
+
+      # 4️⃣ Configurar variables de entorno
+      - name: Set up env vars
+        run: |
+          echo "WASM_FILE=target/wasm32v1-none/release/pyme_token_v1.wasm" >> $GITHUB_ENV
+          echo "WASM_NAME=pyme_token_v1.wasm" >> $GITHUB_ENV
+
+          if [ -n "${{ github.event.inputs.release_name }}" ]; then
+            echo "TAG_NAME=${{ github.event.inputs.release_name }}" >> $GITHUB_ENV
+          else
+            echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
+      # 5️⃣ Instalar Stellar CLI
+      - name: Setup Stellar CLI
+        uses: stellar/stellar-cli@v22.8.1
+        with:
+          version: 22.8.1
+
+      # 6️⃣ Build del contrato con metadata de verificación
+      - name: Build contract with metadata
+        run: |
+          echo "🔨 Building PymeToken v2.0 (Privacy-First Architecture)..."
+          
+          stellar contract build \
+            --meta home_domain=pymetoken.cl \
+            --meta source_repo=github:${{ github.repository }}
+          
+          echo "📊 Build info:"
+          ls -la ${{ env.WASM_FILE }}
+          
+          echo "🔧 Optimizing WASM..."
+          stellar contract optimize --wasm ${{ env.WASM_FILE }}
+          
+          # Reemplazar con versión optimizada
+          file=${{ env.WASM_FILE }}
+          cp "${file%.*}.optimized.wasm" ${{ env.WASM_FILE }}
+          
+          echo "✅ Optimized WASM:"
+          ls -la ${{ env.WASM_FILE }}
+
+      # 7️⃣ Mostrar hash del WASM (para verificación)
+      - name: Display WASM hash
+        run: |
+          echo "📦 WASM Hash (SHA256):"
+          sha256sum ${{ env.WASM_FILE }}
+          
+          echo ""
+          echo "🔗 Stellar WASM Hash:"
+          stellar contract info --wasm ${{ env.WASM_FILE }} || true
+
+      # 8️⃣ Ejecutar tests
+      - name: Run tests
+        run: |
+          echo "🧪 Running unit tests..."
+          cargo test --verbose
+
+      # 9️⃣ Subir WASM a artifacts
+      - name: Upload to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.WASM_NAME }}
+          path: ${{ env.WASM_FILE }}
+          retention-days: 90
+
+      # 🔟 Generar attestation de build (prueba criptográfica)
+      - name: Build Attestation for Release
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.WASM_NAME }}
+          subject-path: ${{ env.WASM_FILE }}
+
+      # 1️⃣1️⃣ Crear Release en GitHub
+      - name: Create Release
+        id: release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const response = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: '${{ env.TAG_NAME }}',
+              name: 'PymeToken ${{ env.TAG_NAME }}',
+              target_commitish: '${{ github.sha }}',
+              make_latest: 'true',
+              body: `## PymeToken ${{ env.TAG_NAME }}
+              
+            ### 🔐 Privacy-First & Low-Cost Architecture
+            
+            Este release incluye el contrato Soroban optimizado con:
+            - ✅ Privacidad: RUTs hasheados (SHA256)
+            - ✅ Bajo costo: Solo eventos, sin storage persistente
+            - ✅ Attestation: Build verificable criptográficamente
+            
+            ### 📦 Archivos
+            - \`pyme_token_v1.wasm\` - Contrato optimizado
+            
+            ### 🔍 Verificación
+            Este WASM tiene attestation de GitHub Actions.
+            Puedes verificar que fue compilado desde este repo usando:
+            \`\`\`
+            https://api.github.com/repos/${{ github.repository }}/attestations/sha256:<wasm_hash>
+            \`\`\`
+            `
+            });
+
+            const { data } = response;
+            core.setOutput('release_id', data.id);
+            console.log(`✅ Release created: ${data.html_url}`);
+
+      # 1️⃣2️⃣ Subir WASM al Release
+      - name: Upload WASM to Release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            await github.rest.repos.uploadReleaseAsset({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: '${{ steps.release.outputs.release_id }}',
+              name: '${{ env.WASM_NAME }}',
+              data: fs.readFileSync('${{ env.WASM_FILE }}'),
+            });
+            
+            console.log('✅ WASM uploaded to release');
+
+      # 1️⃣3️⃣ Resumen final
+      - name: Summary
+        run: |
+          echo "╔═══════════════════════════════════════════════════════════╗"
+          echo "║   ✅ BUILD & RELEASE COMPLETADO                           ║"
+          echo "╚═══════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "📦 Release: ${{ env.TAG_NAME }}"
+          echo "📄 WASM: ${{ env.WASM_NAME }}"
+          echo "🔗 Repo: ${{ github.repository }}"
+          echo "📝 Commit: ${{ github.sha }}"
+          echo ""
+          echo "🔐 Attestation generada - el WASM es verificable"

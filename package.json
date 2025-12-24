@@ -1,0 +1,23 @@
+{
+  "name": "vigente-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo VIGENTE - PymeToken v2.0 (Soroban) + Frontend Next.js",
+  "scripts": {
+    "dev": "npm run dev --prefix web",
+    "dev:web": "npm run dev --prefix web",
+    "build": "npm run build --prefix web",
+    "start": "npm run start --prefix web",
+    "lint": "npm run lint --prefix web",
+    
+    "build:contract": "cd contracts && cargo build --release --target wasm32-unknown-unknown",
+    "test:contract": "cd contracts && cargo test",
+    "optimize:contract": "cd contracts && stellar contract optimize --wasm target/wasm32-unknown-unknown/release/pyme_token_v1.wasm",
+    "deploy:contract": "cd contracts && stellar contract deploy --network testnet --source admin --wasm target/wasm32-unknown-unknown/release/pyme_token_v1.wasm",
+    
+    "smoke-test": "npx tsx web/smoke-test.ts",
+    "setup": "cd web && npm install"
+  },
+  "keywords": ["soroban", "stellar", "blockchain", "nextjs", "monorepo", "pyme"],
+  "license": "MIT"
+}
