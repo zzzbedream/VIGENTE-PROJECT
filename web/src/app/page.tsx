@@ -268,7 +268,7 @@ const handleBlockchainMint = async () => {
         <div className="flex gap-4 items-center">
             <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10"></div>
             <button className="bg-green-500 text-black px-4 py-1.5 rounded font-bold text-xs hover:bg-green-400 transition-colors">
-                SOANG
+                VIGENTE
             </button>
         </div>
       </nav>
@@ -418,10 +418,10 @@ const handleBlockchainMint = async () => {
                 <div className="w-2 h-2 rounded-full bg-red-500"></div>
                 <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
                 <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                <span className="ml-2 text-slate-600 uppercase tracking-tighter">System Terminal</span>
+                <span className="ml-2 text-slate-500 uppercase tracking-tighter">System Terminal</span>
             </div>
             <div className="space-y-1">
-                {logs.length === 0 && <span className="text-slate-700">Inicie validación para ver logs...</span>}
+                {logs.length === 0 && <span className="text-slate-500">Inicie validación para ver logs...</span>}
                 {logs.map((log, i) => (
                     <div key={i} className="text-green-500/80">
                         <span className="text-slate-600 mr-2">[{new Date().toLocaleTimeString()}]</span>
