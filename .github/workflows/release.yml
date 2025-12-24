@@ -30,6 +30,7 @@ jobs:
         run: |
           rustup update
           rustup target add wasm32-unknown-unknown
+          rustup target add wasm32v1-none
 
       # 3️⃣ Configurar Variables de Entorno (Ajustado para MONOREPO)
       - name: Set up env vars
