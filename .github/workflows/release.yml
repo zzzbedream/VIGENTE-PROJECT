@@ -103,11 +103,4 @@ jobs:
               name: 'pyme_token_v1.wasm',
               data: fs.readFileSync('${{ env.WASM_FILE }}'),
             });
-
-      # 9️⃣ Generar Attestation (vinculada al repo público)
-      - name: Build Attestation
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-name: ghcr.io/zzzbedream/vigente-releases/pyme_token_v1.wasm
-          subject-path: ${{ env.WASM_FILE }}
-          push-to-registry: false
+            console.log('✅ Release published to VIGENTE-RELEASES');
