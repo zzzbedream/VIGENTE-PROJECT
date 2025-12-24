@@ -55,10 +55,11 @@ jobs:
           cd contracts
           
           # Inyectamos metadatos en el binario
+          # IMPORTANTE: source_repo debe apuntar al repo donde está la attestation
           stellar contract build \
             --package pyme_token_v1 \
             --meta home_domain=vigente.lat \
-            --meta source_repo=github:zzzbedream/VIGENTE-RELEASES
+            --meta source_repo=github:zzzbedream/VIGENTE-PROJECT
           
           # Optimizamos el binario para producción
           stellar contract optimize --wasm target/wasm32v1-none/release/pyme_token_v1.wasm
