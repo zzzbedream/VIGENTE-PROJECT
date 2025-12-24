@@ -30,7 +30,12 @@ export async function POST(req: Request) {
 
     // 2. CONFIGURACIÓN DE CONEXIÓN
     const server = new rpc.Server(process.env.RPC_URL!);
-    const sourceKey = Keypair.fromSecret(process.env.ADMIN_SECRET!);
+    const adminSecret = process.env.ADMIN_SECRET?.trim();
+    if (!adminSecret) {
+      console.error("❌ ADMIN_SECRET no configurada");
+      return NextResponse.json({ error: "Configuración del servidor incompleta" }, { status: 500 });
+    }
+    const sourceKey = Keypair.fromSecret(adminSecret);
     const account = await server.getAccount(sourceKey.publicKey());
 
     // 3. PREPARAR PARÁMETROS PARA PymeTokenV1
