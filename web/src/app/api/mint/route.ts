@@ -55,8 +55,16 @@ export async function POST(req: Request) {
     const nonce = BigInt(Date.now());
 
     // 4. CONSTRUCCIÓN DE LA TRANSACCIÓN (PymeTokenV1)
+    const contractId = process.env.NEXT_PUBLIC_CONTRACT_ID?.trim();
+    const networkPassphrase = process.env.NETWORK_PASSPHRASE?.trim();
+    
+    if (!contractId || !networkPassphrase) {
+      console.error("❌ CONTRACT_ID o NETWORK_PASSPHRASE no configuradas");
+      return NextResponse.json({ error: "Configuración del servidor incompleta" }, { status: 500 });
+    }
+
     const tx = new TransactionBuilder(account, { fee: "100000" })
-      .addOperation(new Contract(process.env.NEXT_PUBLIC_CONTRACT_ID!).call(
+      .addOperation(new Contract(contractId).call(
         "mint_deal", 
         nativeToScVal(dataHash, { type: 'bytes' }),           // data_hash (32 bytes)
         nativeToScVal(partnerAddress, { type: 'address' }),   // partner
@@ -64,7 +72,7 @@ export async function POST(req: Request) {
         nativeToScVal(nonce, { type: 'i128' })                // nonce
       ))
       .setTimeout(30)
-      .setNetworkPassphrase(process.env.NETWORK_PASSPHRASE!)
+      .setNetworkPassphrase(networkPassphrase)
       .build();
 
     // 5. SIMULAR Y PREPARAR (necesario para Soroban)
