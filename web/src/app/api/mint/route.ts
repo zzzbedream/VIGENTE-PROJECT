@@ -15,8 +15,9 @@ export async function POST(req: Request) {
     const { rut, amount } = body;
     // ... sigue el resto de tu lógica de validación y Stellar
     // 1. VALIDACIÓN DE IDENTIDAD (Backend Guard)
-    if (!RutValidator.validate(rut)) {
-        return NextResponse.json({ error: "RUT con formato o DV inválido" }, { status: 400 });
+    const rutValidation = RutValidator.validateWithError(rut);
+    if (!rutValidation.valid) {
+        return NextResponse.json({ error: rutValidation.error }, { status: 400 });
     }
 
     // 1.a Consentimiento (Ley Fintech) - TODO: Sprint 3 - integrar LegalCore

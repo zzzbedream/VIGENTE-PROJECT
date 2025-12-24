@@ -1,6 +1,74 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { jsPDF } from "jspdf";
+
+// Validador de RUT (misma lógica que el backend)
+const RutValidator = {
+  clean: (rut: string): string => {
+    return rut.replace(/[^0-9kK\-]/g, '').toUpperCase();
+  },
+
+  validateFormat: (rut: string): { valid: boolean; error?: string } => {
+    const cleanRut = RutValidator.clean(rut);
+    
+    if (!cleanRut.includes('-')) {
+      return { valid: false, error: "Formato inválido. Usa el formato: 12345678-K" };
+    }
+
+    const parts = cleanRut.split('-');
+    if (parts.length !== 2) {
+      return { valid: false, error: "Formato inválido. Usa el formato: 12345678-K" };
+    }
+
+    const [num, dv] = parts;
+
+    if (!/^\d{7,8}$/.test(num)) {
+      return { valid: false, error: "El RUT debe tener 7 u 8 dígitos antes del guión" };
+    }
+
+    if (!/^[0-9K]$/.test(dv)) {
+      return { valid: false, error: "El dígito verificador debe ser un número (0-9) o K" };
+    }
+
+    return { valid: true };
+  },
+
+  validate: (rut: string): boolean => {
+    const formatCheck = RutValidator.validateFormat(rut);
+    if (!formatCheck.valid) return false;
+
+    const cleanRut = RutValidator.clean(rut);
+    const [num, dv] = cleanRut.split('-');
+
+    let sum = 0;
+    let mul = 2;
+
+    for (let i = num.length - 1; i >= 0; i--) {
+      sum += parseInt(num.charAt(i)) * mul;
+      mul = mul === 7 ? 2 : mul + 1;
+    }
+
+    const expected = 11 - (sum % 11);
+    let validDv: string;
+    
+    if (expected === 11) validDv = '0';
+    else if (expected === 10) validDv = 'K';
+    else validDv = expected.toString();
+
+    return validDv === dv.toUpperCase();
+  },
+
+  validateWithError: (rut: string): { valid: boolean; error?: string } => {
+    const formatCheck = RutValidator.validateFormat(rut);
+    if (!formatCheck.valid) return formatCheck;
+
+    if (!RutValidator.validate(rut)) {
+      return { valid: false, error: "Dígito verificador incorrecto. Verifica tu RUT" };
+    }
+
+    return { valid: true };
+  }
+};
 
 
 export default function Home() {
@@ -10,6 +78,12 @@ export default function Home() {
   const [scoring, setScoring] = useState<any>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [txHash, setTxHash] = useState<string | null>(null);
+
+  // Validación en tiempo real del RUT
+  const rutValidation = useMemo(() => {
+    if (!rut) return { valid: false, error: undefined };
+    return RutValidator.validateWithError(rut);
+  }, [rut]);
 
   const addLog = (msg: string) => setLogs(prev => [...prev, `> ${msg}`]);
 
@@ -114,7 +188,12 @@ export default function Home() {
   };
 
   const handleSIIValidation = () => {
-    if (!rut.includes("-")) return alert("Ingresa RUT con guion (ej: 78043412-0)");
+    // Validar RUT antes de continuar
+    if (!rutValidation.valid) {
+      addLog(`❌ ${rutValidation.error || "RUT inválido"}`);
+      return;
+    }
+    
     setIsLoading(true);
     addLog("📡 Estableciendo túnel seguro con SII...");
     
@@ -204,17 +283,36 @@ const handleBlockchainMint = async () => {
                     <span className="text-green-500">01</span> VALIDAR CREDENCIALES
                 </h3>
                 <div className="grid md:grid-cols-2 gap-4">
-                    <input 
-                        type="text" 
-                        placeholder="RUT Empresa" 
-                        className="bg-black/40 border border-white/10 p-4 rounded-lg focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-all text-white"
-                        value={rut}
-                        onChange={(e) => setRut(e.target.value)}
-                    />
+                    <div className="flex flex-col gap-2">
+                        <input 
+                            type="text" 
+                            placeholder="Ej: 12345678-K" 
+                            maxLength={12}
+                            className={`bg-black/40 border p-4 rounded-lg outline-none transition-all text-white ${
+                              rut && !rutValidation.valid 
+                                ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500' 
+                                : rut && rutValidation.valid
+                                  ? 'border-green-500 focus:border-green-500 focus:ring-1 focus:ring-green-500'
+                                  : 'border-white/10 focus:border-green-500 focus:ring-1 focus:ring-green-500'
+                            }`}
+                            value={rut}
+                            onChange={(e) => setRut(e.target.value)}
+                        />
+                        {rut && rutValidation.error && (
+                          <p className="text-red-400 text-xs flex items-center gap-1">
+                            <span>⚠️</span> {rutValidation.error}
+                          </p>
+                        )}
+                        {rut && rutValidation.valid && (
+                          <p className="text-green-400 text-xs flex items-center gap-1">
+                            <span>✓</span> RUT válido
+                          </p>
+                        )}
+                    </div>
                     <button 
                         onClick={handleSIIValidation}
-                        disabled={isLoading || step !== 1}
-                        className="bg-green-600 hover:bg-green-500 disabled:bg-slate-800 text-black font-black py-4 rounded-lg transition-all"
+                        disabled={isLoading || step !== 1 || !rutValidation.valid}
+                        className="bg-green-600 hover:bg-green-500 disabled:bg-slate-800 disabled:cursor-not-allowed text-black font-black py-4 rounded-lg transition-all"
                     >
                         {isLoading ? "PROCESANDO..." : "VALIDAR EN SII"}
                     </button>
