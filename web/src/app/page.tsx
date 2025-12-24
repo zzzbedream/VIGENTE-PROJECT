@@ -94,37 +94,32 @@ export default function Home() {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     
-    // Cargar logo como base64
-    try {
-      const logoResponse = await fetch('/logo-vigente.png');
-      const logoBlob = await logoResponse.blob();
-      const logoBase64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(logoBlob);
-      });
-      
-      // Header con fondo blanco/gris claro
-      doc.setFillColor(248, 250, 252);
-      doc.rect(0, 0, pageWidth, 50, 'F');
-      
-      // Logo centrado en header
-      doc.addImage(logoBase64, 'PNG', pageWidth / 2 - 35, 8, 70, 25);
-      
-      // Subtítulo
-      doc.setTextColor(100, 100, 100);
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.text('Certificado de Registro en Blockchain', pageWidth / 2, 42, { align: 'center' });
-    } catch (e) {
-      // Fallback sin logo
-      doc.setFillColor(34, 197, 94);
-      doc.rect(0, 0, pageWidth, 40, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(28);
-      doc.setFont('helvetica', 'bold');
-      doc.text('VIGENTE', pageWidth / 2, 25, { align: 'center' });
-    }
+    // Header con fondo blanco
+    doc.setFillColor(248, 250, 252);
+    doc.rect(0, 0, pageWidth, 50, 'F');
+    
+    // Logo texto estilizado (simulando el logo)
+    // Check azul oscuro
+    doc.setDrawColor(30, 58, 95);
+    doc.setLineWidth(2);
+    doc.line(pageWidth/2 - 40, 22, pageWidth/2 - 30, 32);
+    
+    // Check verde
+    doc.setDrawColor(34, 197, 94);
+    doc.setLineWidth(2.5);
+    doc.line(pageWidth/2 - 30, 32, pageWidth/2 - 10, 12);
+    
+    // Texto VIGENTE
+    doc.setTextColor(30, 58, 95);
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.text('VIGENTE', pageWidth / 2 + 5, 28);
+    
+    // Subtítulo
+    doc.setTextColor(100, 100, 100);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Certificado de Registro en Blockchain', pageWidth / 2, 42, { align: 'center' });
     
     // Contenido principal
     doc.setTextColor(50, 50, 50);
@@ -268,7 +263,7 @@ const handleBlockchainMint = async () => {
       {/* NAVBAR AL ESTILO DE LA IMAGEN */}
       <nav className="border-b border-white/5 bg-[#121417] px-6 py-4 flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <Image src="/logo-vigente.png" alt="VIGENTE" width={120} height={40} className="h-10 w-auto" />
+          <Image src="/logo-vigente.svg" alt="VIGENTE" width={140} height={45} className="h-10 w-auto" />
         </div>
         <div className="flex gap-4 items-center">
             <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10"></div>
@@ -282,7 +277,7 @@ const handleBlockchainMint = async () => {
         
         {/* LOGO CENTRAL Y TÍTULO */}
         <div className="flex flex-col items-center mb-12 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-             <Image src="/logo-vigente.png" alt="VIGENTE" width={280} height={100} className="mb-4" priority />
+             <Image src="/logo-vigente.svg" alt="VIGENTE" width={320} height={110} className="mb-4" priority />
              <p className="text-slate-500 mt-2 font-medium tracking-wide">Validación Digital • Operación Blockchain</p>
         </div>
 
