@@ -301,7 +301,30 @@ MIT © 2025 VIGENTE
 
 ---
 
-## 🔗 Links
+## �️ Roadmap
+
+### Phase 1: MVP (Current - Hackathon) ✅
+- [x] Custom Soroban smart contract
+- [x] SEP-0055 Build Verification
+- [x] Privacy-first architecture (RUT never on-chain)
+- [x] Production deployment on Vercel
+
+### Phase 2: Security Hardening (Q1 2026)
+- [ ] Migration to [OpenZeppelin Stellar Contracts](https://github.com/OpenZeppelin/stellar-contracts)
+- [ ] RWA Token (ERC-3643) for KYC/AML compliance
+- [ ] Role-Based Access Control (RBAC)
+- [ ] Pausable functionality for regulatory emergencies
+- [ ] Formal verification by Certora
+
+### Phase 3: Production (Q2 2026)
+- [ ] Mainnet deployment
+- [ ] Integration with Chilean financial regulators (CMF)
+- [ ] Multi-signature governance
+- [ ] Real-time compliance monitoring
+
+---
+
+## �🔗 Links
 
 - **Live Demo**: [Coming Soon]
 - **Stellar Expert**: [View Contract](https://stellar.expert/explorer/testnet/contract/CDFA64ESMY2MWBBDVLKJJPQ3TMIBSBDGJGVUSGHCVHZDHCTJOUNOANG2)
