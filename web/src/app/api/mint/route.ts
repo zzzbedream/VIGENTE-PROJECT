@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { Keypair, Contract, rpc, TransactionBuilder, Networks, nativeToScVal, xdr } from "@stellar/stellar-sdk";
+import { Keypair, Contract, rpc, TransactionBuilder, nativeToScVal } from "@stellar/stellar-sdk";
 import { RutValidator } from "../../lib/rut-validator";
-import { createHmac } from "crypto";
 
 export async function POST(req: Request) {
   try {
@@ -13,16 +12,14 @@ export async function POST(req: Request) {
     }
 
     const { rut, amount } = body;
-    // ... sigue el resto de tu lógica de validación y Stellar
+    
     // 1. VALIDACIÓN DE IDENTIDAD (Backend Guard)
     const rutValidation = RutValidator.validateWithError(rut);
     if (!rutValidation.valid) {
         return NextResponse.json({ error: rutValidation.error }, { status: 400 });
     }
 
-    // 1.a Consentimiento (Ley Fintech) - TODO: Sprint 3 - integrar LegalCore
-    // Por ahora saltamos la verificación de consentimiento
-
+    // 1.a Verificar RUT autorizado
     const authorized = process.env.AUTHORIZED_RUTS?.split(",") || [];
     if (!authorized.includes(RutValidator.clean(rut))) {
         return NextResponse.json({ error: "RUT no autorizado en el sistema Vigente" }, { status: 403 });
@@ -38,23 +35,12 @@ export async function POST(req: Request) {
     const sourceKey = Keypair.fromSecret(adminSecret);
     const account = await server.getAccount(sourceKey.publicKey());
 
-    // 3. PREPARAR PARÁMETROS PARA PymeTokenV1
-    // Firma: mint_deal(data_hash: BytesN<32>, partner: Address, amount: i128, nonce: i128)
-    
-    // 3.1 data_hash: HMAC-SHA256 del RUT (privacidad - el RUT nunca va on-chain)
-    const hashSecret = process.env.ADMIN_SECRET || "default-hash-secret";
-    const dataHash = createHmac('sha256', hashSecret).update(rut).digest();
-    
-    // 3.2 partner: La dirección del admin que firma
-    const partnerAddress = sourceKey.publicKey();
-    
-    // 3.3 amount: Monto en stroops (del body o default 5M = 0.5 XLM)
+    // 3. PREPARAR PARÁMETROS PARA CONTRATO V1
+    // Firma del contrato v1: mint_deal(rut: String, amount: i128) -> u64
+    const cleanRut = RutValidator.clean(rut);
     const mintAmount = BigInt(amount || 5000000);
-    
-    // 3.4 nonce: Timestamp para idempotencia
-    const nonce = BigInt(Date.now());
 
-    // 4. CONSTRUCCIÓN DE LA TRANSACCIÓN (PymeTokenV1)
+    // 4. CONSTRUCCIÓN DE LA TRANSACCIÓN
     const contractId = process.env.NEXT_PUBLIC_CONTRACT_ID?.trim();
     const networkPassphrase = process.env.NETWORK_PASSPHRASE?.trim();
     
@@ -66,10 +52,8 @@ export async function POST(req: Request) {
     const tx = new TransactionBuilder(account, { fee: "100000" })
       .addOperation(new Contract(contractId).call(
         "mint_deal", 
-        xdr.ScVal.scvBytes(dataHash),                         // data_hash: BytesN<32>
-        nativeToScVal(partnerAddress, { type: 'address' }),   // partner
-        nativeToScVal(mintAmount, { type: 'i128' }),          // amount
-        nativeToScVal(nonce, { type: 'i128' })                // nonce
+        nativeToScVal(cleanRut, { type: 'string' }),   // rut: String
+        nativeToScVal(mintAmount, { type: 'i128' })    // amount: i128
       ))
       .setTimeout(30)
       .setNetworkPassphrase(networkPassphrase)
@@ -85,16 +69,15 @@ export async function POST(req: Request) {
     const sendResponse = await server.sendTransaction(preparedTx);
 
     // En Soroban, el éxito inicial es siempre "PENDING"
-    // Si es "ERROR", "DUPLICATE" o "TRY_AGAIN_LATER", algo salió mal
     if (sendResponse.status !== "PENDING") {
-        console.error("❌ Transacción rechazada o duplicada:", sendResponse);
+        console.error("❌ Transacción rechazada:", sendResponse);
         return NextResponse.json({ 
             error: `La transacción no pudo ser procesada: ${sendResponse.status}`,
             details: sendResponse 
         }, { status: 400 });
     }
 
-    // Si llegamos aquí, status es "PENDING", lo cual es el "Happy Path" inicial
+    // Happy Path - transacción enviada
     return NextResponse.json({ 
         success: true, 
         hash: sendResponse.hash,
