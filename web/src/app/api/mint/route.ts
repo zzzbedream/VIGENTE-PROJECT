@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { Keypair, Contract, rpc, TransactionBuilder, Networks, nativeToScVal } from "@stellar/stellar-sdk";
+import { Keypair, Contract, rpc, TransactionBuilder, Networks, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { RutValidator } from "../../lib/rut-validator";
 import { createHmac } from "crypto";
 
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
     const tx = new TransactionBuilder(account, { fee: "100000" })
       .addOperation(new Contract(contractId).call(
         "mint_deal", 
-        nativeToScVal(dataHash, { type: 'bytes' }),           // data_hash (32 bytes)
+        xdr.ScVal.scvBytes(dataHash),                         // data_hash: BytesN<32>
         nativeToScVal(partnerAddress, { type: 'address' }),   // partner
         nativeToScVal(mintAmount, { type: 'i128' }),          // amount
         nativeToScVal(nonce, { type: 'i128' })                // nonce
