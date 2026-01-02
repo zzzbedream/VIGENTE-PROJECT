@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { Keypair, Contract, rpc, TransactionBuilder, nativeToScVal } from "@stellar/stellar-sdk";
+import { Keypair, Contract, rpc, TransactionBuilder, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { RutValidator } from "../../lib/rut-validator";
+import { createHmac } from "crypto";
 
 export async function POST(req: Request) {
   try {
@@ -35,10 +36,18 @@ export async function POST(req: Request) {
     const sourceKey = Keypair.fromSecret(adminSecret);
     const account = await server.getAccount(sourceKey.publicKey());
 
-    // 3. PREPARAR PARÁMETROS PARA CONTRATO V1
-    // Firma del contrato v1: mint_deal(rut: String, amount: i128) -> u64
-    const cleanRut = RutValidator.clean(rut);
+    // 3. PREPARAR PARÁMETROS PARA CONTRATO V2
+    // Firma: mint_deal(data_hash: BytesN<32>, partner: Address, amount: i128, nonce: i128)
+    
+    // 3.1 data_hash: SHA256 del RUT (privacidad)
+    const dataHash = createHmac('sha256', adminSecret).update(rut).digest();
+    
+    // 3.2 partner: Dirección del admin
+    const partnerAddress = sourceKey.publicKey();
+    
+    // 3.3 amount y nonce
     const mintAmount = BigInt(amount || 5000000);
+    const nonce = BigInt(Date.now());
 
     // 4. CONSTRUCCIÓN DE LA TRANSACCIÓN
     const contractId = process.env.NEXT_PUBLIC_CONTRACT_ID?.trim();
@@ -52,8 +61,10 @@ export async function POST(req: Request) {
     const tx = new TransactionBuilder(account, { fee: "100000" })
       .addOperation(new Contract(contractId).call(
         "mint_deal", 
-        nativeToScVal(cleanRut, { type: 'string' }),   // rut: String
-        nativeToScVal(mintAmount, { type: 'i128' })    // amount: i128
+        xdr.ScVal.scvBytes(dataHash),                         // data_hash: BytesN<32>
+        nativeToScVal(partnerAddress, { type: 'address' }),   // partner: Address
+        nativeToScVal(mintAmount, { type: 'i128' }),          // amount: i128
+        nativeToScVal(nonce, { type: 'i128' })                // nonce: i128
       ))
       .setTimeout(30)
       .setNetworkPassphrase(networkPassphrase)
