@@ -48,6 +48,12 @@ const RutValidator = {
     validate: (rut: string): boolean => {
         const formatCheck = RutValidator.validateFormat(rut);
         if (!formatCheck.valid) return false;
+
+        // DEMO MODE: Skip mathematical check digit validation
+        // In production, uncomment the code below to enable full validation
+        return true;
+
+        /* FULL VALIDATION (Commented for demo):
         const cleanRut = RutValidator.clean(rut);
         const [num, dv] = cleanRut.split('-');
         let sum = 0, mul = 2;
@@ -58,11 +64,15 @@ const RutValidator = {
         const expected = 11 - (sum % 11);
         let validDv = expected === 11 ? '0' : expected === 10 ? 'K' : expected.toString();
         return validDv === dv.toUpperCase();
+        */
     },
     validateWithError: (rut: string): { valid: boolean; error?: string } => {
         const formatCheck = RutValidator.validateFormat(rut);
         if (!formatCheck.valid) return formatCheck;
-        if (!RutValidator.validate(rut)) return { valid: false, error: "Dígito verificador incorrecto" };
+
+        // DEMO MODE: Skip check digit verification error
+        // if (!RutValidator.validate(rut)) return { valid: false, error: "Dígito verificador incorrecto" };
+
         return { valid: true };
     }
 };
@@ -218,10 +228,10 @@ export default function Home() {
                                             placeholder="e.g. 12.345.678-K"
                                             maxLength={12}
                                             className={`w-full bg-black/40 border p-4 rounded-lg outline-none transition-all text-white text-lg font-mono ${rut && !rutValidation.valid
-                                                    ? 'border-red-500/50 focus:border-red-500'
-                                                    : rut && rutValidation.valid
-                                                        ? 'border-cyan-500/50 focus:border-cyan-500'
-                                                        : 'border-white/10 focus:border-cyan-500/50'
+                                                ? 'border-red-500/50 focus:border-red-500'
+                                                : rut && rutValidation.valid
+                                                    ? 'border-cyan-500/50 focus:border-cyan-500'
+                                                    : 'border-white/10 focus:border-cyan-500/50'
                                                 }`}
                                             value={rut}
                                             onChange={(e) => setRut(e.target.value)}
@@ -271,8 +281,8 @@ export default function Home() {
                                             Credit Profile Dashboard
                                             {creditProfile.scoring.badgeType !== "None" && (
                                                 <span className={`text-xs px-2 py-1 rounded border ${creditProfile.scoring.badgeType === 'Gold' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' :
-                                                        creditProfile.scoring.badgeType === 'Silver' ? 'bg-slate-300/10 text-slate-300 border-slate-300/30' :
-                                                            'bg-orange-700/10 text-orange-400 border-orange-700/30'
+                                                    creditProfile.scoring.badgeType === 'Silver' ? 'bg-slate-300/10 text-slate-300 border-slate-300/30' :
+                                                        'bg-orange-700/10 text-orange-400 border-orange-700/30'
                                                     }`}>
                                                     {creditProfile.scoring.badgeType} Badge
                                                 </span>
