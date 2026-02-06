@@ -13,14 +13,14 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
-        const userId = searchParams.get("userId");
+        const rut = searchParams.get("rut") || searchParams.get("userId");
 
-        if (!userId) {
-            return NextResponse.json({ error: "userId is required" }, { status: 400 });
+        if (!rut) {
+            return NextResponse.json({ error: "rut is required" }, { status: 400 });
         }
 
         // 1. Obtener datos del Oráculo (MoneyGram)
-        const oracleResponse = await fetchOracleData(userId);
+        const oracleResponse = await fetchOracleData(rut);
 
         if (!oracleResponse) {
             // Retornamos 200 pero indicando que no hay datos,
@@ -39,7 +39,7 @@ export async function GET(req: Request) {
 
         // 3. Generar Firma Mock (Simulando firma ed25519 del oráculo)
         // En producción esto sería el firmado real con la llave privada del Oráculo
-        const payloadStart = `${userId}:${scoreResult.totalScore}:${scoreResult.tier}`;
+        const payloadStart = `${rut}:${scoreResult.totalScore}:${scoreResult.tier}`;
         const signature = crypto.createHmac('sha256', 'oracle-secret-key-mock')
             .update(payloadStart)
             .digest('hex');

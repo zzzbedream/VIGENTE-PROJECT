@@ -222,6 +222,48 @@ function generateFailTransactions(): MoneyGramTransaction[] {
  * const txEmpty = await fetchUserTransactions('unknown');
  * ```
  */
+/**
+ * Mapea un RUT chileno a un userId de prueba.
+ * Esto permite que el demo funcione con RUTs reales.
+ */
+function mapRutToUserId(rut: string): string {
+  // Limpiar RUT (solo números y K)
+  const cleanRut = rut.replace(/[^0-9kK]/g, '').toUpperCase();
+
+  // Obtener último dígito del número (antes del verificador)
+  const rutNumber = cleanRut.split('-')[0] || cleanRut.slice(0, -1);
+  const lastDigit = rutNumber.charAt(rutNumber.length - 1);
+
+  // RUTs de prueba específicos (mapeo directo)
+  const testRuts: Record<string, string> = {
+    '223423423': 'user_tier_a',     // 22.342.342-3 -> Tier A
+    '12345671K': 'user_tier_a',     // 12.345.671-K -> Tier A
+    '98765435': 'user_tier_b',      // 9.876.543-5 -> Tier B
+    '11111111K': 'user_tier_b',     // 11.111.111-K -> Tier B
+    '555555559': 'user_fail',       // 5.555.555-9 -> Fail
+    '999999990': 'user_fail',       // 9.999.999-0 -> Fail
+  };
+
+  // Primero intentar mapeo directo
+  if (testRuts[cleanRut]) {
+    return testRuts[cleanRut];
+  }
+
+  // Si no está en la lista, usar lógica por último dígito (para demos rápidos)
+  // Dígitos 1, 2, 3 -> Tier A
+  if (['1', '2', '3'].includes(lastDigit)) {
+    return 'user_tier_a';
+  }
+
+  // Dígitos 4, 5, 6 -> Tier B
+  if (['4', '5', '6'].includes(lastDigit)) {
+    return 'user_tier_b';
+  }
+
+  // Dígitos 7, 8, 9, 0, K -> Fail
+  return 'user_fail';
+}
+
 export async function fetchUserTransactions(
   userId: string
 ): Promise<MoneyGramTransaction[]> {
@@ -230,7 +272,12 @@ export async function fetchUserTransactions(
     setTimeout(resolve, 200 + Math.random() * 300)
   );
 
-  switch (userId.toLowerCase()) {
+  // Si viene un RUT (contiene guión o dígitos), mapearlo
+  const mappedUserId = userId.includes('-') || /^\d/.test(userId)
+    ? mapRutToUserId(userId)
+    : userId.toLowerCase();
+
+  switch (mappedUserId) {
     case 'user_tier_a':
       return generateTierATransactions();
 
@@ -260,23 +307,28 @@ export async function fetchUserProfile(
     setTimeout(resolve, 100 + Math.random() * 200)
   );
 
+  // Si viene un RUT, mapearlo
+  const mappedUserId = userId.includes('-') || /^\d/.test(userId)
+    ? mapRutToUserId(userId)
+    : userId.toLowerCase();
+
   const profiles: Record<string, UserProfile> = {
     'user_tier_a': {
-      id: 'user_tier_a',
+      id: mappedUserId,
       name: 'María García',
       kycLevel: 3,
       country: 'CL',
       registeredAt: getRelativeDate(365), // Hace 1 año
     },
     'user_tier_b': {
-      id: 'user_tier_b',
+      id: mappedUserId,
       name: 'Carlos Rodríguez',
       kycLevel: 2,
       country: 'CL',
       registeredAt: getRelativeDate(180), // Hace 6 meses
     },
     'user_fail': {
-      id: 'user_fail',
+      id: mappedUserId,
       name: 'Ana López',
       kycLevel: 1,
       country: 'CL',
@@ -284,7 +336,7 @@ export async function fetchUserProfile(
     },
   };
 
-  return profiles[userId.toLowerCase()] || null;
+  return profiles[mappedUserId] || null;
 }
 
 /**
