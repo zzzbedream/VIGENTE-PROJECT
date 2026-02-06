@@ -2,437 +2,400 @@
 import { useState, useMemo } from "react";
 import { jsPDF } from "jspdf";
 import Image from "next/image";
+import { TransactionHistoryChart } from "../components/TransactionHistoryChart";
 
-// Validador de RUT (misma lógica que el backend)
+// -----------------------------------------------------------------------------
+// TYPES
+// -----------------------------------------------------------------------------
+interface CreditProfile {
+    found: boolean;
+    profile: {
+        name: string;
+        country: string;
+        kycLevel: number;
+        registeredAt: string;
+    };
+    scoring: {
+        totalScore: number;
+        tier: number;
+        badgeType: "Gold" | "Silver" | "Bronze" | "None";
+        maxLoanAmount: number;
+        breakdown: {
+            volumePoints: number;
+            consistencyPoints: number;
+            frequencyPoints: number;
+        };
+    };
+    history: any[];
+    oracleSignature: string;
+}
+
+// -----------------------------------------------------------------------------
+// VALIDATOR (RUT - CHILE)
+// -----------------------------------------------------------------------------
 const RutValidator = {
-  clean: (rut: string): string => {
-    return rut.replace(/[^0-9kK\-]/g, '').toUpperCase();
-  },
-
-  validateFormat: (rut: string): { valid: boolean; error?: string } => {
-    const cleanRut = RutValidator.clean(rut);
-    
-    if (!cleanRut.includes('-')) {
-      return { valid: false, error: "Formato inválido. Usa el formato: 12345678-K" };
+    clean: (rut: string): string => rut.replace(/[^0-9kK\-]/g, '').toUpperCase(),
+    validateFormat: (rut: string): { valid: boolean; error?: string } => {
+        const cleanRut = RutValidator.clean(rut);
+        if (!cleanRut.includes('-')) return { valid: false, error: "Formato inválido. Usa el formato: 12345678-K" };
+        const parts = cleanRut.split('-');
+        if (parts.length !== 2) return { valid: false, error: "Formato inválido. Usa el formato: 12345678-K" };
+        const [num, dv] = parts;
+        if (!/^\d{7,8}$/.test(num)) return { valid: false, error: "El RUT debe tener 7 u 8 dígitos antes del guión" };
+        if (!/^[0-9K]$/.test(dv)) return { valid: false, error: "El dígito verificador debe ser un número (0-9) o K" };
+        return { valid: true };
+    },
+    validate: (rut: string): boolean => {
+        const formatCheck = RutValidator.validateFormat(rut);
+        if (!formatCheck.valid) return false;
+        const cleanRut = RutValidator.clean(rut);
+        const [num, dv] = cleanRut.split('-');
+        let sum = 0, mul = 2;
+        for (let i = num.length - 1; i >= 0; i--) {
+            sum += parseInt(num.charAt(i)) * mul;
+            mul = mul === 7 ? 2 : mul + 1;
+        }
+        const expected = 11 - (sum % 11);
+        let validDv = expected === 11 ? '0' : expected === 10 ? 'K' : expected.toString();
+        return validDv === dv.toUpperCase();
+    },
+    validateWithError: (rut: string): { valid: boolean; error?: string } => {
+        const formatCheck = RutValidator.validateFormat(rut);
+        if (!formatCheck.valid) return formatCheck;
+        if (!RutValidator.validate(rut)) return { valid: false, error: "Dígito verificador incorrecto" };
+        return { valid: true };
     }
-
-    const parts = cleanRut.split('-');
-    if (parts.length !== 2) {
-      return { valid: false, error: "Formato inválido. Usa el formato: 12345678-K" };
-    }
-
-    const [num, dv] = parts;
-
-    if (!/^\d{7,8}$/.test(num)) {
-      return { valid: false, error: "El RUT debe tener 7 u 8 dígitos antes del guión" };
-    }
-
-    if (!/^[0-9K]$/.test(dv)) {
-      return { valid: false, error: "El dígito verificador debe ser un número (0-9) o K" };
-    }
-
-    return { valid: true };
-  },
-
-  validate: (rut: string): boolean => {
-    const formatCheck = RutValidator.validateFormat(rut);
-    if (!formatCheck.valid) return false;
-
-    const cleanRut = RutValidator.clean(rut);
-    const [num, dv] = cleanRut.split('-');
-
-    let sum = 0;
-    let mul = 2;
-
-    for (let i = num.length - 1; i >= 0; i--) {
-      sum += parseInt(num.charAt(i)) * mul;
-      mul = mul === 7 ? 2 : mul + 1;
-    }
-
-    const expected = 11 - (sum % 11);
-    let validDv: string;
-    
-    if (expected === 11) validDv = '0';
-    else if (expected === 10) validDv = 'K';
-    else validDv = expected.toString();
-
-    return validDv === dv.toUpperCase();
-  },
-
-  validateWithError: (rut: string): { valid: boolean; error?: string } => {
-    const formatCheck = RutValidator.validateFormat(rut);
-    if (!formatCheck.valid) return formatCheck;
-
-    if (!RutValidator.validate(rut)) {
-      return { valid: false, error: "Dígito verificador incorrecto. Verifica tu RUT" };
-    }
-
-    return { valid: true };
-  }
 };
 
-
 export default function Home() {
-  const [rut, setRut] = useState("");
-  const [step, setStep] = useState(1); 
-  const [isLoading, setIsLoading] = useState(false);
-  const [scoring, setScoring] = useState<any>(null);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [txHash, setTxHash] = useState<string | null>(null);
+    const [rut, setRut] = useState("");
+    const [step, setStep] = useState(1);
+    const [isLoading, setIsLoading] = useState(false);
+    const [creditProfile, setCreditProfile] = useState<CreditProfile | null>(null);
+    const [logs, setLogs] = useState<string[]>([]);
+    const [txHash, setTxHash] = useState<string | null>(null);
 
-  // Validación en tiempo real del RUT
-  const rutValidation = useMemo(() => {
-    if (!rut) return { valid: false, error: undefined };
-    return RutValidator.validateWithError(rut);
-  }, [rut]);
+    // Validación en tiempo real del RUT
+    const rutValidation = useMemo(() => {
+        if (!rut) return { valid: false, error: undefined };
+        return RutValidator.validateWithError(rut);
+    }, [rut]);
 
-  const addLog = (msg: string) => setLogs(prev => [...prev, `> ${msg}`]);
+    const addLog = (msg: string) => setLogs(prev => [...prev, `> ${msg}`]);
 
-  const generateCertificate = async () => {
-    if (!txHash || !scoring) return;
-    
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    
-    // Header con fondo blanco
-    doc.setFillColor(248, 250, 252);
-    doc.rect(0, 0, pageWidth, 50, 'F');
-    
-    // Logo texto estilizado (simulando el logo)
-    // Check azul oscuro
-    doc.setDrawColor(30, 58, 95);
-    doc.setLineWidth(2);
-    doc.line(pageWidth/2 - 40, 22, pageWidth/2 - 30, 32);
-    
-    // Check verde
-    doc.setDrawColor(34, 197, 94);
-    doc.setLineWidth(2.5);
-    doc.line(pageWidth/2 - 30, 32, pageWidth/2 - 10, 12);
-    
-    // Texto VIGENTE
-    doc.setTextColor(30, 58, 95);
-    doc.setFontSize(24);
-    doc.setFont('helvetica', 'bold');
-    doc.text('VIGENTE', pageWidth / 2 + 5, 28);
-    
-    // Subtítulo
-    doc.setTextColor(100, 100, 100);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Certificado de Registro en Blockchain', pageWidth / 2, 42, { align: 'center' });
-    
-    // Contenido principal
-    doc.setTextColor(50, 50, 50);
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text('CERTIFICADO DE FINANCIAMIENTO DIGITAL', pageWidth / 2, 60, { align: 'center' });
-    
-    // Línea decorativa
-    doc.setDrawColor(34, 197, 94);
-    doc.setLineWidth(0.5);
-    doc.line(40, 65, pageWidth - 40, 65);
-    
-    // Información del certificado
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
-    const startY = 80;
-    const lineHeight = 10;
-    
-    doc.setFont('helvetica', 'bold');
-    doc.text('Folio:', 30, startY);
-    doc.setFont('helvetica', 'normal');
-    doc.text(scoring.folio, 70, startY);
-    
-    doc.setFont('helvetica', 'bold');
-    doc.text('RUT Empresa:', 30, startY + lineHeight);
-    doc.setFont('helvetica', 'normal');
-    doc.text(rut, 70, startY + lineHeight);
-    
-    doc.setFont('helvetica', 'bold');
-    doc.text('Score:', 30, startY + lineHeight * 2);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`${scoring.score} Pts - ${scoring.capacidad}`, 70, startY + lineHeight * 2);
-    
-    doc.setFont('helvetica', 'bold');
-    doc.text('Estado:', 30, startY + lineHeight * 3);
-    doc.setTextColor(34, 197, 94);
-    doc.text(scoring.status, 70, startY + lineHeight * 3);
-    
-    doc.setTextColor(50, 50, 50);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Fecha Registro:', 30, startY + lineHeight * 4);
-    doc.setFont('helvetica', 'normal');
-    doc.text(new Date().toLocaleString('es-CL'), 70, startY + lineHeight * 4);
-    
-    // TX Hash (destacado)
-    doc.setFillColor(240, 240, 240);
-    doc.roundedRect(25, startY + lineHeight * 5.5, pageWidth - 50, 30, 3, 3, 'F');
-    
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text('TRANSACTION HASH (Stellar Testnet):', 30, startY + lineHeight * 6.5);
-    doc.setFont('courier', 'normal');
-    doc.setFontSize(7);
-    doc.text(txHash, 30, startY + lineHeight * 7.5);
-    
-    // Mensaje de verificación
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'italic');
-    doc.setTextColor(100, 100, 100);
-    doc.text(
-      'Este documento certifica que el financiamiento ha sido registrado de forma inmutable',
-      pageWidth / 2, startY + lineHeight * 10, { align: 'center' }
+    // ---------------------------------------------------------------------------
+    // STEP 1: CONNECT & ANALYZE (CALL ORACLE)
+    // ---------------------------------------------------------------------------
+    const handleConnectMoneyGram = async () => {
+        if (!rutValidation.valid) {
+            addLog(`❌ ${rutValidation.error || "RUT inválido"}`);
+            return;
+        }
+
+        setIsLoading(true);
+        addLog("📡 Connecting to MoneyGram Access API...");
+
+        try {
+            // Llamada al endpoint real que implementamos
+            // Usamos el RUT para que el mock decida el tier (debug)
+            const res = await fetch(`/api/oracle/score?rut=${rut}`);
+            const data = await res.json();
+
+            if (res.ok && data.found) {
+                setCreditProfile(data);
+                addLog("✅ User Identity Verified (KYC Level " + data.profile.kycLevel + ")");
+                addLog("📊 Remittance History Downloaded.");
+                addLog(`🏆 Score Calculated: ${data.scoring.totalScore} Pts (Tier ${data.scoring.tier})`);
+
+                // Simular un pequeño delay para efecto UI
+                setTimeout(() => {
+                    setStep(2);
+                    setIsLoading(false);
+                }, 800);
+            } else {
+                addLog(`❌ ${data.message || "User not found"}`);
+                setIsLoading(false);
+            }
+        } catch (error: any) {
+            addLog(`❌ API Error: ${error.message}`);
+            setIsLoading(false);
+        }
+    };
+
+    // ---------------------------------------------------------------------------
+    // STEP 2: MINT BADGE (ON-CHAIN)
+    // ---------------------------------------------------------------------------
+    const handleMintBadge = async () => {
+        if (!creditProfile) return;
+
+        setIsLoading(true);
+        addLog("⛓️ Authenticating with Soroban Contract...");
+        addLog("📝 Preparing CreditBadge Mint Transaction...");
+
+        try {
+            // TODO: Update /api/mint to support mint_badge
+            // Por ahora probaremos llamando al endpoint existente, asumiendo que lo actualizaremos brevemente
+            // O enviaremos los datos que espera si no lo hemos actualizado aun (espera mint_deal). 
+            // Para evitar romper, asumiré que vamos a actualizar `api/mint` en el siguiente paso.
+
+            const response = await fetch("/api/mint", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                // Enviamos todo lo necesario para mint_badge
+                body: JSON.stringify({
+                    rut,
+                    tier: creditProfile.scoring.tier,
+                    score: creditProfile.scoring.totalScore,
+                    oracleSignature: creditProfile.oracleSignature
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                addLog("✅ BADGE MINTED ON STELLAR NETWORK!");
+                addLog(`TX HASH: ${data.hash}`);
+                setTxHash(data.hash);
+                setStep(3);
+            } else {
+                addLog(`❌ Mint Error: ${data.error || "Unknown error"}`);
+            }
+        } catch (e: any) {
+            addLog(`💥 Network Error: ${e.message}`);
+        }
+        setIsLoading(false);
+    };
+
+    // ---------------------------------------------------------------------------
+    // RENDER
+    // ---------------------------------------------------------------------------
+    return (
+        <div className="min-h-screen bg-[#0d0f11] text-slate-300 font-sans selection:bg-cyan-500/30">
+
+            {/* NAVBAR */}
+            <nav className="border-b border-white/5 bg-[#121417]/80 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                    <Image src="/logo-vigente.svg" alt="VIGENTE" width={140} height={45} className="h-8 w-auto opacity-90 hover:opacity-100 transition-opacity" />
+                </div>
+                <div className="flex gap-4 items-center">
+                    <span className="text-xs font-mono text-cyan-500/80 bg-cyan-950/30 px-2 py-1 rounded border border-cyan-500/20">TESTNET ENABLED</span>
+                </div>
+            </nav>
+
+            <main className="max-w-5xl mx-auto pt-12 px-6 pb-20">
+
+                {/* HERO SECTION */}
+                <div className="flex flex-col items-center mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 mb-4 tracking-tight text-center">
+                        Financial Identity Protocol
+                    </h1>
+                    <p className="text-slate-400 max-w-xl text-center text-lg">
+                        Turn your MoneyGram remittance history into a verifiable
+                        <span className="text-cyan-400 font-semibold mx-1">On-Chain Credit Score</span>
+                        to access global DeFi loans for your business.
+                    </p>
+                </div>
+
+                <div className="grid gap-8">
+
+                    {/* -------------------------------------------------------------- */}
+                    {/* STEP 1: IDENTITY & CONNECT */}
+                    {/* -------------------------------------------------------------- */}
+                    <div className={`bg-[#121417] border rounded-xl overflow-hidden transition-all duration-500 relative ${step === 1 ? 'border-cyan-500/50 shadow-[0_0_30px_rgba(6,182,212,0.15)]' : 'border-white/5 opacity-40'}`}>
+                        <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-cyan-400 to-blue-600"></div>
+                        <div className="p-8">
+                            <h3 className="text-white font-bold text-xl mb-6 flex items-center gap-3">
+                                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-cyan-500 text-black font-black text-sm">1</span>
+                                Connect Financial Data
+                            </h3>
+
+                            <div className="grid md:grid-cols-2 gap-8 items-center">
+                                <div className="space-y-4">
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Chilean National ID (RUT)</label>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. 12.345.678-K"
+                                            maxLength={12}
+                                            className={`w-full bg-black/40 border p-4 rounded-lg outline-none transition-all text-white text-lg font-mono ${rut && !rutValidation.valid
+                                                    ? 'border-red-500/50 focus:border-red-500'
+                                                    : rut && rutValidation.valid
+                                                        ? 'border-cyan-500/50 focus:border-cyan-500'
+                                                        : 'border-white/10 focus:border-cyan-500/50'
+                                                }`}
+                                            value={rut}
+                                            onChange={(e) => setRut(e.target.value)}
+                                        />
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                            {rutValidation.valid && <span className="text-cyan-400 text-xl">✓</span>}
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-slate-500">
+                                        We use your ID to fetch hashed remittance records from the MoneyGram Oracle.
+                                    </p>
+                                </div>
+
+                                <div className="bg-white/5 rounded-xl p-6 border border-white/5 flex flex-col items-center text-center">
+                                    <div className="mb-4 p-3 bg-white/5 rounded-full">
+                                        <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                                        </svg>
+                                    </div>
+                                    <h4 className="text-white font-bold mb-2">MoneyGram Integration</h4>
+                                    <p className="text-xs text-slate-400 mb-4">
+                                        Securely access your remittance history to calculate your credit score.
+                                    </p>
+                                    <button
+                                        onClick={handleConnectMoneyGram}
+                                        disabled={isLoading || step !== 1 || !rutValidation.valid}
+                                        className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-all shadow-lg shadow-cyan-900/20"
+                                    >
+                                        {isLoading ? "Analyzing Data..." : "Connect & Analyze"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* -------------------------------------------------------------- */}
+                    {/* STEP 2: DASHBOARD & MINT */}
+                    {/* -------------------------------------------------------------- */}
+                    {step >= 2 && creditProfile && (
+                        <div className={`bg-[#121417] border rounded-xl overflow-hidden transition-all duration-700 relative animate-in zoom-in-95 ${step === 2 ? 'border-cyan-500/50' : 'border-white/5 opacity-50'}`}>
+                            <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-purple-500 to-pink-600"></div>
+
+                            <div className="p-8">
+                                <div className="flex flex-col md:flex-row justify-between items-start mb-8 gap-4">
+                                    <div>
+                                        <h3 className="text-white font-bold text-2xl flex items-center gap-3">
+                                            Credit Profile Dashboard
+                                            {creditProfile.scoring.badgeType !== "None" && (
+                                                <span className={`text-xs px-2 py-1 rounded border ${creditProfile.scoring.badgeType === 'Gold' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' :
+                                                        creditProfile.scoring.badgeType === 'Silver' ? 'bg-slate-300/10 text-slate-300 border-slate-300/30' :
+                                                            'bg-orange-700/10 text-orange-400 border-orange-700/30'
+                                                    }`}>
+                                                    {creditProfile.scoring.badgeType} Badge
+                                                </span>
+                                            )}
+                                        </h3>
+                                        <p className="text-slate-500 text-sm mt-1">Hello, <span className="text-white font-medium">{creditProfile.profile.name}</span> ({creditProfile.profile.country})</p>
+                                    </div>
+
+                                    <div className="text-right">
+                                        <div className="text-xs text-slate-500 uppercase tracking-widest mb-1">Total Score</div>
+                                        <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">
+                                            {creditProfile.scoring.totalScore}
+                                        </div>
+                                    </div>
+                                </div>
+
+
+                                <div className="grid lg:grid-cols-3 gap-6 mb-8">
+
+                                    {/* CHART COLUMN (Span 2) */}
+                                    <div className="lg:col-span-2">
+                                        <TransactionHistoryChart transactions={creditProfile.history} />
+                                    </div>
+
+                                    {/* STATS COLUMN */}
+                                    <div className="bg-black/20 rounded-xl border border-white/5 p-6 flex flex-col justify-between">
+                                        <div>
+                                            <h4 className="text-sm font-bold text-slate-300 mb-4 border-b border-white/5 pb-2">Scoring Breakdown</h4>
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-slate-500">Volume</span>
+                                                    <span className="font-mono text-cyan-400">+{creditProfile.scoring.breakdown.volumePoints}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-slate-500">Consistency</span>
+                                                    <span className="font-mono text-cyan-400">+{creditProfile.scoring.breakdown.consistencyPoints}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-slate-500">Frequency</span>
+                                                    <span className="font-mono text-cyan-400">+{creditProfile.scoring.breakdown.frequencyPoints}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-8 pt-4 border-t border-white/5">
+                                            <div className="text-xs text-slate-500 uppercase mb-1">Approved Credit Limit</div>
+                                            <div className="text-3xl font-bold text-white">
+                                                ${creditProfile.scoring.maxLoanAmount} <span className="text-lg text-slate-500">USDC</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end gap-3">
+                                    {step === 2 && (
+                                        <button
+                                            onClick={handleMintBadge}
+                                            disabled={isLoading}
+                                            className="bg-green-600 hover:bg-green-500 text-black font-black py-4 px-8 rounded-lg text-sm transition-all shadow-lg shadow-green-900/20 flex items-center gap-2"
+                                        >
+                                            {isLoading ? (
+                                                <span className="animate-spin text-xl">◌</span>
+                                            ) : (
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                                            )}
+                                            MINT CREDIT BADGE
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* -------------------------------------------------------------- */}
+                    {/* STEP 3: SUCCESS */}
+                    {/* -------------------------------------------------------------- */}
+                    {step === 3 && txHash && (
+                        <div className="bg-[#121417] border border-green-500/50 rounded-xl p-8 text-center animate-in zoom-in-95 shadow-[0_0_50px_rgba(34,197,94,0.1)]">
+                            <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-green-500/30">
+                                <span className="text-4xl">🎉</span>
+                            </div>
+                            <h2 className="text-3xl font-bold text-white mb-2">Reputation Minted!</h2>
+                            <p className="text-slate-400 mb-8 max-w-md mx-auto">
+                                Your <b>{creditProfile?.scoring.badgeType} Credit Badge</b> is now live on the Stellar Network.
+                                You can now access under-collateralized loans on Blend Protocol.
+                            </p>
+
+                            <div className="bg-black/30 rounded-lg p-4 max-w-lg mx-auto mb-8 border border-white/10 flex flex-col items-center">
+                                <span className="text-xs text-slate-500 uppercase font-bold mb-2">Transaction Hash</span>
+                                <a href={`https://stellar.expert/explorer/testnet/tx/${txHash}`} target="_blank" className="font-mono text-cyan-400 hover:text-cyan-300 text-xs break-all hover:underline">
+                                    {txHash}
+                                </a>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
+                                <button onClick={() => window.location.reload()} className="py-3 rounded-lg border border-white/10 hover:bg-white/5">
+                                    Start Over
+                                </button>
+                                <button className="py-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold">
+                                    View on Blend
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* -------------------------------------------------------------- */}
+                    {/* LOGS CONSOLE */}
+                    {/* -------------------------------------------------------------- */}
+                    <div className="bg-black/60 rounded-xl p-6 border border-white/5 font-mono text-[11px] leading-relaxed max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800">
+                        <div className="flex items-center gap-2 mb-2 sticky top-0 bg-black/60 pb-2 border-b border-white/5 backdrop-blur-sm">
+                            <span className="text-green-500">●</span>
+                            <span className="text-slate-500 uppercase">System Logs</span>
+                        </div>
+                        {logs.length === 0 && <span className="text-slate-600 italic">Waiting for connection...</span>}
+                        {logs.map((log, i) => (
+                            <div key={i} className="text-green-500/80 hover:text-green-400 py-0.5">
+                                {log}
+                            </div>
+                        ))}
+                    </div>
+
+                </div>
+            </main>
+        </div>
     );
-    doc.text(
-      'en la red Stellar Testnet. Puede verificar la transacción en stellar.expert',
-      pageWidth / 2, startY + lineHeight * 11, { align: 'center' }
-    );
-    
-    // Footer
-    doc.setFillColor(18, 20, 23);
-    doc.rect(0, 270, pageWidth, 30, 'F');
-    doc.setTextColor(150, 150, 150);
-    doc.setFontSize(8);
-    doc.text('VIGENTE - Sistema de Validación Digital de Financiamiento', pageWidth / 2, 280, { align: 'center' });
-    doc.text('Powered by Stellar Blockchain', pageWidth / 2, 286, { align: 'center' });
-    
-    // Descargar
-    doc.save(`certificado-vigente-${scoring.folio}.pdf`);
-  };
-
-  const handleSIIValidation = () => {
-    // Validar RUT antes de continuar
-    if (!rutValidation.valid) {
-      addLog(`❌ ${rutValidation.error || "RUT inválido"}`);
-      return;
-    }
-    
-    setIsLoading(true);
-    addLog("📡 Estableciendo túnel seguro con SII...");
-    
-    setTimeout(() => {
-      addLog("✅ Autenticación exitosa.");
-      addLog("📊 Procesando vectores de scoring...");
-      
-      const mockScoring = {
-        folio: `V-GE-${Math.floor(Math.random() * 999999)}`,
-        score: 820,
-        status: "VIGENTE",
-        capacidad: "ÓPTIMA"
-      };
-      
-      setScoring(mockScoring);
-      setStep(2);
-      setIsLoading(false);
-    }, 2000);
-  };
-
-const handleBlockchainMint = async () => {
-    setIsLoading(true);
-    addLog("⛓️ Iniciando handshake con Soroban...");
-    
-    try {
-      // MODIFICACIÓN AQUÍ: Añadimos Headers y Body
-      const response = await fetch("/api/mint", { 
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ rut: rut }) // Envia el RUT que el usuario ingresó
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        addLog("✅ REGISTRO EN LEDGER COMPLETADO.");
-        addLog(`TX HASH: ${data.hash}`);
-        setTxHash(data.hash);
-        setStep(3);
-      } else {
-        // Mostramos el error específico que viene del servidor
-        addLog(`❌ Error: ${data.error || "Falla en el servidor"}`);
-      }
-    } catch (e) {
-      addLog("💥 Fallo de comunicación con la API.");
-    }
-    setIsLoading(false);
-  };
-
-  return (
-    <div className="min-h-screen bg-[#0d0f11] text-slate-300 font-sans selection:bg-green-500/30">
-      {/* NAVBAR AL ESTILO DE LA IMAGEN */}
-      <nav className="border-b border-white/5 bg-[#121417] px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <Image src="/logo-vigente.svg" alt="VIGENTE" width={140} height={45} className="h-10 w-auto" />
-        </div>
-        <div className="flex gap-4 items-center">
-            <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10"></div>
-            <button className="bg-green-500 text-black px-4 py-1.5 rounded font-bold text-xs hover:bg-green-400 transition-colors">
-                VIGENTE
-            </button>
-        </div>
-      </nav>
-
-      <main className="max-w-4xl mx-auto pt-16 px-6 pb-20">
-        
-        {/* LOGO CENTRAL Y TÍTULO */}
-        <div className="flex flex-col items-center mb-12 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-             <Image src="/logo-vigente.svg" alt="VIGENTE" width={320} height={110} className="mb-4" priority />
-             <p className="text-slate-500 mt-2 font-medium tracking-wide">Validación Digital • Operación Blockchain</p>
-        </div>
-
-        <div className="grid gap-6">
-          
-          {/* PASO 1: VALIDACIÓN */}
-          <div className={`bg-[#121417] border rounded-xl overflow-hidden transition-all duration-500 ${step === 1 ? 'border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.1)]' : 'border-white/5 opacity-50'}`}>
-            <div className="p-8">
-                <h3 className="text-white font-bold mb-6 flex items-center gap-3">
-                    <span className="text-green-500">01</span> VALIDAR CREDENCIALES
-                </h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-2">
-                        <input 
-                            type="text" 
-                            placeholder="Ej: 12345678-K" 
-                            maxLength={12}
-                            className={`bg-black/40 border p-4 rounded-lg outline-none transition-all text-white ${
-                              rut && !rutValidation.valid 
-                                ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500' 
-                                : rut && rutValidation.valid
-                                  ? 'border-green-500 focus:border-green-500 focus:ring-1 focus:ring-green-500'
-                                  : 'border-white/10 focus:border-green-500 focus:ring-1 focus:ring-green-500'
-                            }`}
-                            value={rut}
-                            onChange={(e) => setRut(e.target.value)}
-                        />
-                        {rut && rutValidation.error && (
-                          <p className="text-red-400 text-xs flex items-center gap-1">
-                            <span>⚠️</span> {rutValidation.error}
-                          </p>
-                        )}
-                        {rut && rutValidation.valid && (
-                          <p className="text-green-400 text-xs flex items-center gap-1">
-                            <span>✓</span> RUT válido
-                          </p>
-                        )}
-                    </div>
-                    <button 
-                        onClick={handleSIIValidation}
-                        disabled={isLoading || step !== 1 || !rutValidation.valid}
-                        className="bg-green-600 hover:bg-green-500 disabled:bg-slate-800 disabled:cursor-not-allowed text-black font-black py-4 rounded-lg transition-all"
-                    >
-                        {isLoading ? "PROCESANDO..." : "VALIDAR EN SII"}
-                    </button>
-                </div>
-            </div>
-          </div>
-
-          {/* PASO 2: SCORE Y RESULTADO */}
-          {step >= 2 && (
-            <div className={`bg-[#121417] border rounded-xl overflow-hidden transition-all duration-500 ${step === 2 ? 'border-green-500' : 'border-white/5 opacity-50'}`}>
-                <div className="p-8">
-                    <div className="flex justify-between items-start mb-8">
-                        <div>
-                            <h3 className="text-white font-bold mb-1">REPORTE DE VIGENCIA</h3>
-                            <p className="text-xs text-slate-500 tracking-widest uppercase">Folio: {scoring?.folio}</p>
-                        </div>
-                        <div className="bg-green-500/10 text-green-500 px-3 py-1 rounded border border-green-500/20 font-bold text-xs">
-                            {scoring?.status}
-                        </div>
-                    </div>
-
-                    <div className="mb-8">
-                        <div className="flex justify-between text-xs mb-2">
-                            <span className="text-slate-400">Score de Confianza</span>
-                            <span className="text-green-500 font-bold">{scoring?.score} Pts</span>
-                        </div>
-                        <div className="h-2 w-full bg-black rounded-full overflow-hidden">
-                            <div className="h-full bg-green-500 shadow-[0_0_10px_#22c55e]" style={{width: '91%'}}></div>
-                        </div>
-                    </div>
-
-                    <div className="flex gap-4">
-                        <button className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-lg border border-white/10 text-sm transition-all">
-                            DESCARGAR PDF
-                        </button>
-                        {step === 2 && (
-                             <button 
-                                onClick={handleBlockchainMint}
-                                className="flex-1 bg-green-600 hover:bg-green-500 text-black font-black py-3 rounded-lg text-sm transition-all shadow-lg shadow-green-900/20"
-                             >
-                                REGISTRAR EN LEDGER
-                             </button>
-                        )}
-                    </div>
-                </div>
-            </div>
-          )}
-
-          {/* PASO 3: CERTIFICADO */}
-          {step === 3 && txHash && (
-            <div className="bg-[#121417] border border-green-500 rounded-xl overflow-hidden transition-all duration-500 shadow-[0_0_30px_rgba(34,197,94,0.2)]">
-                <div className="p-8">
-                    <div className="flex flex-col items-center text-center">
-                        <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mb-4">
-                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="20 6 9 17 4 12"></polyline>
-                            </svg>
-                        </div>
-                        <h3 className="text-white font-bold text-xl mb-2">¡REGISTRO EXITOSO!</h3>
-                        <p className="text-slate-400 text-sm mb-6">Tu financiamiento ha sido registrado en Blockchain</p>
-                        
-                        <div className="w-full bg-black/40 rounded-lg p-4 mb-6 border border-white/10">
-                            <p className="text-xs text-slate-500 mb-2">TX HASH</p>
-                            <p className="text-green-500 font-mono text-xs break-all">{txHash}</p>
-                        </div>
-                        
-                        <div className="flex gap-4 w-full">
-                            <a 
-                                href={`https://stellar.expert/explorer/testnet/tx/${txHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-lg border border-white/10 text-sm transition-all text-center"
-                            >
-                                VER EN EXPLORER
-                            </a>
-                            <button 
-                                onClick={generateCertificate}
-                                className="flex-1 bg-green-600 hover:bg-green-500 text-black font-black py-3 rounded-lg text-sm transition-all shadow-lg shadow-green-900/20 flex items-center justify-center gap-2"
-                            >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                    <polyline points="7 10 12 15 17 10"></polyline>
-                                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                                </svg>
-                                DESCARGAR CERTIFICADO
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-          )}
-
-          {/* CONSOLA DE SALIDA */}
-          <div className="bg-black/60 rounded-xl p-6 border border-white/5 font-mono text-[11px] leading-relaxed">
-            <div className="flex items-center gap-2 mb-4 border-b border-white/5 pb-2">
-                <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                <span className="ml-2 text-slate-500 uppercase tracking-tighter">System Terminal</span>
-            </div>
-            <div className="space-y-1">
-                {logs.length === 0 && <span className="text-slate-500">Inicie validación para ver logs...</span>}
-                {logs.map((log, i) => (
-                    <div key={i} className="text-green-500/80">
-                        <span className="text-slate-600 mr-2">[{new Date().toLocaleTimeString()}]</span>
-                        {log}
-                    </div>
-                ))}
-            </div>
-          </div>
-
-        </div>
-      </main>
-    </div>
-  );
 }
