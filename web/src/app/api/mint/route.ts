@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { Keypair, Contract, rpc, TransactionBuilder, nativeToScVal, xdr, TimeoutInfinite } from "@stellar/stellar-sdk";
-import { RutValidator } from "../../lib/rut-validator";
 import { createHmac } from "crypto";
 
 export const dynamic = 'force-dynamic';
+
+// Simple RUT cleaner (removed dependency on RutValidator)
+function cleanRut(rut: string): string {
+  return rut.replace(/[^0-9kK]/g, '').toUpperCase();
+}
 
 export async function POST(req: Request) {
   try {
@@ -15,10 +19,10 @@ export async function POST(req: Request) {
 
     const { rut, tier, score } = body;
 
-    // 1. Validar RUT
-    const rutValidation = RutValidator.validateWithError(rut);
-    if (!rutValidation.valid) {
-      return NextResponse.json({ error: rutValidation.error }, { status: 400 });
+    // 1. Limpiar RUT (skip validation for demo)
+    const rutClean = cleanRut(rut);
+    if (rutClean.length < 8) {
+      return NextResponse.json({ error: "RUT inválido" }, { status: 400 });
     }
 
     // 2. Configurar Admin (Signer)
@@ -33,11 +37,6 @@ export async function POST(req: Request) {
     // 3. Definir Usuario Destino
     // Para esta demo, generamos una keypair determinística basada en el RUT
     // En producción, esto vendría de la wallet conectada del usuario (Freighter)
-    const rutClean = RutValidator.clean(rut);
-    const rutHash = createHmac('sha256', 'demo-salt').update(rutClean).digest('hex');
-    const userSecretSeed = createHmac('sha256', rutHash).digest('hex').slice(0, 32); // 32 bytes seed
-    // Stellar uses ed25519 seeds. Using raw 32 bytes from hash as seed is "okay" for demo.
-    // Better: just random for now to avoid invalid seed issues if format wrong.
     const userKey = Keypair.random();
 
     // 4. Preparar Argumentos para mint_badge
