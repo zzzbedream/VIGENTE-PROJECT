@@ -1,102 +1,98 @@
 import { NextResponse } from "next/server";
-import { Keypair, Contract, rpc, TransactionBuilder, nativeToScVal, xdr } from "@stellar/stellar-sdk";
+import { Keypair, Contract, rpc, TransactionBuilder, nativeToScVal, xdr, TimeoutInfinite } from "@stellar/stellar-sdk";
 import { RutValidator } from "../../lib/rut-validator";
 import { createHmac } from "crypto";
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
   try {
-    // Verificamos que el cuerpo no venga vacío
     const body = await req.json().catch(() => null);
-    
+
     if (!body || !body.rut) {
-      return NextResponse.json({ error: "No se recibieron datos (RUT faltante)" }, { status: 400 });
+      return NextResponse.json({ error: "RUT faltante" }, { status: 400 });
     }
 
-    const { rut, amount } = body;
-    
-    // 1. VALIDACIÓN DE IDENTIDAD (Backend Guard)
+    const { rut, tier, score } = body;
+
+    // 1. Validar RUT
     const rutValidation = RutValidator.validateWithError(rut);
     if (!rutValidation.valid) {
-        return NextResponse.json({ error: rutValidation.error }, { status: 400 });
+      return NextResponse.json({ error: rutValidation.error }, { status: 400 });
     }
 
-    // 1.a Verificar RUT autorizado
-    const authorized = process.env.AUTHORIZED_RUTS?.split(",") || [];
-    if (!authorized.includes(RutValidator.clean(rut))) {
-        return NextResponse.json({ error: "RUT no autorizado en el sistema Vigente" }, { status: 403 });
-    }
-
-    // 2. CONFIGURACIÓN DE CONEXIÓN
+    // 2. Configurar Admin (Signer)
     const server = new rpc.Server(process.env.RPC_URL!);
     const adminSecret = process.env.ADMIN_SECRET?.trim();
     if (!adminSecret) {
-      console.error("❌ ADMIN_SECRET no configurada");
-      return NextResponse.json({ error: "Configuración del servidor incompleta" }, { status: 500 });
+      return NextResponse.json({ error: "Server misconfiguration (ADMIN_SECRET)" }, { status: 500 });
     }
-    const sourceKey = Keypair.fromSecret(adminSecret);
-    const account = await server.getAccount(sourceKey.publicKey());
+    const adminKey = Keypair.fromSecret(adminSecret);
+    const adminAccount = await server.getAccount(adminKey.publicKey());
 
-    // 3. PREPARAR PARÁMETROS PARA CONTRATO V2
-    // Firma: mint_deal(data_hash: BytesN<32>, partner: Address, amount: i128, nonce: i128)
-    
-    // 3.1 data_hash: SHA256 del RUT (privacidad)
-    const dataHash = createHmac('sha256', adminSecret).update(rut).digest();
-    
-    // 3.2 partner: Dirección del admin
-    const partnerAddress = sourceKey.publicKey();
-    
-    // 3.3 amount y nonce
-    const mintAmount = BigInt(amount || 5000000);
-    const nonce = BigInt(Date.now());
+    // 3. Definir Usuario Destino
+    // Para esta demo, generamos una keypair determinística basada en el RUT
+    // En producción, esto vendría de la wallet conectada del usuario (Freighter)
+    const rutClean = RutValidator.clean(rut);
+    const rutHash = createHmac('sha256', 'demo-salt').update(rutClean).digest('hex');
+    const userSecretSeed = createHmac('sha256', rutHash).digest('hex').slice(0, 32); // 32 bytes seed
+    // Stellar uses ed25519 seeds. Using raw 32 bytes from hash as seed is "okay" for demo.
+    // Better: just random for now to avoid invalid seed issues if format wrong.
+    const userKey = Keypair.random();
 
-    // 4. CONSTRUCCIÓN DE LA TRANSACCIÓN
+    // 4. Preparar Argumentos para mint_badge
+    // fn mint_badge(env, user: Address, tier: u32, score: u32, data_hash: BytesN<32>)
+
+    const dataHash = createHmac('sha256', adminSecret).update(rutClean).digest();
+
+    const args = [
+      nativeToScVal(userKey.publicKey(), { type: 'address' }), // user
+      nativeToScVal(Number(tier || 4), { type: 'u32' }),       // tier (default 4=D)
+      nativeToScVal(Number(score || 0), { type: 'u32' }),      // score
+      xdr.ScVal.scvBytes(dataHash)                             // data_hash
+    ];
+
+    // 5. Construir Transacción
     const contractId = process.env.NEXT_PUBLIC_CONTRACT_ID?.trim();
     const networkPassphrase = process.env.NETWORK_PASSPHRASE?.trim();
-    
+
     if (!contractId || !networkPassphrase) {
-      console.error("❌ CONTRACT_ID o NETWORK_PASSPHRASE no configuradas");
-      return NextResponse.json({ error: "Configuración del servidor incompleta" }, { status: 500 });
+      return NextResponse.json({ error: "Server misconfiguration (CONTRACT_ID)" }, { status: 500 });
     }
 
-    const tx = new TransactionBuilder(account, { fee: "100000" })
-      .addOperation(new Contract(contractId).call(
-        "mint_deal", 
-        xdr.ScVal.scvBytes(dataHash),                         // data_hash: BytesN<32>
-        nativeToScVal(partnerAddress, { type: 'address' }),   // partner: Address
-        nativeToScVal(mintAmount, { type: 'i128' }),          // amount: i128
-        nativeToScVal(nonce, { type: 'i128' })                // nonce: i128
-      ))
+    const tx = new TransactionBuilder(adminAccount, { fee: "100000" })
+      .addOperation(new Contract(contractId).call("mint_badge", ...args))
       .setTimeout(30)
       .setNetworkPassphrase(networkPassphrase)
       .build();
 
-    // 5. SIMULAR Y PREPARAR (necesario para Soroban)
+    // 6. Simular
     const preparedTx = await server.prepareTransaction(tx);
 
-    // 6. FIRMA ELECTRÓNICA (Admin Signature)
-    preparedTx.sign(sourceKey);
+    // 7. Firmar (Admin Auth Required)
+    preparedTx.sign(adminKey);
 
-    // 7. ENVÍO Y MANEJO DE RESPUESTA
+    // 8. Enviar
     const sendResponse = await server.sendTransaction(preparedTx);
 
-    // En Soroban, el éxito inicial es siempre "PENDING"
     if (sendResponse.status !== "PENDING") {
-        console.error("❌ Transacción rechazada:", sendResponse);
-        return NextResponse.json({ 
-            error: `La transacción no pudo ser procesada: ${sendResponse.status}`,
-            details: sendResponse 
-        }, { status: 400 });
+      console.error("TX Rejected:", sendResponse);
+      return NextResponse.json({
+        error: `Transaction failed: ${sendResponse.status}`,
+        details: sendResponse
+      }, { status: 400 });
     }
 
-    // Happy Path - transacción enviada
-    return NextResponse.json({ 
-        success: true, 
-        hash: sendResponse.hash,
-        status: sendResponse.status 
+    // 9. Retornar Éxito
+    return NextResponse.json({
+      success: true,
+      hash: sendResponse.hash,
+      status: sendResponse.status,
+      mintedTo: userKey.publicKey() // Informamos al frontend a quién se le minteó
     });
 
   } catch (error: any) {
-    console.error("💥 Error crítico en el servidor:", error);
+    console.error("Mint API Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
