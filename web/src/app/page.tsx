@@ -3,6 +3,8 @@ import { useState, useMemo } from "react";
 import { jsPDF } from "jspdf";
 import Image from "next/image";
 import { TransactionHistoryChart } from "../components/TransactionHistoryChart";
+import { useWallet } from "../contexts/WalletContext";
+import { mintCreditBadge } from "../services/mint-service";
 
 // -----------------------------------------------------------------------------
 // TYPES
@@ -78,6 +80,7 @@ const RutValidator = {
 };
 
 export default function Home() {
+    const { isConnected, publicKey } = useWallet();
     const [rut, setRut] = useState("");
     const [step, setStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
@@ -94,6 +97,34 @@ export default function Home() {
     const addLog = (msg: string) => setLogs(prev => [...prev, `> ${msg}`]);
 
     // ---------------------------------------------------------------------------
+    // RUT AUTO-FORMAT FUNCTION
+    // ---------------------------------------------------------------------------
+    const formatRut = (value: string): string => {
+        // Remove all non-alphanumeric characters
+        const clean = value.replace(/[^0-9kK]/g, '').toUpperCase();
+
+        if (clean.length === 0) return '';
+        if (clean.length === 1) return clean;
+
+        // Split into body and verifier digit
+        const body = clean.slice(0, -1);
+        const verifier = clean.slice(-1);
+
+        // Add thousand separators to body
+        const formatted = body.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
+
+        // Return formatted with hyphen
+        return `${formatted}-${verifier}`;
+    };
+
+    // Handle RUT input change with auto-formatting
+    const handleRutChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const rawValue = e.target.value;
+        const formatted = formatRut(rawValue);
+        setRut(formatted);
+    };
+
+    // ---------------------------------------------------------------------------
     // STEP 1: CONNECT & ANALYZE (CALL ORACLE)
     // ---------------------------------------------------------------------------
     const handleConnectMoneyGram = async () => {
@@ -107,9 +138,17 @@ export default function Home() {
 
         try {
             // Llamada al endpoint real que implementamos
-            // Usamos el RUT para que el mock decida el tier (debug)
-            const res = await fetch(`/api/oracle/score?rut=${rut}`);
+            // Incluimos publicKey para recibir un score firmado para esa wallet específica
+            console.log("DEBUG: publicKey for signing:", publicKey);
+            const url = `/api/score?rut=${rut}${publicKey ? `&userAddress=${publicKey}` : ''}`;
+            console.log("DEBUG: Fetching URL:", url);
+
+            const res = await fetch(url);
             const data = await res.json();
+
+            console.log("DEBUG: API Response Scoring:", data?.scoring);
+            console.log("DEBUG: Signature received:", data?.scoring?.signature);
+            console.log("DEBUG: Server _debug:", data?._debug);
 
             if (res.ok && data.found) {
                 setCreditProfile(data);
@@ -138,37 +177,43 @@ export default function Home() {
     const handleMintBadge = async () => {
         if (!creditProfile) return;
 
+        // Check wallet connection
+        if (!isConnected || !publicKey) {
+            addLog("❌ Please connect your wallet first");
+            alert("Please connect your Freighter wallet before minting");
+            return;
+        }
+
         setIsLoading(true);
-        addLog("⛓️ Authenticating with Soroban Contract...");
-        addLog("📝 Preparing CreditBadge Mint Transaction...");
+        addLog("⛓️ Preparing transaction with your wallet...");
+        addLog("📝 Building CreditBadge Mint Transaction...");
 
         try {
-            // TODO: Update /api/mint to support mint_badge
-            // Por ahora probaremos llamando al endpoint existente, asumiendo que lo actualizaremos brevemente
-            // O enviaremos los datos que espera si no lo hemos actualizado aun (espera mint_deal). 
-            // Para evitar romper, asumiré que vamos a actualizar `api/mint` en el siguiente paso.
+            const signature = (creditProfile.scoring as any).signature;
 
-            const response = await fetch("/api/mint", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                // Enviamos todo lo necesario para mint_badge
-                body: JSON.stringify({
-                    rut,
-                    tier: creditProfile.scoring.tier,
-                    score: creditProfile.scoring.totalScore,
-                    oracleSignature: creditProfile.oracleSignature
-                })
+            if (!signature) {
+                addLog("⚠️ Missing Oracle Signature. Please click 'Connect & Analyze' again with your wallet connected.");
+                alert("Missing Oracle Proof. Please re-run the analysis (Connect & Analyze) while your wallet is connected to authorize the mint.");
+                setIsLoading(false);
+                return;
+            }
+
+            // Call client-side mint service with Oracle signature
+            const result = await mintCreditBadge({
+                userAddress: publicKey,
+                tier: creditProfile.scoring.tier,
+                score: (creditProfile.scoring as any).score || creditProfile.scoring.totalScore,
+                rut: (creditProfile as any).rut || rut,
+                signature: signature
             });
 
-            const data = await response.json();
-
-            if (data.success) {
+            if (result.success && result.hash) {
                 addLog("✅ BADGE MINTED ON STELLAR NETWORK!");
-                addLog(`TX HASH: ${data.hash}`);
-                setTxHash(data.hash);
+                addLog(`TX HASH: ${result.hash}`);
+                setTxHash(result.hash);
                 setStep(3);
             } else {
-                addLog(`❌ Mint Error: ${data.error || "Unknown error"}`);
+                addLog(`❌ Mint Error: ${result.error || "Unknown error"}`);
             }
         } catch (e: any) {
             addLog(`💥 Network Error: ${e.message}`);
@@ -181,18 +226,8 @@ export default function Home() {
     // ---------------------------------------------------------------------------
     return (
         <div className="min-h-screen bg-[#0d0f11] text-slate-300 font-sans selection:bg-cyan-500/30">
-
-            {/* NAVBAR */}
-            <nav className="border-b border-white/5 bg-[#121417]/80 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                    <Image src="/logo-vigente.svg" alt="VIGENTE" width={140} height={45} className="h-8 w-auto opacity-90 hover:opacity-100 transition-opacity" />
-                </div>
-                <div className="flex gap-4 items-center">
-                    <span className="text-xs font-mono text-cyan-500/80 bg-cyan-950/30 px-2 py-1 rounded border border-cyan-500/20">TESTNET ENABLED</span>
-                </div>
-            </nav>
-
-            <main className="max-w-5xl mx-auto pt-12 px-6 pb-20">
+            {/* Navbar is now in layout.tsx */}
+            <main className="max-w-5xl mx-auto pt-24 px-6 pb-20">
 
                 {/* HERO SECTION */}
                 <div className="flex flex-col items-center mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -225,7 +260,7 @@ export default function Home() {
                                     <div className="relative">
                                         <input
                                             type="text"
-                                            placeholder="e.g. 12.345.678-K"
+                                            placeholder="e.g. 202444520 o 7452862K"
                                             maxLength={12}
                                             className={`w-full bg-black/40 border p-4 rounded-lg outline-none transition-all text-white text-lg font-mono ${rut && !rutValidation.valid
                                                 ? 'border-red-500/50 focus:border-red-500'
@@ -234,7 +269,7 @@ export default function Home() {
                                                     : 'border-white/10 focus:border-cyan-500/50'
                                                 }`}
                                             value={rut}
-                                            onChange={(e) => setRut(e.target.value)}
+                                            onChange={handleRutChange}
                                         />
                                         <div className="absolute right-4 top-1/2 -translate-y-1/2">
                                             {rutValidation.valid && <span className="text-cyan-400 text-xl">✓</span>}

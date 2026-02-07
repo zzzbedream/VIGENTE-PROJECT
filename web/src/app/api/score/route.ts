@@ -4,6 +4,8 @@ import {
     calculateTransactionStats
 } from "../../../services/moneygram-oracle";
 import { calculateCreditScore } from "../../../services/scoring-engine";
+import { Keypair, xdr, nativeToScVal, Address } from "@stellar/stellar-sdk";
+import { createHmac } from "crypto";
 
 export const dynamic = 'force-dynamic'; // Ensure endpoint is not cached eagerly
 
@@ -29,8 +31,8 @@ export async function GET(req: Request) {
             } else if (lastDigit === '9') {
                 userId = 'user_fail';   // Fail (RUT termina en 9)
             } else {
-                // Default a Tier C para otros casos, o vacío
-                userId = 'user_tier_c_mock'; // (El fallback del servicio devolverá empty array si no existe este ID, manejaremos eso)
+                // Default a Tier C para otros casos
+                userId = 'user_tier_b'; // Cambiado de user_tier_c_mock a user_tier_b para que siempre tenga datos
             }
         }
 
@@ -41,24 +43,78 @@ export async function GET(req: Request) {
         // 1. Fetch Data from Oracle Service
         const oracleResponse = await fetchOracleData(userId);
 
-        if (!oracleResponse) {
-            // User not found in MoneyGram (or mock)
+        if (!oracleResponse || !oracleResponse.transactions || oracleResponse.transactions.length === 0) {
+            // User not found or no transactions - return a friendly message instead of 404
             return NextResponse.json({
                 found: false,
-                message: "No financial history found for this user."
-            }, { status: 404 });
+                message: "No financial history found for this user. Try RUT ending in 1, 2, or 3 for demo.",
+                rut: rut || "N/A"
+            }, { status: 200 }); // Changed to 200 to avoid error UI
         }
 
-        // 2. Run Scoring Engine
-        // Usamos el nuevo motor de scoring dedicado
-        const scoreResult = calculateCreditScore(oracleResponse.transactions);
+        // 2. Run Scoring Engine with error handling
+        let scoreResult;
+        try {
+            scoreResult = calculateCreditScore(oracleResponse.transactions);
+        } catch (scoringError: any) {
+            console.error("Scoring engine error:", scoringError);
+            // Return a default fail score instead of crashing
+            scoreResult = {
+                totalScore: 0,
+                tier: 4,
+                badgeType: "None" as const,
+                maxLoanAmount: 0,
+                breakdown: { volumePoints: 0, consistencyPoints: 0, frequencyPoints: 0 }
+            };
+        }
 
         // Stats básicos para mostrar en UI además del score
         const stats = calculateTransactionStats(oracleResponse.transactions);
 
+        // ---------------------------------------------------------------------
+        // 3. GENERATE ORACLE SIGNATURE (NEW)
+        // ---------------------------------------------------------------------
+        const userAddress = searchParams.get("userAddress");
+        let signature = null;
+        let adminPublicKey = null;
+        let signError: string | null = null;
+        const hasSecret = !!process.env.ADMIN_SECRET;
+
+        if (userAddress && process.env.ADMIN_SECRET) {
+            console.log("SERVER DEBUG: Signing for User:", userAddress);
+            try {
+                const adminKeypair = Keypair.fromSecret(process.env.ADMIN_SECRET);
+                adminPublicKey = adminKeypair.publicKey();
+
+                // Build the payload: [user_address_xdr, tier_be, score_be, data_hash_bytes]
+                // Consistent with contract: payload.append(&user.to_xdr(&env)); ...
+                const rutClean = rut!.replace(/[^0-9kK]/g, '').toUpperCase();
+                const dataHash = createHmac('sha256', process.env.ADMIN_SECRET).update(rutClean).digest();
+
+                const tierBuf = Buffer.alloc(4);
+                tierBuf.writeUInt32BE(scoreResult.tier);
+
+                const scoreBuf = Buffer.alloc(4);
+                scoreBuf.writeUInt32BE(scoreResult.totalScore);
+
+                const payload = Buffer.concat([
+                    Address.fromString(userAddress).toScAddress().toXDR(),
+                    tierBuf,
+                    scoreBuf,
+                    dataHash
+                ]);
+
+                signature = adminKeypair.sign(payload).toString('hex');
+            } catch (err: any) {
+                signError = err?.message || String(err);
+                console.error("Signing error:", signError);
+            }
+        }
+
         return NextResponse.json({
             found: true,
             rut: rut || "N/A",
+            _debug: { hasSecret, hasUserAddress: !!userAddress, signError },
             moneyGramId: oracleResponse.user.id,
             profile: {
                 name: oracleResponse.user.name,
@@ -74,7 +130,10 @@ export async function GET(req: Request) {
                 breakdown: scoreResult.breakdown,
                 capability: scoreResult.tier === 1 ? "EXCELLENT" :
                     scoreResult.tier === 2 ? "GOOD" :
-                        scoreResult.tier === 3 ? "FAIR" : "INSUFFICIENT"
+                        scoreResult.tier === 3 ? "FAIR" : "INSUFFICIENT",
+                // Return signature for minting
+                signature,
+                adminPublicKey
             },
             stats: {
                 monthlyVolume: stats.avgPerMonth,
@@ -91,6 +150,11 @@ export async function GET(req: Request) {
 
     } catch (error: any) {
         console.error("Scoring API Error:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        // Return a more user-friendly error instead of generic 500
+        return NextResponse.json({
+            error: "Failed to calculate score",
+            message: "There was an error processing your request. Please try again.",
+            details: error.message
+        }, { status: 500 });
     }
 }
