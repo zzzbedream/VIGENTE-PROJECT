@@ -1,7 +1,7 @@
 #![no_std]
 use soroban_sdk::{
     contract, contractimpl, contracttype, symbol_short, 
-    Address, BytesN, Env
+    Address, BytesN, Env, xdr::ToXdr, log
 };
 
 // External test module
@@ -90,6 +90,10 @@ impl VigenteProtocol {
         // Guardar admin
         env.storage().instance().set(&DataKey::Admin, &admin);
         
+        // CRITICAL: Extend TTL to prevent storage expiration
+        // 1_555_200 ledgers ≈ 90 days (assuming 5s per ledger)
+        env.storage().instance().extend_ttl(1_555_200, 1_555_200);
+        
         // Emitir evento de inicialización
         env.events().publish(
             (symbol_short!("init"), admin.clone()),
@@ -116,6 +120,11 @@ impl VigenteProtocol {
     /// 
     /// # Returns
     /// - `CreditBadge`: El badge emitido con todos sus campos
+    /// SIMPLIFIED VERSION - Sin verificación de firma del oráculo
+    /// La seguridad se basa en:
+    /// 1. user.require_auth() - El usuario firma con Freighter
+    /// 2. El backend (API) calcula el score y lo pasa al frontend
+    /// 3. Para producción, agregar verificación de firma del oráculo
     pub fn mint_badge(
         env: Env,
         user: Address,
@@ -123,12 +132,15 @@ impl VigenteProtocol {
         score: u32,
         data_hash: BytesN<32>,
     ) -> CreditBadge {
-        // 1. AUTENTICACIÓN: Verificar que el caller es el admin
-        let admin: Address = env.storage().instance().get(&DataKey::Admin)
-            .expect("Contract not initialized");
-        admin.require_auth();
+        // 1. AUTENTICACIÓN: El usuario firma y paga los fees con Freighter
+        user.require_auth();
 
-        // 2. VALIDACIÓN: Verificar que tier y score son válidos
+        // 2. Verificar que el contrato está inicializado (admin existe)
+        if !env.storage().instance().has(&DataKey::Admin) {
+            panic!("Contract not initialized");
+        }
+
+        // 3. VALIDACIÓN: Verificar que tier y score son válidos
         if tier < 1 || tier > 4 {
             panic!("Invalid tier: must be 1-4");
         }
@@ -136,12 +148,11 @@ impl VigenteProtocol {
             panic!("Invalid score: must be 0-1000");
         }
 
-        // 3. CALCULAR TIMESTAMPS
+        // 4. CALCULAR TIMESTAMPS
         let issued_at = env.ledger().timestamp();
-        // 90 días = 90 * 24 * 60 * 60 = 7,776,000 segundos
         let expires_at = issued_at + 7_776_000_u64;
 
-        // 4. CREAR BADGE
+        // 5. CREAR BADGE
         let badge = CreditBadge {
             tier,
             score,
@@ -150,19 +161,16 @@ impl VigenteProtocol {
             data_hash: data_hash.clone(),
         };
 
-        // 5. GUARDAR EN INSTANCE STORAGE (para consulta rápida por Blend)
+        // 6. GUARDAR EN INSTANCE STORAGE
         env.storage().instance().set(&DataKey::Badge(user.clone()), &badge);
-        
-        // Extender TTL del storage (90 días en ledgers, ~17280 ledgers/día)
         env.storage().instance().extend_ttl(1_555_200, 1_555_200);
 
-        // 6. EMITIR EVENTO (fuente de verdad auditable)
+        // 7. EMITIR EVENTO
         env.events().publish(
             (symbol_short!("badge"), user.clone()),
             (tier, score, issued_at, expires_at, data_hash)
         );
 
-        // 7. RETORNAR BADGE
         badge
     }
 

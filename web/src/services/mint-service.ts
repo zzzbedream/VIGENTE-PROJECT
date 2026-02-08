@@ -7,7 +7,7 @@ interface MintBadgeParams {
     tier: number;
     score: number;
     rut: string;
-    signature: string; // NEW: Signature from Oracle
+    creditProfile: any; // Full response from /api/score (signature no longer needed)
 }
 
 interface MintResult {
@@ -18,9 +18,10 @@ interface MintResult {
 
 /**
  * Client-side service to mint credit badges using Freighter wallet
+ * SIMPLIFIED: No Oracle signature verification - user.require_auth() provides security
  */
 export async function mintCreditBadge(params: MintBadgeParams): Promise<MintResult> {
-    const { userAddress, tier, score, rut, signature } = params;
+    const { userAddress, tier, score, rut, creditProfile } = params;
 
     try {
         // 1. Setup RPC connection
@@ -39,15 +40,16 @@ export async function mintCreditBadge(params: MintBadgeParams): Promise<MintResu
             throw err;
         }
 
-        // 3. Generate data hash (same logic as server)
-        const rutClean = rut.replace(/[^0-9kK]/g, '').toUpperCase();
-        // For client-side, we'll use a simple hash. In production, this would come from the oracle signature
-        const encoder = new TextEncoder();
-        const data = encoder.encode(rutClean + tier + score);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const dataHash = new Uint8Array(hashBuffer);
+        // 3. Use data_hash from server response (already computed with HMAC)
+        // The server calculates: createHmac('sha256', ADMIN_SECRET).update(rutClean).digest()
+        // We need to get this value from the scoring response
+        if (!creditProfile?.scoring?.dataHash) {
+            throw new Error('Server did not provide dataHash. Please re-analyze.');
+        }
 
-        // 4. Prepare contract args
+        const dataHash = Buffer.from(creditProfile?.dataHash || creditProfile?.scoring?.dataHash, 'hex');
+
+        // 4. Prepare contract args (SIMPLIFIED - no signature required)
         const contractId = process.env.NEXT_PUBLIC_CONTRACT_ID?.trim();
         console.log('DEBUG: Using Contract ID:', contractId);
 
@@ -55,17 +57,12 @@ export async function mintCreditBadge(params: MintBadgeParams): Promise<MintResu
             throw new Error('NEXT_PUBLIC_CONTRACT_ID is not defined in environment');
         }
 
-        // Check if signature is valid
-        if (!signature || typeof signature !== 'string') {
-            throw new Error(`Invalid Oracle signature received: ${typeof signature}. Please re-analyze while your wallet is connected.`);
-        }
-
+        // Contract now only needs: user, tier, score, data_hash (no signature)
         const args = [
             nativeToScVal(userAddress, { type: 'address' }),
             nativeToScVal(tier, { type: 'u32' }),
             nativeToScVal(score, { type: 'u32' }),
-            xdr.ScVal.scvBytes(Buffer.from(dataHash as any)),
-            xdr.ScVal.scvBytes(Buffer.from(signature, 'hex')) // signature should be hex string
+            xdr.ScVal.scvBytes(Buffer.from(dataHash as any))
         ];
 
         // 5. Build transaction

@@ -80,16 +80,15 @@ export async function GET(req: Request) {
         let signError: string | null = null;
         const hasSecret = !!process.env.ADMIN_SECRET;
 
+        // Calculate data_hash outside try block so it's accessible in response
+        const rutClean = rut!.replace(/[^0-9kK]/g, '').toUpperCase();
+        const dataHash = createHmac('sha256', process.env.ADMIN_SECRET || 'fallback').update(rutClean).digest();
+
         if (userAddress && process.env.ADMIN_SECRET) {
             console.log("SERVER DEBUG: Signing for User:", userAddress);
             try {
                 const adminKeypair = Keypair.fromSecret(process.env.ADMIN_SECRET);
                 adminPublicKey = adminKeypair.publicKey();
-
-                // Build the payload: [user_address_xdr, tier_be, score_be, data_hash_bytes]
-                // Consistent with contract: payload.append(&user.to_xdr(&env)); ...
-                const rutClean = rut!.replace(/[^0-9kK]/g, '').toUpperCase();
-                const dataHash = createHmac('sha256', process.env.ADMIN_SECRET).update(rutClean).digest();
 
                 const tierBuf = Buffer.alloc(4);
                 tierBuf.writeUInt32BE(scoreResult.tier);
@@ -97,14 +96,32 @@ export async function GET(req: Request) {
                 const scoreBuf = Buffer.alloc(4);
                 scoreBuf.writeUInt32BE(scoreResult.totalScore);
 
+                // Build SCAddress XDR matching contract's user.to_xdr() EXACTLY
+                // Contract does: user.to_xdr() which produces SCAddress XDR (not ScVal wrapped)
+                const address = Address.fromString(userAddress);
+                const scAddress = address.toScAddress();
+                const scAddressXdr = scAddress.toXDR('raw');
+
+                console.log('=== PAYLOAD HEX DEBUG ===');
+                console.log('User address:', userAddress);
+                console.log('scAddressXdr:', scAddressXdr.toString('hex'));
+                console.log('scAddressXdr length:', scAddressXdr.length);
+                console.log('tierBuf:', tierBuf.toString('hex'));
+                console.log('scoreBuf:', scoreBuf.toString('hex'));
+                console.log('dataHash:', dataHash.toString('hex'));
+
                 const payload = Buffer.concat([
-                    Address.fromString(userAddress).toScAddress().toXDR(),
+                    scAddressXdr, // SCAddress XDR - same as Rust's user.to_xdr()
                     tierBuf,
                     scoreBuf,
                     dataHash
                 ]);
 
+                console.log('FULL PAYLOAD:', payload.toString('hex'));
+                console.log('PAYLOAD LENGTH:', payload.length);
+
                 signature = adminKeypair.sign(payload).toString('hex');
+                console.log('SIGNATURE:', signature);
             } catch (err: any) {
                 signError = err?.message || String(err);
                 console.error("Signing error:", signError);
@@ -131,9 +148,10 @@ export async function GET(req: Request) {
                 capability: scoreResult.tier === 1 ? "EXCELLENT" :
                     scoreResult.tier === 2 ? "GOOD" :
                         scoreResult.tier === 3 ? "FAIR" : "INSUFFICIENT",
-                // Return signature for minting
+                // Return signature and dataHash for minting
                 signature,
-                adminPublicKey
+                adminPublicKey,
+                dataHash: dataHash.toString('hex') // Return hex string for frontend
             },
             stats: {
                 monthlyVolume: stats.avgPerMonth,

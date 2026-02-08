@@ -60,9 +60,11 @@ export const TransactionHistoryChart: React.FC<TransactionHistoryChartProps> = (
                 {sortedTx.map((tx, idx) => {
                     // Calculate relative height (min 10% visually)
                     const heightPercent = Math.max((tx.amountUSD / maxAmount) * 100, 10);
+                    // Use tx.id if available, otherwise fall back to index for unique key
+                    const uniqueKey = tx.id || `tx-${idx}-${tx.date}-${tx.amountUSD}`;
 
                     return (
-                        <div key={tx.id} className="group relative flex flex-col items-center justify-end h-full flex-1 min-w-[30px] transition-all hover:flex-[1.2]">
+                        <div key={uniqueKey} className="group relative flex flex-col items-center justify-end h-full flex-1 min-w-[30px] transition-all hover:flex-[1.2]">
 
                             {/* Tooltip (Hover) */}
                             <div className="absolute -top-10 scale-0 group-hover:scale-100 transition-transform origin-bottom z-10 flex flex-col items-center">
