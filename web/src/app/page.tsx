@@ -140,10 +140,11 @@ export default function Home() {
             // Llamada al endpoint real que implementamos
             // Incluimos publicKey para recibir un score firmado para esa wallet específica
             console.log("DEBUG: publicKey for signing:", publicKey);
-            const url = `/api/score?rut=${rut}${publicKey ? `&userAddress=${publicKey}` : ''}`;
+            const cacheBuster = `&_t=${Date.now()}`;
+            const url = `/api/score?rut=${rut}${publicKey ? `&userAddress=${publicKey}` : ''}${cacheBuster}`;
             console.log("DEBUG: Fetching URL:", url);
 
-            const res = await fetch(url);
+            const res = await fetch(url, { cache: 'no-store' });
             const data = await res.json();
 
             console.log("DEBUG: API Response Scoring:", data?.scoring);
@@ -191,20 +192,13 @@ export default function Home() {
         try {
             const signature = (creditProfile.scoring as any).signature;
 
-            if (!signature) {
-                addLog("⚠️ Missing Oracle Signature. Please click 'Connect & Analyze' again with your wallet connected.");
-                alert("Missing Oracle Proof. Please re-run the analysis (Connect & Analyze) while your wallet is connected to authorize the mint.");
-                setIsLoading(false);
-                return;
-            }
-
-            // Call client-side mint service with Oracle signature
+            // Call client-side mint service (signature no longer needed - simplified contract)
             const result = await mintCreditBadge({
                 userAddress: publicKey,
                 tier: creditProfile.scoring.tier,
                 score: (creditProfile.scoring as any).score || creditProfile.scoring.totalScore,
                 rut: (creditProfile as any).rut || rut,
-                signature: signature
+                creditProfile // Pass full creditProfile for dataHash
             });
 
             if (result.success && result.hash) {

@@ -27,6 +27,56 @@ A developer-facing SDK that standardizes Vigente's `CreditBadge` tokens as colla
 
 ---
 
+## 🧪 Testing Guide (Testnet)
+
+### 🔗 Live Deployment
+
+| Resource | Value |
+|----------|-------|
+| **Live App** | https://vigente-hackathon-final.vercel.app |
+| **Contract ID** | `CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W` |
+| **Network** | Stellar Testnet |
+| **Explorer** | [View Contract on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W) |
+
+### 🪪 Test RUTs (Chilean ID Numbers)
+
+Use these RUT numbers to test different credit tiers:
+
+| RUT | Tier | Score | Badge Type | Description |
+|-----|------|-------|------------|-------------|
+| `20.244.452-1` | A | 1000 | 🥇 Gold | High volume, consistent history |
+| `21.151.115-1` | A | 1000 | 🥇 Gold | Excellent credit profile |
+| `12.345.678-2` | B | ~650 | 🥈 Silver | Medium volume, stable history |
+| `6.531.561-5` | B | ~640 | 🥈 Silver | Good credit profile |
+| `7.452.862-K` | A | 1000 | 🥇 Gold | K as verification digit |
+| `99.999.999-9` | D | 0 | ❌ None | Insufficient history (fail) |
+
+> **Note**: RUTs ending in `1` or `K` → Tier A (Gold)  
+> RUTs ending in `2` → Tier B (Silver)  
+> RUTs ending in `9` → Fail (no history)  
+> Other digits → Tier B/C
+
+### 🦊 Freighter Wallet Setup
+
+1. Install [Freighter Wallet](https://www.freighter.app/) browser extension
+2. Create or import a wallet
+3. **Switch to TESTNET** in Freighter settings
+4. Fund your testnet account: https://laboratory.stellar.org/#account-creator?network=test
+
+### ✅ Testing Flow
+
+1. Open https://vigente-hackathon-final.vercel.app
+2. Click **"Connect Wallet"** (top right)
+3. Approve connection in Freighter popup
+4. Enter a test RUT (e.g., `20.244.452-1`)
+5. Click **"Connect & Analyze"**
+6. Review your credit score
+7. Click **"Mint Credit Badge"**
+8. **Approve transaction** in Freighter popup
+9. ✅ Badge minted! Check TX hash on Stellar Expert
+
+---
+
 ## 📐 Architecture
 
 ```mermaid
@@ -127,6 +177,13 @@ soroban contract deploy \
 ---
 
 ## 📊 Current Status (Testnet MVP)
+
+### 🚀 Deployed Contract
+```
+Contract ID: CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W
+Network: Stellar Testnet
+Admin: GAJT5NOKLJYDMO6WSUQAKYAWSH56YLPXLZTYPFP3PIJAKZ4PH7S235TU
+```
 
 ### ✅ Completed
 - **Oracle Node**: Functional MoneyGram data ingestion simulator
