@@ -1,154 +1,76 @@
-// =============================================================================
-// SCORING ENGINE - Vigente Protocol
-// =============================================================================
-// 
-// Motor de decisión crediticia basado en historial de remesas.
-// Implementa el algoritmo de 3 factores: Volumen, Consistencia y Frecuencia.
-// 
-// Rango total: 0 - 1000 Pts
-// =============================================================================
+/**
+ * Vigente Protocol — Scoring Engine
+ * 
+ * Motor de scoring crediticio alimentado por datos transaccionales de Payku.
+ * Evalúa volumen, consistencia y frecuencia de cobros para asignar
+ * un Tier de riesgo (A=Gold, B=Silver, C=Bronze, D=Rechazado).
+ */
 
-import { MoneyGramTransaction } from "./moneygram-oracle";
+import type { PaykuTransaction } from "./payku-oracle";
 
-export interface CreditScoreResult {
-    totalScore: number;      // 0-1000
-    tier: number;            // 1=A, 2=B, 3=C, 4=Fail
-    badgeType: "Gold" | "Silver" | "Bronze" | "None";
-    maxLoanAmount: number;   // Monto máximo sugerido en USDC
-    breakdown: {             // Detalle de puntos para UI
-        volumePoints: number;
-        consistencyPoints: number;
-        frequencyPoints: number;
-    };
+export interface ScoreBreakdown {
+  volumePoints: number;
+  consistencyPoints: number;
+  frequencyPoints: number;
 }
 
-/**
- * Calcula el Score Crediticio basado en transacciones de remesas.
- * 
- * @param transactions - Historial de transacciones del usuario
- * @param periodMonths - (Opcional) Período de análisis en meses, default 6
- */
-export function calculateCreditScore(
-    transactions: MoneyGramTransaction[],
-    periodMonths: number = 6
-): CreditScoreResult {
+export interface ScoreResult {
+  totalScore: number;
+  tier: number;               // 1=Gold, 2=Silver, 3=Bronze, 4=None
+  badgeType: "Gold" | "Silver" | "Bronze" | "None";
+  maxLoanAmount: number;      // CLP
+  breakdown: ScoreBreakdown;
+}
 
-    // 0. Si no hay datos suficiente
-    if (!transactions || transactions.length === 0) {
-        return {
-            totalScore: 0,
-            tier: 4,
-            badgeType: "None",
-            maxLoanAmount: 0,
-            breakdown: { volumePoints: 0, consistencyPoints: 0, frequencyPoints: 0 }
-        };
-    }
+const VOLUME_TIERS = { gold: 15_000, silver: 5_000, bronze: 1_500 };
+const LOAN_AMOUNTS: Record<number, number> = { 1: 10_000_000, 2: 5_000_000, 3: 2_000_000, 4: 0 };
 
-    // ---------------------------------------------------------------------------
-    // 1. ANÁLISIS DE DATOS
-    // ---------------------------------------------------------------------------
+export function calculateCreditScore(transactions: PaykuTransaction[]): ScoreResult {
+  const completed = transactions.filter((t) => t.status === "completed");
 
-    const now = new Date();
-    const periodStart = new Date();
-    periodStart.setMonth(now.getMonth() - periodMonths);
+  if (completed.length === 0) {
+    return { totalScore: 0, tier: 4, badgeType: "None", maxLoanAmount: 0, breakdown: { volumePoints: 0, consistencyPoints: 0, frequencyPoints: 0 } };
+  }
 
-    // Filtrar transacciones dentro del período de análisis
-    const recentTx = transactions.filter(tx => new Date(tx.date) >= periodStart);
+  // DIM 1: Volumen (0-40 pts)
+  const totalVolumeUSD = completed.reduce((sum, t) => sum + t.amountUSD, 0);
+  let volumePoints: number;
+  if (totalVolumeUSD >= VOLUME_TIERS.gold) volumePoints = 40;
+  else if (totalVolumeUSD >= VOLUME_TIERS.silver) volumePoints = 25 + Math.round(((totalVolumeUSD - VOLUME_TIERS.silver) / (VOLUME_TIERS.gold - VOLUME_TIERS.silver)) * 15);
+  else if (totalVolumeUSD >= VOLUME_TIERS.bronze) volumePoints = 12 + Math.round(((totalVolumeUSD - VOLUME_TIERS.bronze) / (VOLUME_TIERS.silver - VOLUME_TIERS.bronze)) * 13);
+  else volumePoints = Math.round((totalVolumeUSD / VOLUME_TIERS.bronze) * 12);
 
-    // Calcular métricas base
-    const totalVolume = recentTx.reduce((sum, tx) => sum + tx.amountUSD, 0);
-    const avgMonthlyVolume = totalVolume / periodMonths;
-    const transactionCount = recentTx.length;
+  // DIM 2: Consistencia (0-30 pts)
+  const monthlyVolumes: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    const monthStart = new Date(); monthStart.setMonth(monthStart.getMonth() - i - 1);
+    const monthEnd = new Date(); monthEnd.setMonth(monthEnd.getMonth() - i);
+    monthlyVolumes.push(completed.filter((t) => { const d = new Date(t.date); return d >= monthStart && d < monthEnd; }).reduce((s, t) => s + t.amountUSD, 0));
+  }
+  const activeMonths = monthlyVolumes.filter((v) => v > 0).length;
+  const avgMonthly = monthlyVolumes.reduce((a, b) => a + b, 0) / 6;
+  const variance = monthlyVolumes.reduce((sum, v) => sum + Math.pow(v - avgMonthly, 2), 0) / 6;
+  const cv = avgMonthly > 0 ? Math.sqrt(variance) / avgMonthly : 1;
+  let consistencyPoints: number;
+  if (activeMonths >= 5 && cv < 0.3) consistencyPoints = 30;
+  else if (activeMonths >= 4 && cv < 0.5) consistencyPoints = 20;
+  else if (activeMonths >= 3) consistencyPoints = 10;
+  else consistencyPoints = Math.round(activeMonths * 3);
 
-    // Analizar consistencia (meses únicos con actividad)
-    const activeMonths = new Set(
-        recentTx.map(tx => {
-            const d = new Date(tx.date);
-            return `${d.getFullYear()}-${d.getMonth()}`;
-        })
-    ).size;
+  // DIM 3: Frecuencia (0-30 pts)
+  const txPerMonth = completed.length / 6;
+  let frequencyPoints: number;
+  if (txPerMonth >= 10) frequencyPoints = 30;
+  else if (txPerMonth >= 5) frequencyPoints = 20;
+  else if (txPerMonth >= 2) frequencyPoints = 10;
+  else frequencyPoints = Math.round(txPerMonth * 5);
 
-    // ---------------------------------------------------------------------------
-    // 2. ALGORITMO DE SCORING
-    // ---------------------------------------------------------------------------
+  const totalScore = volumePoints + consistencyPoints + frequencyPoints;
+  let tier: number; let badgeType: ScoreResult["badgeType"];
+  if (totalScore >= 80) { tier = 1; badgeType = "Gold"; }
+  else if (totalScore >= 55) { tier = 2; badgeType = "Silver"; }
+  else if (totalScore >= 30) { tier = 3; badgeType = "Bronze"; }
+  else { tier = 4; badgeType = "None"; }
 
-    // A. VOLUMEN (Máx 400 pts)
-    // Evalúa capacidad de pago basada en flujo mensual
-    let volumePoints = 0;
-    if (avgMonthlyVolume > 500) {
-        volumePoints = 400;
-    } else if (avgMonthlyVolume > 300) {
-        volumePoints = 250;
-    } else if (avgMonthlyVolume >= 100) {
-        // Escala lineal entre $100 y $300: 50 pts base + prop
-        volumePoints = 50 + Math.floor(((avgMonthlyVolume - 100) / 200) * 150);
-    } else {
-        volumePoints = 50;
-    }
-
-    // B. CONSISTENCIA (Máx 300 pts)
-    // Evalúa regularidad de envíos (proxy de estabilidad laboral)
-    let consistencyPoints = 0;
-    // Threshold: al menos 4 de los últimos 6 meses (66% del tiempo)
-    const consistencyRate = activeMonths / periodMonths;
-
-    if (consistencyRate >= 0.66) { // Ejemplo: 4 de 6 meses
-        consistencyPoints = 300;
-    } else if (consistencyRate >= 0.5) { // 3 de 6 meses
-        consistencyPoints = 200;
-    } else {
-        consistencyPoints = 100;
-    }
-
-    // C. FRECUENCIA (Máx 300 pts)
-    // Evalúa uso del servicio (fidelidad y puntos de data)
-    let frequencyPoints = 0;
-    if (transactionCount > 10) {
-        frequencyPoints = 300;
-    } else if (transactionCount >= 5) {
-        frequencyPoints = 200;
-    } else {
-        frequencyPoints = 100;
-    }
-
-    // SCORE FINAL
-    const totalScore = volumePoints + consistencyPoints + frequencyPoints;
-
-    // ---------------------------------------------------------------------------
-    // 3. DETERMINACIÓN DE TIER Y BENEFICIOS
-    // ---------------------------------------------------------------------------
-
-    let tier = 4;
-    let badgeType: "Gold" | "Silver" | "Bronze" | "None" = "None";
-    let maxLoanAmount = 0;
-
-    if (totalScore >= 800) {
-        tier = 1; // Tier A
-        badgeType = "Gold";
-        maxLoanAmount = 500;
-    } else if (totalScore >= 500) {
-        tier = 2; // Tier B
-        badgeType = "Silver";
-        maxLoanAmount = 300;
-    } else if (totalScore >= 300) {
-        tier = 3; // Tier C
-        badgeType = "Bronze";
-        maxLoanAmount = 100;
-    } else {
-        tier = 4; // Fail
-        badgeType = "None";
-        maxLoanAmount = 0;
-    }
-
-    return {
-        totalScore,
-        tier,
-        badgeType,
-        maxLoanAmount,
-        breakdown: {
-            volumePoints,
-            consistencyPoints,
-            frequencyPoints
-        }
-    };
+  return { totalScore, tier, badgeType, maxLoanAmount: LOAN_AMOUNTS[tier], breakdown: { volumePoints, consistencyPoints, frequencyPoints } };
 }

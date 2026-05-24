@@ -1,103 +1,134 @@
-# 🧪 RUTs de Prueba - Vigente Protocol Demo
+# Test RUTs — Vigente Protocol Demo
 
-Este documento lista los RUTs válidos para testing del demo de Vigente Protocol.
-
-## 📋 RUTs Preconfigurados
-
-### ✅ Tier A (Gold Badge) - Score: 1000 pts
-Usuarios con alto volumen ($600+/mes) y historial de 6+ meses:
-
-- **22.342.342-3** → María García (KYC Nivel 3)
-- **12.345.671-K** → María García (KYC Nivel 3)
-
-**Características:**
-- 20 transacciones en 6 meses
-- Promedio: $180 USD por transacción
-- Max Loan: $5,000 USDC
+Test RUTs to demonstrate Vigente's tiering for SCF reviewers and Payku integration testing.
 
 ---
 
-### 🥈 Tier B (Silver Badge) - Score: ~673 pts
-Usuarios con volumen medio ($350+/mes) y historial de 4+ meses:
+## Preconfigured RUTs (Mock Fallback)
 
-- **9.876.543-5** → Carlos Rodríguez (KYC Nivel 2)
-- **11.111.111-K** → Carlos Rodríguez (KYC Nivel 2)
+The Payku oracle uses a hybrid strategy: when Payku Sandbox credentials are configured, it returns real merchant data; otherwise, it falls back to deterministic mock data based on the RUT's verification digit.
 
-**Características:**
-- 10 transacciones en 4 meses
-- Promedio: $140 USD por transacción
-- Max Loan: $2,000 USDC
+### Tier A (Gold) — Score 80–100
+
+Merchants with high monthly volume ($15,000+ USD equivalent) and 6+ months of consistent transactions:
+
+- `20.244.452-1`
+- `7.452.862-K`
+- `21.151.115-1`
+
+Approximate profile in mock mode:
+- ~60 transactions per 6-month window
+- Average transaction: $80,000–$950,000 CLP
+- Max loan: **10,000,000 CLP** (~$10,500 USD)
+- Badge: 🥇 Gold
+
+### Tier B (Silver) — Score 55–79
+
+Medium-volume merchants ($5,000–$15,000 USD equivalent) with stable activity:
+
+- `12.345.678-2`
+- `6.531.561-5`
+
+Approximate profile in mock mode:
+- ~35 transactions per 6-month window
+- Average transaction: $30,000–$450,000 CLP
+- Max loan: **5,000,000 CLP** (~$5,250 USD)
+- Badge: 🥈 Silver
+
+### Tier C (Bronze) — Score 30–54
+
+Lower-volume but credit-eligible merchants ($1,500–$5,000 USD equivalent):
+
+- `11.222.333-4`
+- `13.456.789-5`
+
+Approximate profile in mock mode:
+- ~15 transactions per 6-month window
+- Average transaction: $10,000–$150,000 CLP
+- Max loan: **2,000,000 CLP** (~$2,100 USD)
+- Badge: 🥉 Bronze
+
+### Tier D (No Badge) — Score < 30
+
+Insufficient transaction history:
+
+- `99.999.999-9`
+- `5.555.555-9`
+
+Approximate profile in mock mode:
+- ≤3 transactions
+- Average transaction: $5,000–$25,000 CLP
+- Max loan: **0 CLP** (rejected)
+- Badge: ❌ None
 
 ---
 
-### ❌ Tier D (No Califica) - Score: <250 pts
-Usuarios con datos insuficientes:
+## Fallback Logic (Random RUTs)
 
-- **5.555.555-9** → Ana López (KYC Nivel 1)
-- **9.999.999-0** → Ana López (KYC Nivel 1)
+For any RUT not in the preconfigured list, the mock oracle uses the verification digit (or last character) to deterministically assign a tier:
 
-**Características:**
-- Solo 2 transacciones
-- Promedio: $50 USD por transacción
-- Max Loan: $0 USDC
+| Last character | Tier |
+|----------------|------|
+| `1`, `K` | Gold (A) |
+| `2`, `3` | Silver (B) |
+| `4`, `5`, `6` | Bronze (C) |
+| `9` | None (fail) |
+| Other | Silver (B, default) |
 
----
+### Examples
 
-## 🎲 Lógica de Fallback (RUTs Aleatorios)
-
-Si ingresas un RUT que **NO** está en la lista preconfigurada, el sistema usa el **último dígito del número** (antes del verificador) para asignar el tier:
-
-| Último Dígito | Tier Asignado |
-|--------------|---------------|
-| 1, 2, 3      | **Tier A** (Gold) |
-| 4, 5, 6      | **Tier B** (Silver) |
-| 7, 8, 9, 0   | **Tier D** (Fail) |
-
-### Ejemplos de Fallback:
-
-- `18.123.456-1` → Termina en **1** → **Tier A**
-- `19.999.884-2` → Termina en **4** → **Tier B**
-- `15.000.007-7` → Termina en **7** → **Tier D (Fail)**
+- `18.123.456-1` → ends in `1` → **Gold**
+- `19.999.884-2` → ends in `2` → **Silver**
+- `15.000.007-7` → ends in `7` → defaults to **Silver**
+- `12.345.679-9` → ends in `9` → **None** (fail case)
 
 ---
 
-## 🔧 Para Agregar Más RUTs de Prueba
+## Real Mode (Payku Sandbox Credentials)
 
-Edita el archivo `web/src/services/moneygram-oracle.ts` en la función `mapRutToUserId()`:
+When `PAYKU_PUBLIC_TOKEN` and `PAYKU_PRIVATE_TOKEN` are set in `.env.local`, the oracle queries the live Payku Sandbox API for the given RUT's conciliation data. The mock fallback is not used unless the API call fails.
 
-```typescript
-const testRuts: Record<string, string> = {
-    '223423423': 'user_tier_a',     // 22.342.342-3
-    '12345671K': 'user_tier_a',     // 12.345.671-K
-    // Agrega aquí tus RUTs personalizados
-};
+To enable real mode:
+
+```bash
+# In web/.env.local
+PAYKU_BASE_URL="https://des.payku.cl/api"
+PAYKU_PUBLIC_TOKEN="<your-sandbox-public-token>"
+PAYKU_PRIVATE_TOKEN="<your-sandbox-private-token>"
+USD_CLP_RATE="950"
 ```
 
----
-
-## ✅ RUT Válido - Formato Aceptado
-
-El validador acepta:
-- Dígitos verificadores numéricos: `0-9`
-- Dígito verificador `K`
-- Formato con puntos y guión: `12.345.678-9`
-- Formato sin puntos: `12345678-9`
-
-**NO acepta:**
-- RUTs sin guión
-- Letras diferentes a 'K' en el verificador
-- RUTs con menos de 7 dígitos
+Verify which mode is active by checking the `dataSource` field in the API response:
+- `"payku_sandbox_real"` → live Payku API call succeeded
+- `"payku_fallback_mock"` → using mock data (no credentials, or API failure)
 
 ---
 
-## 🚀 Uso en el Demo
+## RUT Format Validation
 
-1. Ve a: http://localhost:3000
-2. Ingresa uno de los RUTs de arriba
-3. Click en "Connect & Analyze"
-4. Verifica el Score y Tier asignado
-5. Click en "Mint Credit Badge" para probar Freighter
+Accepted formats:
+- `12.345.678-9` (dots + dash)
+- `12345678-9` (dash only)
+- Verification digit: `0–9` or `K`
+
+Rejected:
+- No verification digit
+- Letters other than `K` as verification digit
+- Fewer than 7 digits
 
 ---
 
-**Nota**: Este es un sistema de prueba (MOCK). En producción, los RUTs se validarían contra la API real de MoneyGram Access.
+## Demo Flow
+
+1. Open https://vigente-hackathon-final.vercel.app (or `npm run dev` locally → http://localhost:3000)
+2. Connect Freighter wallet (Testnet mode)
+3. Enter one of the RUTs above
+4. Click **Connect & Analyze**
+5. Review the score, tier, and transaction chart
+6. Click **Mint Credit Badge**
+7. Approve the transaction in Freighter
+8. Verify the transaction hash on stellar.expert
+
+---
+
+**Note:** All preconfigured RUTs above are sample data for the mock fallback. They do not correspond to real Chilean taxpayers. Real merchant data comes from the Payku Sandbox or production API when credentials are configured.

@@ -1,281 +1,252 @@
-# Vigente Protocol 🛡️
+# Vigente Protocol
 
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen) ![Network](https://img.shields.io/badge/stellar-testnet-blue) ![License](https://img.shields.io/badge/license-MIT-purple)
+![Build Status](https://img.shields.io/badge/build-passing-brightgreen) ![Network](https://img.shields.io/badge/stellar-testnet-blue) ![License](https://img.shields.io/badge/license-MIT-purple) ![Tests](https://img.shields.io/badge/tests-45%2F45-green)
 
-> **Privacy-Preserving Reputation Infrastructure for RWA & Remittances**
-> 
-> Vigente transforms off-chain MoneyGram transaction history into verifiable on-chain credit scores using Zero-Knowledge cryptography on Stellar Soroban.
-
----
-
-## 🏗 The Problem
-
-The **$150B LatAm remittance market** is invisible to DeFi. 1.6M migrants in Chile alone send over $2B annually via MoneyGram, yet possess zero on-chain credit history. These "Credit Ghosts" are forced into predatory loans despite demonstrating consistent cash flow—a market failure at the intersection of Web2 finance and Web3 liquidity.
-
-## 💡 The Solution: Vigente Protocol
-
-Vigente is a **decentralized oracle and reputation layer** built on Soroban (Stellar Smart Contracts) that provides three core infrastructure components:
-
-### 1. **Deterministic Oracle Node**
-A production-grade oracle that ingests MoneyGram Access API data, executing deterministic scoring logic to translate remittance consistency into on-chain reputation tiers (Gold/Silver/Bronze) **without storing PII**.
-
-### 2. **ZK-Reputation Circuits** *(In Development)*
-Zero-Knowledge circuits (utilizing Noir/Zephyr) that allow users to generate cryptographic proofs of financial solvency. This enables verification of credit worthiness (e.g., "Monthly Volume > $500") **without revealing exact transaction amounts**.
-
-### 3. **Blend-Composable SDK**
-A developer-facing SDK that standardizes Vigente's `CreditBadge` tokens as collateral primitives, enabling any lending protocol (specifically Blend) to create under-collateralized pools for migrant demographics.
+> **Privacy-preserving on-chain credit reputation for the LatAm SME and microcommerce market.**
+>
+> Vigente turns merchant transaction history (initially via Payku in Chile, extending to open banking via Fintoc/Prometeo) into verifiable Soroban-native credit badges that unlock undercollateralized lending.
 
 ---
 
-## 🧪 Testing Guide (Testnet)
+## The Problem
 
-### 🔗 Live Deployment
+Chile alone has **>1M microcommerces** processing payments through fintech rails like Payku, yet zero of them have credit history visible to DeFi protocols. Despite consistent monthly cash flow, they are excluded from on-chain liquidity because Stellar has no native credit primitive that maps fiat transactional behavior to verifiable reputation.
+
+Banks won't lend without collateral they can't post. DeFi won't lend without 150%+ overcollateralization. The result: a $2B+ annual transaction volume that generates zero borrowing capacity.
+
+## The Solution
+
+Vigente Protocol is a **three-component infrastructure** on Stellar:
+
+### 1. CreditBadge SBT (`vigente-badge`)
+Non-transferable Soulbound Token on Soroban encoding a borrower's credit tier, score, and a SHA-256 commitment to their attested transactional data. Includes a permanent `slash()` mechanism that records defaults immutably for ~2 years.
+
+### 2. Oracle Adapter Layer
+Service-side adapter that ingests merchant data from Payku (Chile) and produces deterministic credit scores. Designed with a clean adapter interface (`PaykuClient`) so Fintoc/Prometeo open banking sources can be added without changing the scoring engine. Privacy-preserving: only SHA-256 commitments touch the chain.
+
+### 3. Reference Lending Vault (`reference-vault`)
+A minimal but complete Soroban lending contract that demonstrates credit-gated undercollateralized lending end-to-end. Calls `is_defaulted()` and `get_score()` on the badge contract to determine eligibility; calls `slash()` cross-contract on default. **Not** a production protocol — a reference implementation that any Stellar lending protocol can adopt.
+
+---
+
+## Live Deployment (Testnet)
 
 | Resource | Value |
 |----------|-------|
 | **Live App** | https://vigente-hackathon-final.vercel.app |
-| **Contract ID** | `CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W` |
+| **Badge Contract** | `CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W` |
 | **Network** | Stellar Testnet |
-| **Explorer** | [View Contract on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W) |
-
-### 🪪 Test RUTs (Chilean ID Numbers)
-
-Use these RUT numbers to test different credit tiers:
-
-| RUT | Tier | Score | Badge Type | Description |
-|-----|------|-------|------------|-------------|
-| `20.244.452-1` | A | 1000 | 🥇 Gold | High volume, consistent history |
-| `21.151.115-1` | A | 1000 | 🥇 Gold | Excellent credit profile |
-| `12.345.678-2` | B | ~650 | 🥈 Silver | Medium volume, stable history |
-| `6.531.561-5` | B | ~640 | 🥈 Silver | Good credit profile |
-| `7.452.862-K` | A | 1000 | 🥇 Gold | K as verification digit |
-| `99.999.999-9` | D | 0 | ❌ None | Insufficient history (fail) |
-
-> **Note**: RUTs ending in `1` or `K` → Tier A (Gold)  
-> RUTs ending in `2` → Tier B (Silver)  
-> RUTs ending in `9` → Fail (no history)  
-> Other digits → Tier B/C
-
-### 🦊 Freighter Wallet Setup
-
-1. Install [Freighter Wallet](https://www.freighter.app/) browser extension
-2. Create or import a wallet
-3. **Switch to TESTNET** in Freighter settings
-4. Fund your testnet account: https://laboratory.stellar.org/#account-creator?network=test
-
-### ✅ Testing Flow
-
-1. Open https://vigente-hackathon-final.vercel.app
-2. Click **"Connect Wallet"** (top right)
-3. Approve connection in Freighter popup
-4. Enter a test RUT (e.g., `20.244.452-1`)
-5. Click **"Connect & Analyze"**
-6. Review your credit score
-7. Click **"Mint Credit Badge"**
-8. **Approve transaction** in Freighter popup
-9. ✅ Badge minted! Check TX hash on Stellar Expert
+| **Explorer** | [stellar.expert](https://stellar.expert/explorer/testnet/contract/CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W) |
+| **Repository** | https://github.com/zzzbedream/VIGENTE-PROJECT |
 
 ---
 
-## 📐 Architecture
+## Testing Guide
 
-```mermaid
-graph LR
-    A[User] -->|1. OAuth Connect| B(MoneyGram API)
-    B -->|2. Tx History| C{Vigente Oracle}
-    C -->|3. Calculate Score| D[Scoring Engine]
-    D -->|4. Generate ZK Proof| E[Noir Circuit]
-    E -->|5. Submit Proof| F[Soroban Contract]
-    F -->|6. Mint Badge| G[Stellar Ledger]
-    G -->|7. Verify Reputation| H[Blend Lending Pool]
+### Test RUTs (Chilean ID Numbers)
+
+| RUT | Tier | Score | Badge | Description |
+|-----|------|-------|-------|-------------|
+| `20.244.452-1` | A | 1000 | Gold | High volume, consistent history |
+| `7.452.862-K` | A | 1000 | Gold | K as verification digit |
+| `12.345.678-2` | B | ~650 | Silver | Medium volume, stable history |
+| `6.531.561-5` | B | ~640 | Silver | Good credit profile |
+| `99.999.999-9` | D | 0 | None | Insufficient history (fail case) |
+
+> RUTs ending in `1`/`K` → Tier A; `2` → Tier B; `9` → fail; other digits → Tier B/C.
+
+### End-to-End Flow
+
+1. Install [Freighter Wallet](https://www.freighter.app/) (Testnet mode).
+2. Fund your testnet account at https://laboratory.stellar.org/#account-creator?network=test.
+3. Open https://vigente-hackathon-final.vercel.app.
+4. Click **Connect Wallet** → approve in Freighter.
+5. Enter a test RUT (e.g., `20.244.452-1`).
+6. Click **Connect & Analyze** → review credit score and transaction chart.
+7. Click **Mint Credit Badge** → approve transaction in Freighter.
+8. Inspect the transaction hash on Stellar Expert.
+
+---
+
+## Architecture (Summary — Full Spec in `docs/ARCHITECTURE.md`)
+
+```
+┌─────────────┐    ┌───────────────────┐    ┌─────────────────┐
+│  Merchant    │───►│  Payku Oracle      │───►│ Scoring Engine  │
+│  (RUT)       │    │  (adapter pattern)│    │ (V, F, C → S)   │
+└─────────────┘    └───────────────────┘    └────────┬────────┘
+                                                      │
+                          ┌───────────────────────────┴──┐
+                          ▼                              ▼
+                  ┌──────────────────┐         ┌─────────────────┐
+                  │ vigente-badge    │◄────────│  Freighter      │
+                  │ Soroban SBT      │ mint()  │  Wallet (user)  │
+                  └─────────┬────────┘         └─────────────────┘
+                            │
+              get_score()   │   slash()
+                            ▼
+                  ┌──────────────────┐         ┌─────────────────┐
+                  │ reference-vault  │────────►│  Borrower /     │
+                  │ Soroban Lending  │ borrow()│  LP             │
+                  └──────────────────┘         └─────────────────┘
 ```
 
-### Technical Flow:
-1. **Data Ingestion**: User connects MoneyGram account via OAuth. Oracle fetches transaction history.
-2. **Scoring**: Proprietary algorithm weights frequency and consistency over raw volume.
-3. **Privacy Layer**: ZK-circuit generates proof of tier eligibility without exposing amounts.
-4. **Minting**: Soroban contract verifies proof and mints non-transferable `CreditBadge` (SBT).
-5. **DeFi Integration**: Badge acts as reputation collateral in Blend Protocol pools.
+**Technical flow**:
+1. **Data ingestion**: Oracle pulls merchant transaction data from Payku (or Fintoc in T2).
+2. **Scoring**: Deterministic algorithm weights volume, frequency, and consistency.
+3. **Privacy layer**: SHA-256 commitment of RUT + merchant data — raw PII never on-chain.
+4. **Minting**: Soroban contract verifies signed claim and mints non-transferable `CreditBadge`.
+5. **DeFi integration**: Badge gates borrowing in `reference-vault`; default triggers cross-contract `slash()`.
 
 ---
 
-## 🚀 Key Features
-
-### 🔄 Remittance-to-Credit Algorithm
-Deterministic scoring engine that democratizes access to capital by rewarding consistency:
-- **Volume Score**: Total USD transacted over 6 months
-- **Frequency Score**: Number of transactions (rewards small, regular senders)
-- **Consistency Score**: Standard deviation penalty (punishes irregular behavior)
-
-### 🔒 ZKP-Ready Architecture
-Current MVP uses SHA-256 commitment schemes. Roadmap includes:
-- **Noir Circuits**: Range proofs for tier verification
-- **Client-Side Proving**: Browser-based proof generation (no server trust)
-- **Soroban Verifier**: On-chain verification of ZK-SNARK proofs
-
-### 🧩 DeFi Composable
-The `CreditBadge` is a Soroban-native token designed for ecosystem-wide composability:
-- **Blend Protocol**: Reduces collateral requirements for badge holders
-- **SAC Compatible**: Follows Stellar Asset Contract standards
-- **Event-Driven**: Emits standardized events for indexers and analytics
-
----
-
-## 🛠 Tech Stack
+## Tech Stack
 
 | Layer | Technology | Purpose |
-|-------|------------|---------|
-| **Smart Contracts** | Rust (Soroban SDK v21) | CreditBadge minting, verification, and storage |
-| **Oracle** | Node.js + TypeScript | MoneyGram API integration and scoring engine |
-| **ZK Circuits** | Noir Lang *(Roadmap)* | Privacy-preserving credit proofs |
-| **Frontend** | Next.js 14 + Tailwind CSS | User dashboard and identity verification |
-| **Network** | Stellar Testnet → Mainnet | 5-second finality, sub-cent fees |
+|-------|-----------|---------|
+| Smart Contracts | Rust + Soroban SDK | CreditBadge SBT, reference lending vault, mock USDC |
+| Oracle | Node.js + TypeScript | Payku API adapter with HMAC signing + retry/timeout |
+| Frontend | Next.js 16 + Tailwind | User dashboard, Freighter integration, vault UI |
+| Network | Stellar Testnet → Mainnet | Sub-cent fees, 5-second finality |
 
 ---
 
-## ⚡ Installation & Testing
+## Installation
 
 ### Prerequisites
 - Node.js v18+
 - Rust 1.75+ & Cargo
-- Soroban CLI v21+
+- Stellar CLI v22+
+- Freighter wallet (browser extension)
 
-### 1️⃣ Clone Repository
+### Frontend
+
 ```bash
 git clone https://github.com/zzzbedream/VIGENTE-PROJECT.git
-cd VIGENTE-PROJECT
-```
-
-### 2️⃣ Frontend Setup
-```bash
-cd web
+cd VIGENTE-PROJECT/web
 npm install
+cp .env.local.example .env.local  # Configure CONTRACT_ID, ADMIN_SECRET
 npm run dev
 # Open http://localhost:3000
 ```
 
-### 3️⃣ Smart Contract Testing
+### Smart Contracts
+
 ```bash
-cd contracts
-cargo test
-# Expected: test result: ok. 11 passed; 0 failed
+# vigente-badge (30 tests)
+cd contracts/vigente-badge && cargo test
+# Expected: 30 passed; 0 failed
+
+# reference-vault (10 integration tests with badge + mock-usdc)
+cd ../reference-vault && cargo test
+# Expected: 10 passed; 0 failed
+
+# mock-usdc (5 tests)
+cd ../mock-usdc && cargo test
+# Expected: 5 passed; 0 failed
 ```
 
-### 4️⃣ Build Optimized WASM
-```bash
-cargo build --target wasm32-unknown-unknown --release
-```
+### Deploy to Testnet
 
-### 5️⃣ Deploy to Testnet
 ```bash
-soroban contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/pyme_token_v1.wasm \
-  --source [ADMIN_SECRET] \
+cd contracts/vigente-badge
+cargo build --target wasm32v1-none --release
+stellar contract deploy \
+  --wasm target/wasm32v1-none/release/vigente_badge.wasm \
+  --source <ADMIN_SECRET> \
   --network testnet
 ```
 
 ---
 
-## 📊 Current Status (Testnet MVP)
+## Roadmap (SCF Build — 3 Tranches, $60K USD)
 
-### 🚀 Deployed Contract
-```
-Contract ID: CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W
-Network: Stellar Testnet
-Admin: GAJT5NOKLJYDMO6WSUQAKYAWSH56YLPXLZTYPFP3PIJAKZ4PH7S235TU
-```
+### Tranche 1 — MVP ($12K) · Weeks 1-6
+- `vigente-badge` contract deployed to testnet with 30+ tests passing.
+- Payku adapter integrating sandbox API with hybrid fallback.
+- Frontend end-to-end flow: RUT → score → mint → on-chain confirmation.
+- **Validation**: `npm run validate-t1` returns JSON with contract ID, test count, and a fresh mint tx hash.
 
-### ✅ Completed
-- **Oracle Node**: Functional MoneyGram data ingestion simulator
-- **Scoring Engine**: Deterministic tier assignment (Gold/Silver/Bronze/Fail)
-- **Soroban Contract**: `CreditBadge` minting and verification logic
-- **Frontend Dashboard**: User identity flow with transaction visualization
-- **API Layer**: `/api/oracle/score` and `/api/mint` endpoints
+### Tranche 2 — Testnet Expansion ($18K) · Weeks 7-14
+- `reference-vault` contract on testnet with cross-contract calls to `vigente-badge`.
+- Mock USDC token (SEP-41) for testnet liquidity.
+- Full lending lifecycle: mint → deposit → borrow → repay (happy path) and → liquidate → slash (default path).
+- Frontend vault UI: deposit, borrow, repay flows.
+- Open banking adapter: real Fintoc HTTP integration (replaces sandbox fixtures).
+- **Validation**: `npm run validate-t2` executes full lifecycle, returns 4 tx hashes.
 
-### 🧪 Validation Metrics
-- **Tier A (Gold)**: Users with >$500/mo volume → 1000 pts ✅
-- **Tier B (Silver)**: Users with >$300/mo volume → 673 pts ✅
-- **Fail State**: Correctly rejects insufficient history ✅
-- **Contract Tests**: 11/11 passing on Testnet ✅
-
----
-
-## 🗺 Roadmap (SCF Build Tranches)
-
-### **Tranche 1: Core Infrastructure** ($50k) - *Q2 2026*
-- Production-grade Oracle Node with redundancy and signed feeds
-- Soroban Reputation Standard (SAC-compliant SBT)
-- Developer SDK (TypeScript) and documentation site
-
-### **Tranche 2: Privacy Layer** ($60k) - *Q2 2026*
-- ZK-Circuit implementation (Noir/Zephyr integration)
-- Client-side proof generation (browser-based)
-- Soroban verifier contract for ZK-SNARK proofs
-
-### **Tranche 3: Mainnet & Liquidity** ($40k) - *Q3 2026*
-- Blend Protocol pool integration (custom LTV ratios)
-- Mainnet deployment with multi-sig admin controls
-- Real-world pilot with 50 migrant users in Chile
+### Tranche 3 — Mainnet Launch ($24K) · Weeks 15-24
+- Mainnet deployment of `vigente-badge` and `reference-vault`.
+- Hardening: multi-sig admin, monitoring (Mercury indexer), audit preparation.
+- Public TypeScript SDK + docs site.
+- 1+ pilot user (Chilean PyME via commercial partnership with Payku).
+- **Validation**: mainnet contract IDs verifiable on stellar.expert + go-live metrics dashboard.
 
 ---
 
-## 🎯 Market Opportunity
+## Market Opportunity
 
 | Metric | Value | Source |
 |--------|-------|--------|
-| LatAm Remittances (2024) | $150B | World Bank |
-| Chile Migrant Population | 1.6M | INE Chile |
-| Annual MoneyGram Volume (Chile) | $2B+ | MoneyGram Investor Relations |
-| Unbanked/Underbanked Rate | 68% | CGAP Financial Inclusion Data |
+| LatAm SME credit gap | $1.2T USD | IFC SME Finance Forum |
+| Chile Microcommerce Population | ~1M PyMEs | SII |
+| Payku Annual TPV (Chile) | $500M+ | Industry estimates |
+| Unbanked/Underbanked Rate | 68% (LatAm) | CGAP |
 
-**Thesis**: Vigente addresses the "Cold Start" problem for DeFi lending in emerging markets by creating a **privacy-preserving bridge** between legacy financial infrastructure (MoneyGram) and permissionless liquidity (Blend Protocol).
-
----
-
-## 🔐 Security & Privacy
-
-### Current Implementation
-- **Data Hashing**: SHA-256 commitment of RUT (national ID) for privacy
-- **Admin Controls**: Multi-signature authorization for badge minting
-- **Time-Bound Badges**: 90-day expiry to enforce fresh data
-
-### Roadmap (ZKP Integration)
-- **Range Proofs**: Prove "score > threshold" without revealing exact score
-- **Selective Disclosure**: Users choose which attributes to reveal to lenders
-- **On-Chain Verification**: Trustless proof checking via Soroban verifier
+**Thesis**: Vigente addresses the "cold start" problem for DeFi lending in emerging markets by creating a privacy-preserving bridge between regulated fintech rails (Payku, Fintoc) and permissionless on-chain liquidity.
 
 ---
 
-## 🤝 Contributing
+## Security & Privacy
 
-We welcome contributions! Please see our [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+- **Data hashing**: SHA-256 commitment of RUT + merchant data. Raw PII never on-chain.
+- **Soulbound (non-transferable)**: badges bound to a Stellar address permanently.
+- **Time-bound badges**: 90-day expiry forces fresh attestation.
+- **Immutable defaults**: `slash()` creates a permanent `DefaultBadge` with ~2-year TTL. No delete function exists.
+- **Three-tier ACL**: Admin (governance), Oracle (mint), Vault (slash) — separation of concerns prevents single-key compromise.
+- **Circuit breaker**: admin can pause `mint`/`slash` without affecting existing data.
 
-### Development Priorities
-1. **Noir Circuit Development**: ZK proof implementation
-2. **Oracle Hardening**: Rate limiting and redundancy
-3. **Blend Integration**: SDK for lending pool configuration
-
----
-
-## 📄 License
-
-This project is licensed under the **MIT License** - see [LICENSE](./LICENSE) file for details.
+See `docs/ARCHITECTURE.md` for the full threat model.
 
 ---
 
-## 🏆 Acknowledgments
+## Contributing
 
-Built with support from:
-- **Stellar Community Fund (SCF)** - Build Award Track
-- **GitHub Student Developer Pack** - Infrastructure credits
-- **MoneyGram Access API** - Remittance data access
+We welcome contributions. See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+
+Development priorities:
+1. **Reference vault** — cross-contract lending PoC (Tranche 2 deliverable).
+2. **Fintoc real integration** — replace sandbox fixtures with live HTTP.
+3. **TypeScript SDK** — public package for protocols integrating Vigente badges.
+
+---
+
+## Team
+
+- **zzzbedream** — Founder / Tech Lead
+- **Cristian Pérez Arce** — Full-stack Engineer
+- **Mauricio Urra** — Commercial Lead (BD, partnerships)
+
+See [docs/TEAM.md](./docs/TEAM.md) for profiles.
+
+---
+
+## AI Disclosure
+
+Per SCF Open Track requirements, full disclosure of AI assistance in development is available in [docs/AI_DISCLOSURE.md](./docs/AI_DISCLOSURE.md). Summary: Anthropic Claude was used as a collaborative coding and documentation assistant. All design decisions, security-relevant code, and final implementations were author-reviewed and validated.
+
+---
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
 
 ---
 
 <p align="center">
   <strong>Vigente Protocol</strong><br/>
-  Privacy-Preserving Reputation Infrastructure for the Next Billion Users<br/>
-  <a href="https://vigente-hackathon-final.vercel.app/landing">Live Demo</a> • 
-  <a href="https://github.com/zzzbedream/VIGENTE-PROJECT">GitHub</a> • 
-  <a href="https://stellar.expert/explorer/testnet">Testnet Explorer</a>
+  Privacy-preserving credit reputation infrastructure on Stellar<br/>
+  <a href="https://vigente-hackathon-final.vercel.app">Live Demo</a> ·
+  <a href="https://github.com/zzzbedream/VIGENTE-PROJECT">GitHub</a> ·
+  <a href="https://stellar.expert/explorer/testnet/contract/CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W">Testnet Contract</a>
 </p>

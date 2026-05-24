@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "VIGENTE Protocol",
-  description: "Turn remittance history into on-chain credit scores",
+  description: "Turn merchant transaction history into on-chain credit scores",
 };
 
 export default function RootLayout({

@@ -1,8 +1,15 @@
 import React from 'react';
-import { MoneyGramTransaction } from '../services/moneygram-oracle';
+
+interface ChartTransaction {
+    date: string;
+    amountUSD?: number;
+    amount?: number;
+    id?: string;
+    orderId?: string;
+}
 
 interface TransactionHistoryChartProps {
-    transactions: MoneyGramTransaction[];
+    transactions: ChartTransaction[];
 }
 
 export const TransactionHistoryChart: React.FC<TransactionHistoryChartProps> = ({ transactions }) => {
@@ -14,7 +21,7 @@ export const TransactionHistoryChart: React.FC<TransactionHistoryChartProps> = (
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
                 <p className="text-gray-400 font-medium">Insufficient History</p>
-                <p className="text-xs text-gray-500 mt-1">No remittance data found</p>
+                <p className="text-xs text-gray-500 mt-1">No transaction data found</p>
             </div>
         );
     }
@@ -24,7 +31,7 @@ export const TransactionHistoryChart: React.FC<TransactionHistoryChartProps> = (
     const sortedTx = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     // Find max value for scaling height
-    const maxAmount = Math.max(...sortedTx.map(tx => tx.amountUSD), 1);
+    const maxAmount = Math.max(...sortedTx.map(tx => (tx.amountUSD ?? tx.amount ?? 0)), 1);
 
     // Formatters
     const formatDate = (isoStr: string) => {
@@ -42,7 +49,7 @@ export const TransactionHistoryChart: React.FC<TransactionHistoryChartProps> = (
             <div className="px-4 py-3 border-b border-gray-800 flex justify-between items-center bg-gray-900/80">
                 <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-                    Remittance History
+                    Transaction History
                 </h3>
                 <span className="text-xs text-gray-500 uppercase tracking-wider font-mono">Last {transactions.length} txs</span>
             </div>
@@ -59,9 +66,9 @@ export const TransactionHistoryChart: React.FC<TransactionHistoryChartProps> = (
 
                 {sortedTx.map((tx, idx) => {
                     // Calculate relative height (min 10% visually)
-                    const heightPercent = Math.max((tx.amountUSD / maxAmount) * 100, 10);
+                    const heightPercent = Math.max(((tx.amountUSD ?? tx.amount ?? 0) / maxAmount) * 100, 10);
                     // Use tx.id if available, otherwise fall back to index for unique key
-                    const uniqueKey = tx.id || `tx-${idx}-${tx.date}-${tx.amountUSD}`;
+                    const uniqueKey = tx.id || `tx-${idx}-${tx.date}-${(tx.amountUSD ?? tx.amount ?? 0)}`;
 
                     return (
                         <div key={uniqueKey} className="group relative flex flex-col items-center justify-end h-full flex-1 min-w-[30px] transition-all hover:flex-[1.2]">
@@ -69,7 +76,7 @@ export const TransactionHistoryChart: React.FC<TransactionHistoryChartProps> = (
                             {/* Tooltip (Hover) */}
                             <div className="absolute -top-10 scale-0 group-hover:scale-100 transition-transform origin-bottom z-10 flex flex-col items-center">
                                 <div className="bg-gray-800/90 text-white text-xs px-3 py-1.5 rounded-lg border border-gray-700 shadow-xl whitespace-nowrap backdrop-blur-md">
-                                    <p className="font-bold text-cyan-400">{formatCurrency(tx.amountUSD)}</p>
+                                    <p className="font-bold text-cyan-400">{formatCurrency((tx.amountUSD ?? tx.amount ?? 0))}</p>
                                     <p className="text-[10px] text-gray-400 mt-0.5">{new Date(tx.date).toLocaleDateString()}</p>
                                 </div>
                                 {/* Arrow */}

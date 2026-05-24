@@ -127,14 +127,14 @@ export default function Home() {
     // ---------------------------------------------------------------------------
     // STEP 1: CONNECT & ANALYZE (CALL ORACLE)
     // ---------------------------------------------------------------------------
-    const handleConnectMoneyGram = async () => {
+    const handleConnectPayku = async () => {
         if (!rutValidation.valid) {
             addLog(`❌ ${rutValidation.error || "RUT inválido"}`);
             return;
         }
 
         setIsLoading(true);
-        addLog("📡 Connecting to MoneyGram Access API...");
+        addLog("📡 Connecting to Payku Sandbox API...");
 
         try {
             // Llamada al endpoint real que implementamos
@@ -154,7 +154,7 @@ export default function Home() {
             if (res.ok && data.found) {
                 setCreditProfile(data);
                 addLog("✅ User Identity Verified (KYC Level " + data.profile.kycLevel + ")");
-                addLog("📊 Remittance History Downloaded.");
+                addLog("📊 Transaction History Downloaded.");
                 addLog(`🏆 Score Calculated: ${data.scoring.totalScore} Pts (Tier ${data.scoring.tier})`);
 
                 // Simular un pequeño delay para efecto UI
@@ -229,7 +229,7 @@ export default function Home() {
                         Financial Identity Protocol
                     </h1>
                     <p className="text-slate-400 max-w-xl text-center text-lg">
-                        Turn your MoneyGram remittance history into a verifiable
+                        Turn your Payku transaction history into a verifiable
                         <span className="text-cyan-400 font-semibold mx-1">On-Chain Credit Score</span>
                         to access global DeFi loans for your business.
                     </p>
@@ -270,7 +270,7 @@ export default function Home() {
                                         </div>
                                     </div>
                                     <p className="text-xs text-slate-500">
-                                        We use your ID to fetch hashed remittance records from the MoneyGram Oracle.
+                                        We use your RUT to fetch hashed merchant transaction records from the Payku Oracle.
                                     </p>
                                 </div>
 
@@ -280,12 +280,12 @@ export default function Home() {
                                             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
                                         </svg>
                                     </div>
-                                    <h4 className="text-white font-bold mb-2">MoneyGram Integration</h4>
+                                    <h4 className="text-white font-bold mb-2">Payku Integration</h4>
                                     <p className="text-xs text-slate-400 mb-4">
-                                        Securely access your remittance history to calculate your credit score.
+                                        Securely access your merchant transaction history to calculate your credit score.
                                     </p>
                                     <button
-                                        onClick={handleConnectMoneyGram}
+                                        onClick={handleConnectPayku}
                                         disabled={isLoading || step !== 1 || !rutValidation.valid}
                                         className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-all shadow-lg shadow-cyan-900/20"
                                     >
@@ -396,7 +396,7 @@ export default function Home() {
                             <h2 className="text-3xl font-bold text-white mb-2">Reputation Minted!</h2>
                             <p className="text-slate-400 mb-8 max-w-md mx-auto">
                                 Your <b>{creditProfile?.scoring.badgeType} Credit Badge</b> is now live on the Stellar Network.
-                                You can now access under-collateralized loans on Blend Protocol.
+                                You can now access under-collateralized loans through the Vigente Reference Vault.
                             </p>
 
                             <div className="bg-black/30 rounded-lg p-4 max-w-lg mx-auto mb-8 border border-white/10 flex flex-col items-center">
@@ -410,9 +410,13 @@ export default function Home() {
                                 <button onClick={() => window.location.reload()} className="py-3 rounded-lg border border-white/10 hover:bg-white/5">
                                     Start Over
                                 </button>
-                                <button className="py-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold">
-                                    View on Blend
-                                </button>
+                                <a
+                                    href={`https://stellar.expert/explorer/testnet/contract/${process.env.NEXT_PUBLIC_CONTRACT_ID || ''}`}
+                                    target="_blank"
+                                    className="py-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-center"
+                                >
+                                    View Contract
+                                </a>
                             </div>
                         </div>
                     )}

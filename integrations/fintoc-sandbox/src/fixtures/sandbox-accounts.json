@@ -1,0 +1,42 @@
+{
+  "accounts": [
+    {
+      "id": "acc_sandbox_001",
+      "name": "Cuenta Corriente",
+      "official_name": "Cuenta Corriente en Pesos",
+      "number": "****1234",
+      "holder_id_hash": "sha256:a1b2c3d4e5f6...",
+      "institution": {
+        "id": "cl_banco_de_chile",
+        "name": "Banco de Chile",
+        "country": "CL"
+      },
+      "currency": "CLP",
+      "balance": {
+        "available": 1250000,
+        "current": 1320000
+      },
+      "type": "checking_account",
+      "created_at": "2025-01-15T10:00:00Z"
+    },
+    {
+      "id": "acc_sandbox_002",
+      "name": "Cuenta Vista",
+      "official_name": "Cuenta Vista Digital",
+      "number": "****5678",
+      "holder_id_hash": "sha256:a1b2c3d4e5f6...",
+      "institution": {
+        "id": "cl_bancoestado",
+        "name": "BancoEstado",
+        "country": "CL"
+      },
+      "currency": "CLP",
+      "balance": {
+        "available": 430000,
+        "current": 430000
+      },
+      "type": "sight_account",
+      "created_at": "2025-03-22T14:30:00Z"
+    }
+  ]
+}
