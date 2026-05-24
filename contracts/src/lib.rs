@@ -12,17 +12,21 @@ mod test;
 // VIGENTE PROTOCOL v2.0 - Financial Identity & On-Chain Reputation
 // =============================================================================
 // 
+// ⚠️ DEPRECATED — This is the v1 legacy contract.
+// The production contract is `contracts/vigente-badge/` with full ACL,
+// slash mechanism, and 30+ tests. See README.md for the canonical contract ID.
+//
 // EVOLUCIÓN DEL CONTRATO:
 // -------------------------
-// ✅ NUEVO: CreditBadge struct para reputación crediticia
-// ✅ NUEVO: mint_badge() para emitir badges de crédito
-// ✅ NUEVO: verify_badge() para integración con Blend Protocol
-// ✅ NUEVO: Instance storage para consulta rápida del último badge
-// ✅ MANTIENE: mint_deal() para compatibilidad con flujo anterior
-// 
+// ✅ CreditBadge struct para reputación crediticia
+// ✅ mint_badge() para emitir badges de crédito
+// ✅ verify_badge() / get_tier() para consulta por terceros (vaults, dApps)
+// ✅ Instance storage para consulta rápida del último badge
+// ✅ mint_deal() para compatibilidad con flujo anterior
+//
 // ARQUITECTURA:
 // - Stateless: Los eventos son la fuente de verdad (auditables vía indexers)
-// - Instance Storage: Solo para el último badge (consulta rápida por Blend)
+// - Instance Storage: Solo para el último badge (consulta rápida por terceros)
 // - Privacy-First: Solo hashes on-chain, nunca datos personales
 // =============================================================================
 
@@ -41,7 +45,7 @@ pub enum DataKey {
 // CREDIT BADGE STRUCTURE
 // -----------------------------------------------------------------------------
 /// Representa la reputación crediticia de un usuario basada en su historial
-/// de remesas (MoneyGram) convertido en un score on-chain.
+/// de transacciones merchant (Payku) convertido en un score on-chain.
 /// 
 /// # Tiers
 /// - Tier 1 (A): Score 800-1000, Alto volumen, historial largo
@@ -175,7 +179,7 @@ impl VigenteProtocol {
     }
 
     /// Verifica si un usuario tiene un CreditBadge válido (no expirado).
-    /// Esta función será usada por Blend Protocol para determinar elegibilidad.
+    /// Esta función es consumida por contratos lending externos para determinar elegibilidad.
     /// 
     /// # Arguments
     /// - `user`: Dirección del usuario a verificar
@@ -203,7 +207,7 @@ impl VigenteProtocol {
         }
     }
 
-    /// Obtiene el tier de un usuario (helper para Blend).
+    /// Obtiene el tier de un usuario (helper para integraciones externas).
     /// Retorna 0 si no tiene badge válido.
     pub fn get_tier(env: Env, user: Address) -> u32 {
         match Self::verify_badge(env, user) {

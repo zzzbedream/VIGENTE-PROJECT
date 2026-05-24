@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
-import {
-    fetchOracleData,
-    calculateTransactionStats
-} from "../../../../services/moneygram-oracle";
-import {
-    calculateCreditScore
-} from "../../../../services/scoring-engine";
+import { fetchPaykuData, calculateTransactionStats } from "@/services/payku-oracle";
+import { calculateCreditScore } from "@/services/scoring-engine";
 import * as crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
@@ -19,15 +14,13 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: "rut is required" }, { status: 400 });
         }
 
-        // 1. Obtener datos del Oráculo (MoneyGram)
-        const oracleResponse = await fetchOracleData(rut);
+        // 1. Obtener datos del Oráculo (Payku)
+        const oracleResponse = await fetchPaykuData(rut);
 
-        if (!oracleResponse) {
-            // Retornamos 200 pero indicando que no hay datos,
-            // para que el frontend pueda manejar el estado "Sin historial" elegantemente
+        if (!oracleResponse || !oracleResponse.transactions || oracleResponse.transactions.length === 0) {
             return NextResponse.json({
                 found: false,
-                message: "User not found or no transaction history."
+                message: "Sin historial transaccional en Payku para este RUT."
             });
         }
 
@@ -38,7 +31,6 @@ export async function GET(req: Request) {
         const basicStats = calculateTransactionStats(oracleResponse.transactions);
 
         // 3. Generar Firma Mock (Simulando firma ed25519 del oráculo)
-        // En producción esto sería el firmado real con la llave privada del Oráculo
         const payloadStart = `${rut}:${scoreResult.totalScore}:${scoreResult.tier}`;
         const signature = crypto.createHmac('sha256', 'oracle-secret-key-mock')
             .update(payloadStart)
@@ -48,30 +40,33 @@ export async function GET(req: Request) {
         return NextResponse.json({
             found: true,
 
-            // User Profile
+            // Merchant Profile (Payku)
             profile: {
-                id: oracleResponse.user.id,
-                name: oracleResponse.user.name,
-                country: oracleResponse.user.country,
-                kycLevel: oracleResponse.user.kycLevel,
-                registeredAt: oracleResponse.user.registeredAt
+                id: oracleResponse.merchant.id,
+                name: oracleResponse.merchant.name,
+                country: oracleResponse.merchant.country,
+                kycLevel: oracleResponse.merchant.kycLevel,
+                registeredAt: oracleResponse.merchant.registeredAt
             },
 
             // Scoring Result
             scoring: {
                 totalScore: scoreResult.totalScore,
-                tier: scoreResult.tier,        // 1-4
-                badgeType: scoreResult.badgeType, // Gold, Silver, Bronze, None
+                tier: scoreResult.tier,
+                badgeType: scoreResult.badgeType,
                 maxLoanAmount: scoreResult.maxLoanAmount,
                 breakdown: scoreResult.breakdown
             },
 
             // Transaction History (para gráficos)
-            history: oracleResponse.transactions.map(tx => ({
+            history: oracleResponse.transactions.map((tx: any) => ({
                 date: tx.date,
                 amount: tx.amountUSD,
+                amountUSD: tx.amountUSD,
+                amountCLP: tx.amountCLP,
                 status: tx.status,
-                recipientCountry: tx.recipientCountry
+                type: tx.type,
+                paymentMethod: tx.paymentMethod
             })),
 
             // Oracle Signature (para verificación on-chain futura)

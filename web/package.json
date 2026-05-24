@@ -10,7 +10,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "verify": "ts-node scripts/verify-contract.ts"
+    "verify": "ts-node scripts/verify-contract.ts",
+    "validate-t1": "ts-node scripts/validate-t1.ts",
+    "validate-t2": "ts-node scripts/validate-t2.ts",
+    "validate-t3": "ts-node scripts/validate-t3.ts"
   },
   "dependencies": {
     "@stellar/freighter-api": "^6.0.1",

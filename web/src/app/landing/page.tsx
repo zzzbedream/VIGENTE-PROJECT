@@ -63,7 +63,7 @@ export default function LandingPage() {
                     <h1 className="text-5xl md:text-7xl lg:text-8xl font-black mb-8 tracking-tighter leading-[0.95]">
                         Transform Your <br className="hidden md:block" />
                         <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#00F0FF] via-[#3E1BDB] to-[#00F0FF] animate-gradient">
-                            Remittance History
+                            Merchant History
                         </span>
                         <br />
                         into DeFi Credit.
@@ -71,8 +71,8 @@ export default function LandingPage() {
 
                     {/* Subheadline */}
                     <p className="text-lg md:text-xl text-white/60 max-w-3xl mx-auto mb-12 leading-relaxed font-light">
-                        The first privacy-preserving reputation layer on Stellar. Turn MoneyGram receipts
-                        into under-collateralized loans via Soroban smart contracts.
+                        The first privacy-preserving reputation layer on Stellar. Turn your Payku
+                        transaction history into under-collateralized loans via Soroban smart contracts.
                     </p>
 
                     {/* CTA Buttons */}
@@ -107,8 +107,8 @@ export default function LandingPage() {
                     <div className="flex flex-wrap justify-center items-center gap-12 md:gap-16 opacity-40 grayscale hover:opacity-70 hover:grayscale-0 transition-all duration-500">
                         <div className="text-2xl font-bold tracking-wider">STELLAR</div>
                         <div className="text-2xl font-bold tracking-wider">SOROBAN</div>
-                        <div className="text-2xl font-bold tracking-wider">MONEYGRAM</div>
-                        <div className="text-2xl font-bold tracking-wider">BLEND</div>
+                        <div className="text-2xl font-bold tracking-wider">PAYKU</div>
+                        <div className="text-2xl font-bold tracking-wider">FINTOC</div>
                     </div>
                 </div>
             </section>
@@ -135,7 +135,7 @@ export default function LandingPage() {
                             <div className="text-[#00F0FF] text-sm font-bold mb-2">STEP 1</div>
                             <h3 className="text-xl font-bold mb-3">Connect</h3>
                             <p className="text-white/50 text-sm leading-relaxed">
-                                Link your MoneyGram account via OAuth. We fetch your transaction history without storing personal data.
+                                Connect your Payku merchant account. We fetch your transaction history without storing personal data.
                             </p>
                         </div>
                     </div>
@@ -186,7 +186,7 @@ export default function LandingPage() {
                             <div className="text-[#3E1BDB] text-sm font-bold mb-2">STEP 4</div>
                             <h3 className="text-xl font-bold mb-3">Borrow</h3>
                             <p className="text-white/50 text-sm leading-relaxed">
-                                Access Blend Protocol liquidity pools with reduced collateral requirements using your reputation.
+                                Access Stellar DeFi liquidity with reduced collateral requirements using your on-chain reputation.
                             </p>
                         </div>
                     </div>

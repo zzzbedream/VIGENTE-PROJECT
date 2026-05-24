@@ -1,0 +1,12 @@
+{
+  "name": "vigente-fintoc-sandbox",
+  "version": "1.0.0",
+  "description": "Vigente Protocol — Fintoc Open Banking Sandbox Integration with TLSNotary stub",
+  "main": "src/quickstart.js",
+  "scripts": {
+    "quickstart": "node src/quickstart.js",
+    "test:connection": "node src/test-connection.js"
+  },
+  "keywords": ["vigente", "fintoc", "stellar", "soroban", "tlsnotary", "zktls"],
+  "license": "MIT"
+}
