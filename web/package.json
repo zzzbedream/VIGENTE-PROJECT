@@ -11,7 +11,9 @@
     "start": "next start",
     "lint": "eslint",
     "verify": "ts-node scripts/verify-contract.ts",
-    "setup:mother": "ts-node scripts/setup-mother-account.ts",
+    "setup:mother": "tsx scripts/setup-mother-account.ts",
+    "evaluate": "tsx scripts/evaluate.ts",
+    "test:horizon": "tsx --test tests/horizon-scoring.test.ts",
     "validate-t1": "ts-node scripts/validate-t1.ts",
     "validate-t2": "ts-node scripts/validate-t2.ts",
     "validate-t3": "ts-node scripts/validate-t3.ts"
@@ -35,6 +37,7 @@
     "eslint-config-next": "16.1.0",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
+    "tsx": "^4.22.3",
     "typescript": "^5"
   }
 }
