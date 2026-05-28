@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "verify": "ts-node scripts/verify-contract.ts",
+    "setup:mother": "ts-node scripts/setup-mother-account.ts",
     "validate-t1": "ts-node scripts/validate-t1.ts",
     "validate-t2": "ts-node scripts/validate-t2.ts",
     "validate-t3": "ts-node scripts/validate-t3.ts"
