@@ -1,6 +1,6 @@
 {
   "generators": {
-    "address": 6,
+    "address": 5,
     "nonce": 0
   },
   "auth": [
@@ -30,10 +30,29 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "add_oracle",
+              "function_name": "set_oracle_keys",
               "args": [
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                  "vec": [
+                    {
+                      "bytes": "ad8f82bd2da3a19ef6babf24e2c38e9fa7962303a89fafe09a63edd9498b7045"
+                    },
+                    {
+                      "bytes": "1a8bc6acc3800a5e8b606f67449d221be211a8bef3af7c8cc26eebb6e58911b3"
+                    },
+                    {
+                      "bytes": "55eb2abaf2d584fa5ad50b3693f2609c21ec21eb20e433252ded8867b43412df"
+                    },
+                    {
+                      "bytes": "5939f0897e38cea56f866aa39fea3df16355f237f144bfd989ae4406a9e095a3"
+                    },
+                    {
+                      "bytes": "e1b2e29d9bdd7b308d717a5fe25b2525f2da78f026e7e1cad0550e794f2e1e5b"
+                    }
+                  ]
+                },
+                {
+                  "u32": 3
                 }
               ]
             }
@@ -52,7 +71,7 @@
               "function_name": "add_vault",
               "args": [
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 }
               ]
             }
@@ -112,7 +131,7 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "AuthOracles"
+                              "symbol": "AuthVaults"
                             }
                           ]
                         },
@@ -128,16 +147,40 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "AuthVaults"
+                              "symbol": "OracleKeys"
                             }
                           ]
                         },
                         "val": {
                           "vec": [
                             {
-                              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                              "bytes": "ad8f82bd2da3a19ef6babf24e2c38e9fa7962303a89fafe09a63edd9498b7045"
+                            },
+                            {
+                              "bytes": "1a8bc6acc3800a5e8b606f67449d221be211a8bef3af7c8cc26eebb6e58911b3"
+                            },
+                            {
+                              "bytes": "55eb2abaf2d584fa5ad50b3693f2609c21ec21eb20e433252ded8867b43412df"
+                            },
+                            {
+                              "bytes": "5939f0897e38cea56f866aa39fea3df16355f237f144bfd989ae4406a9e095a3"
+                            },
+                            {
+                              "bytes": "e1b2e29d9bdd7b308d717a5fe25b2525f2da78f026e7e1cad0550e794f2e1e5b"
                             }
                           ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "OracleThreshold"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 3
                         }
                       },
                       {
@@ -370,11 +413,34 @@
                 "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
               },
               {
-                "symbol": "add_oracle"
+                "symbol": "set_oracle_keys"
               }
             ],
             "data": {
-              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+              "vec": [
+                {
+                  "vec": [
+                    {
+                      "bytes": "ad8f82bd2da3a19ef6babf24e2c38e9fa7962303a89fafe09a63edd9498b7045"
+                    },
+                    {
+                      "bytes": "1a8bc6acc3800a5e8b606f67449d221be211a8bef3af7c8cc26eebb6e58911b3"
+                    },
+                    {
+                      "bytes": "55eb2abaf2d584fa5ad50b3693f2609c21ec21eb20e433252ded8867b43412df"
+                    },
+                    {
+                      "bytes": "5939f0897e38cea56f866aa39fea3df16355f237f144bfd989ae4406a9e095a3"
+                    },
+                    {
+                      "bytes": "e1b2e29d9bdd7b308d717a5fe25b2525f2da78f026e7e1cad0550e794f2e1e5b"
+                    }
+                  ]
+                },
+                {
+                  "u32": 3
+                }
+              ]
             }
           }
         }
@@ -393,11 +459,18 @@
                 "symbol": "acl"
               },
               {
-                "symbol": "oracle"
+                "symbol": "oracles"
               }
             ],
             "data": {
-              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+              "vec": [
+                {
+                  "u32": 5
+                },
+                {
+                  "u32": 3
+                }
+              ]
             }
           }
         }
@@ -416,7 +489,7 @@
                 "symbol": "fn_return"
               },
               {
-                "symbol": "add_oracle"
+                "symbol": "set_oracle_keys"
               }
             ],
             "data": "void"
@@ -444,7 +517,7 @@
               }
             ],
             "data": {
-              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
             }
           }
         }
@@ -467,7 +540,7 @@
               }
             ],
             "data": {
-              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
             }
           }
         }
@@ -514,7 +587,7 @@
               }
             ],
             "data": {
-              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
             }
           }
         }
