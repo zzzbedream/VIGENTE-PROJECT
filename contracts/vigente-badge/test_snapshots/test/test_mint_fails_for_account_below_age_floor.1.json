@@ -35,19 +35,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "d1463279017f8059b94fb5b564be92595bb67e05ca29d12ad036d05dbd198391"
+                      "bytes": "3a6205ba8f376667ccd523e4cf6d4fe499fc51ddfb2861b277fa311a84acb4be"
                     },
                     {
-                      "bytes": "314a2ef7f9a58a915784c8480cb864234e54d0ccf18eeab2ae186983c224215c"
+                      "bytes": "bab90379033c757bfcf5ef30f1e2c5a0386108ff21953fbba810eed1aec10866"
                     },
                     {
-                      "bytes": "2cdfd942410f922e7fb35a12fa83aa9eefa8de8fe8a2cb56fc43342de67d1844"
+                      "bytes": "c9d1278ac7dfe14718f432fb79f3050cc9d47de20d972c6b2690a62da48df7f9"
                     },
                     {
-                      "bytes": "3e674151fb93781abed2d5bf73795a49a4307ff97c02decf6796885bc5679d62"
+                      "bytes": "276accf93378399498ec96b3d9506d528dc7e4ac8d2e2c2d4725c9e8f3a0cb00"
                     },
                     {
-                      "bytes": "dcfbf7eb922cb6c8f23d2336404dc2d53a82f802c3f4a824516614f8e8274c6e"
+                      "bytes": "e583c77accc63cae425387e4f9444e1be4872d1ca590b53b8300260c1d679411"
                     }
                   ]
                 },
@@ -92,137 +92,6 @@
     "min_temp_entry_ttl": 10,
     "max_entry_ttl": 12614400,
     "ledger_entries": [
-      [
-        {
-          "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-            "key": {
-              "vec": [
-                {
-                  "symbol": "Badge"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                }
-              ]
-            },
-            "durability": "persistent"
-          }
-        },
-        [
-          {
-            "last_modified_ledger_seq": 0,
-            "data": {
-              "contract_data": {
-                "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-                "key": {
-                  "vec": [
-                    {
-                      "symbol": "Badge"
-                    },
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                    }
-                  ]
-                },
-                "durability": "persistent",
-                "val": {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "data_hash"
-                      },
-                      "val": {
-                        "bytes": "03b07df31ca4bcd5754b472170dd2e99570c11b0f73d632d4ad64170ddff48e3"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "expires_at"
-                      },
-                      "val": {
-                        "u64": 1707776000
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "issued_at"
-                      },
-                      "val": {
-                        "u64": 1700000000
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "score"
-                      },
-                      "val": {
-                        "u32": 700
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "slashed"
-                      },
-                      "val": {
-                        "bool": false
-                      }
-                    }
-                  ]
-                }
-              }
-            },
-            "ext": "v0"
-          },
-          1555300
-        ]
-      ],
-      [
-        {
-          "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-            "key": {
-              "vec": [
-                {
-                  "symbol": "UsedNonce"
-                },
-                {
-                  "bytes": "50000000000000000000000000000000000000000000000000000000000000aa"
-                }
-              ]
-            },
-            "durability": "persistent"
-          }
-        },
-        [
-          {
-            "last_modified_ledger_seq": 0,
-            "data": {
-              "contract_data": {
-                "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-                "key": {
-                  "vec": [
-                    {
-                      "symbol": "UsedNonce"
-                    },
-                    {
-                      "bytes": "50000000000000000000000000000000000000000000000000000000000000aa"
-                    }
-                  ]
-                },
-                "durability": "persistent",
-                "val": {
-                  "bool": true
-                }
-              }
-            },
-            "ext": "v0"
-          },
-          1555300
-        ]
-      ],
       [
         {
           "contract_data": {
@@ -297,19 +166,19 @@
                         "val": {
                           "vec": [
                             {
-                              "bytes": "d1463279017f8059b94fb5b564be92595bb67e05ca29d12ad036d05dbd198391"
+                              "bytes": "3a6205ba8f376667ccd523e4cf6d4fe499fc51ddfb2861b277fa311a84acb4be"
                             },
                             {
-                              "bytes": "314a2ef7f9a58a915784c8480cb864234e54d0ccf18eeab2ae186983c224215c"
+                              "bytes": "bab90379033c757bfcf5ef30f1e2c5a0386108ff21953fbba810eed1aec10866"
                             },
                             {
-                              "bytes": "2cdfd942410f922e7fb35a12fa83aa9eefa8de8fe8a2cb56fc43342de67d1844"
+                              "bytes": "c9d1278ac7dfe14718f432fb79f3050cc9d47de20d972c6b2690a62da48df7f9"
                             },
                             {
-                              "bytes": "3e674151fb93781abed2d5bf73795a49a4307ff97c02decf6796885bc5679d62"
+                              "bytes": "276accf93378399498ec96b3d9506d528dc7e4ac8d2e2c2d4725c9e8f3a0cb00"
                             },
                             {
-                              "bytes": "dcfbf7eb922cb6c8f23d2336404dc2d53a82f802c3f4a824516614f8e8274c6e"
+                              "bytes": "e583c77accc63cae425387e4f9444e1be4872d1ca590b53b8300260c1d679411"
                             }
                           ]
                         }
@@ -564,19 +433,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "d1463279017f8059b94fb5b564be92595bb67e05ca29d12ad036d05dbd198391"
+                      "bytes": "3a6205ba8f376667ccd523e4cf6d4fe499fc51ddfb2861b277fa311a84acb4be"
                     },
                     {
-                      "bytes": "314a2ef7f9a58a915784c8480cb864234e54d0ccf18eeab2ae186983c224215c"
+                      "bytes": "bab90379033c757bfcf5ef30f1e2c5a0386108ff21953fbba810eed1aec10866"
                     },
                     {
-                      "bytes": "2cdfd942410f922e7fb35a12fa83aa9eefa8de8fe8a2cb56fc43342de67d1844"
+                      "bytes": "c9d1278ac7dfe14718f432fb79f3050cc9d47de20d972c6b2690a62da48df7f9"
                     },
                     {
-                      "bytes": "3e674151fb93781abed2d5bf73795a49a4307ff97c02decf6796885bc5679d62"
+                      "bytes": "276accf93378399498ec96b3d9506d528dc7e4ac8d2e2c2d4725c9e8f3a0cb00"
                     },
                     {
-                      "bytes": "dcfbf7eb922cb6c8f23d2336404dc2d53a82f802c3f4a824516614f8e8274c6e"
+                      "bytes": "e583c77accc63cae425387e4f9444e1be4872d1ca590b53b8300260c1d679411"
                     }
                   ]
                 },
@@ -735,16 +604,16 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                 },
                 {
-                  "u32": 700
+                  "u32": 750
                 },
                 {
                   "u64": 1707776000
                 },
                 {
-                  "u32": 60
+                  "u32": 15
                 },
                 {
-                  "bytes": "50000000000000000000000000000000000000000000000000000000000000aa"
+                  "bytes": "5a000000000000000000000000000000000000000000000000000000000000b4"
                 },
                 {
                   "vec": [
@@ -754,7 +623,17 @@
                           "u32": 0
                         },
                         {
-                          "bytes": "fe4deaa66d20844dd9523fbad674135b94737043e2a0d14dc7b9dd8ec044821b0b3e037cb11ac87ab3290057bf807d260a8273ca07f2b33758faf0ad3b70300e"
+                          "bytes": "87546c5e4f5966d5e10b7e19d45794d7ea27fdf69ab88f1817ea04b97b00fd7a9890f8c993134147dc6e743a368d5e629b63764e29517533782735eb4e032d0e"
+                        }
+                      ]
+                    },
+                    {
+                      "vec": [
+                        {
+                          "u32": 1
+                        },
+                        {
+                          "bytes": "6a232c4203c710dbc70ff3f73c09dea3b1450207ef66d88ebede042368e229eb16f8b5d2c5be18b382ca98c137a882c8342e2dc5f75e5a97ad2263877842c00b"
                         }
                       ]
                     },
@@ -764,54 +643,11 @@
                           "u32": 2
                         },
                         {
-                          "bytes": "86bc9b229f461579acafdc0edb2e521ed8ebfaa9c89935a4740155aaea61895c6d9568e7b1b195aab40e347956556d8cd95b10d50540b9f02e6b5228e1955e08"
-                        }
-                      ]
-                    },
-                    {
-                      "vec": [
-                        {
-                          "u32": 4
-                        },
-                        {
-                          "bytes": "8395c16c9c95175c6ae07d7faf03e96beecd7cbc67bc00ffb467f6a86d6b5fa99ec3328902983759a0b572343e95678a2b2acfabcf0b88c64744f1176a0d8b07"
+                          "bytes": "5de6b348e872f21dd4c7d5251c4f9cc8e996265a490d58223751f04878fc5a7099250cacf6e3561df3075e78eedd61465a8199e9cb756a72ead1dd6ad734e80d"
                         }
                       ]
                     }
                   ]
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "mint"
-              },
-              {
-                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-              }
-            ],
-            "data": {
-              "vec": [
-                {
-                  "u32": 700
-                },
-                {
-                  "u64": 1700000000
-                },
-                {
-                  "u64": 1707776000
                 }
               ]
             }
@@ -829,55 +665,199 @@
           "v0": {
             "topics": [
               {
-                "symbol": "fn_return"
-              },
-              {
-                "symbol": "mint"
+                "symbol": "log"
               }
             ],
             "data": {
-              "map": [
+              "vec": [
                 {
-                  "key": {
-                    "symbol": "data_hash"
-                  },
-                  "val": {
-                    "bytes": "03b07df31ca4bcd5754b472170dd2e99570c11b0f73d632d4ad64170ddff48e3"
-                  }
+                  "string": "caught panic 'wallet age below minimum' from contract function 'Symbol(mint)'"
                 },
                 {
-                  "key": {
-                    "symbol": "expires_at"
-                  },
-                  "val": {
-                    "u64": 1707776000
-                  }
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                 },
                 {
-                  "key": {
-                    "symbol": "issued_at"
-                  },
-                  "val": {
-                    "u64": 1700000000
-                  }
+                  "u32": 750
                 },
                 {
-                  "key": {
-                    "symbol": "score"
-                  },
-                  "val": {
-                    "u32": 700
-                  }
+                  "u64": 1707776000
                 },
                 {
-                  "key": {
-                    "symbol": "slashed"
-                  },
-                  "val": {
-                    "bool": false
-                  }
+                  "u32": 15
+                },
+                {
+                  "bytes": "5a000000000000000000000000000000000000000000000000000000000000b4"
+                },
+                {
+                  "vec": [
+                    {
+                      "vec": [
+                        {
+                          "u32": 0
+                        },
+                        {
+                          "bytes": "87546c5e4f5966d5e10b7e19d45794d7ea27fdf69ab88f1817ea04b97b00fd7a9890f8c993134147dc6e743a368d5e629b63764e29517533782735eb4e032d0e"
+                        }
+                      ]
+                    },
+                    {
+                      "vec": [
+                        {
+                          "u32": 1
+                        },
+                        {
+                          "bytes": "6a232c4203c710dbc70ff3f73c09dea3b1450207ef66d88ebede042368e229eb16f8b5d2c5be18b382ca98c137a882c8342e2dc5f75e5a97ad2263877842c00b"
+                        }
+                      ]
+                    },
+                    {
+                      "vec": [
+                        {
+                          "u32": 2
+                        },
+                        {
+                          "bytes": "5de6b348e872f21dd4c7d5251c4f9cc8e996265a490d58223751f04878fc5a7099250cacf6e3561df3075e78eedd61465a8199e9cb756a72ead1dd6ad734e80d"
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "wasm_vm": "invalid_action"
+                }
+              }
+            ],
+            "data": {
+              "string": "caught error from function"
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": null,
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "wasm_vm": "invalid_action"
+                }
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "string": "contract call failed"
+                },
+                {
+                  "symbol": "mint"
+                },
+                {
+                  "vec": [
+                    {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                    },
+                    {
+                      "u32": 750
+                    },
+                    {
+                      "u64": 1707776000
+                    },
+                    {
+                      "u32": 15
+                    },
+                    {
+                      "bytes": "5a000000000000000000000000000000000000000000000000000000000000b4"
+                    },
+                    {
+                      "vec": [
+                        {
+                          "vec": [
+                            {
+                              "u32": 0
+                            },
+                            {
+                              "bytes": "87546c5e4f5966d5e10b7e19d45794d7ea27fdf69ab88f1817ea04b97b00fd7a9890f8c993134147dc6e743a368d5e629b63764e29517533782735eb4e032d0e"
+                            }
+                          ]
+                        },
+                        {
+                          "vec": [
+                            {
+                              "u32": 1
+                            },
+                            {
+                              "bytes": "6a232c4203c710dbc70ff3f73c09dea3b1450207ef66d88ebede042368e229eb16f8b5d2c5be18b382ca98c137a882c8342e2dc5f75e5a97ad2263877842c00b"
+                            }
+                          ]
+                        },
+                        {
+                          "vec": [
+                            {
+                              "u32": 2
+                            },
+                            {
+                              "bytes": "5de6b348e872f21dd4c7d5251c4f9cc8e996265a490d58223751f04878fc5a7099250cacf6e3561df3075e78eedd61465a8199e9cb756a72ead1dd6ad734e80d"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": null,
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "wasm_vm": "invalid_action"
+                }
+              }
+            ],
+            "data": {
+              "string": "escalating error to panic"
             }
           }
         }

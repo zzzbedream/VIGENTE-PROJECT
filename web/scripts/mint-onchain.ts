@@ -88,10 +88,19 @@ async function main(): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   const expiration = BigInt(now + 90 * 24 * 60 * 60);
 
+  // Account age supplied off-chain. CLI default 60 days — comfortably above
+  // the 30-day floor. Override with `--age <days>` for testing edge cases.
+  const ageFlagIdx = argv.indexOf("--age");
+  const accountAgeDays = ageFlagIdx >= 0 ? Number(argv[ageFlagIdx + 1]) : 60;
+  if (!Number.isInteger(accountAgeDays) || accountAgeDays < 0) {
+    console.error(`Invalid --age value: ${argv[ageFlagIdx + 1]}`);
+    process.exit(1);
+  }
+
   // Generate nonce and sign with the threshold simulator.
   const nonce = freshNonce();
-  const signed = buildSignedMintRequest(borrower, score, expiration, nonce);
-  console.log(`[mint-onchain] borrower=${borrower} score=${score} expiration=${expiration}`);
+  const signed = buildSignedMintRequest(borrower, score, expiration, accountAgeDays, nonce);
+  console.log(`[mint-onchain] borrower=${borrower} score=${score} expiration=${expiration} age_days=${accountAgeDays}`);
   console.log(`[mint-onchain] nonce=${nonce.toString("hex")}`);
   console.log(`[mint-onchain] signatures from oracles ${signed.signatures.map((s) => s.index).join(",")}`);
 
@@ -106,6 +115,7 @@ async function main(): Promise<void> {
     Address.fromString(borrower).toScVal(),
     nativeToScVal(score, { type: "u32" }),
     nativeToScVal(expiration, { type: "u64" }),
+    nativeToScVal(accountAgeDays, { type: "u32" }),
     xdr.ScVal.scvBytes(nonce),
     buildSignaturesScVal(signed.signatures),
   );

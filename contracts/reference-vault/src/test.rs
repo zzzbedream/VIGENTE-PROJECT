@@ -69,12 +69,14 @@ impl OracleSet {
         borrower: &Address,
         score: u32,
         expiration: u64,
+        account_age_days: u32,
         nonce: &[u8; 32],
     ) -> std::vec::Vec<u8> {
         let xdr_bytes: Bytes = borrower.clone().to_xdr(env);
         let mut msg: std::vec::Vec<u8> = xdr_bytes.iter().collect();
         msg.extend_from_slice(&score.to_be_bytes());
         msg.extend_from_slice(&expiration.to_be_bytes());
+        msg.extend_from_slice(&account_age_days.to_be_bytes());
         msg.extend_from_slice(nonce);
         msg
     }
@@ -85,10 +87,11 @@ impl OracleSet {
         borrower: &Address,
         score: u32,
         expiration: u64,
+        account_age_days: u32,
         nonce: &[u8; 32],
         count: usize,
     ) -> Vec<(u32, BytesN<64>)> {
-        let msg = Self::build_message_bytes(env, borrower, score, expiration, nonce);
+        let msg = Self::build_message_bytes(env, borrower, score, expiration, account_age_days, nonce);
         let mut out = Vec::new(env);
         for i in 0..count {
             let sig_bytes = self.nodes[i].signing_key.sign(&msg).to_bytes();
@@ -97,6 +100,8 @@ impl OracleSet {
         out
     }
 }
+
+const DEFAULT_AGE_DAYS: u32 = 60;
 
 fn fresh_nonce(seed: u8) -> [u8; 32] {
     let mut n = [0u8; 32];
@@ -225,6 +230,7 @@ fn mint_badge_threshold(
         borrower,
         score,
         expiration,
+        DEFAULT_AGE_DAYS,
         &nonce,
         h.oracles.threshold as usize,
     );
@@ -232,6 +238,7 @@ fn mint_badge_threshold(
         borrower,
         &score,
         &expiration,
+        &DEFAULT_AGE_DAYS,
         &BytesN::from_array(&h.env, &nonce),
         &sigs,
     );

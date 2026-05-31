@@ -52,6 +52,9 @@ pub enum DataKey {
     /// (sprint scope; cleanup tied to badge expiration is a post-grant optimization documented
     /// in docs/ARCHITECTURE.md).
     UsedNonce(BytesN<32>),
+    /// Minimum wallet age in days required to mint. Phase B'.2 anti-Sybil floor.
+    /// Default 30 days. Configurable by admin via `set_min_wallet_age`.
+    MinWalletAgeDays,
     /// List of authorized vault addresses (Address-based ACL — vaults remain single-signer
     /// contracts in Soroban; threshold semantics only apply to the oracle side).
     AuthVaults,
@@ -62,6 +65,10 @@ pub enum DataKey {
     /// Whether the contract is paused (circuit breaker)
     Paused,
 }
+
+/// Default wallet age floor. Chosen to be hostile to throw-away bot wallets
+/// without locking out real PyMEs who just discovered Stellar last month.
+const DEFAULT_MIN_WALLET_AGE_DAYS: u32 = 30;
 
 // =============================================================================
 // CREDIT BADGE STRUCTURE
@@ -133,6 +140,8 @@ impl VigenteBadge {
         let empty_vaults: Vec<Address> = Vec::new(&env);
         env.storage().instance().set(&DataKey::AuthVaults, &empty_vaults);
         env.storage().instance().set(&DataKey::Paused, &false);
+        // Phase B'.2: default wallet age floor (30 days). Configurable via set_min_wallet_age.
+        env.storage().instance().set(&DataKey::MinWalletAgeDays, &DEFAULT_MIN_WALLET_AGE_DAYS);
 
         // Extend TTL: ~90 days at 5s/ledger
         env.storage().instance().extend_ttl(1_555_200, 1_555_200);
@@ -214,6 +223,25 @@ impl VigenteBadge {
             .unwrap_or(0)
     }
 
+    /// Admin-only: update the minimum wallet age in days required to mint.
+    /// Phase B'.2 control surface — tune the anti-Sybil floor without redeploy.
+    pub fn set_min_wallet_age(env: Env, min_days: u32) {
+        let admin: Address = Self::require_admin(&env);
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::MinWalletAgeDays, &min_days);
+        env.events().publish(
+            (symbol_short!("min_age"),),
+            min_days,
+        );
+    }
+
+    /// Read-only: current minimum wallet age requirement (days).
+    pub fn get_min_wallet_age(env: Env) -> u32 {
+        env.storage().instance()
+            .get(&DataKey::MinWalletAgeDays)
+            .unwrap_or(DEFAULT_MIN_WALLET_AGE_DAYS)
+    }
+
     /// Add a vault address to the authorization list.
     /// Only the admin can call this.
     pub fn add_vault(env: Env, vault: Address) {
@@ -267,16 +295,22 @@ impl VigenteBadge {
     /// unique within a single call (a single oracle cannot vote twice).
     ///
     /// # Arguments
-    /// - `borrower`:   The address receiving the badge.
-    /// - `score`:      Credit score (0–1000).
-    /// - `expiration`: Ledger timestamp when the badge expires.
-    /// - `nonce`:      32-byte anti-replay marker chosen off-chain. Each nonce can be
-    ///                 used exactly once across the contract's lifetime.
-    /// - `signatures`: Vec of (oracle_index, ed25519_signature) tuples. Length must be
-    ///                 >= OracleThreshold.
+    /// - `borrower`:          The address receiving the badge.
+    /// - `score`:             Credit score (0–1000).
+    /// - `expiration`:        Ledger timestamp when the badge expires.
+    /// - `account_age_days`:  Off-chain–measured wallet age. Must be >=
+    ///                         MinWalletAgeDays. Bundled into the signed message
+    ///                         so a compromised oracle node alone cannot grant
+    ///                         a badge to a fresh bot wallet.
+    /// - `nonce`:             32-byte anti-replay marker chosen off-chain. Each
+    ///                         nonce can be used exactly once across the contract's
+    ///                         lifetime.
+    /// - `signatures`:        Vec of (oracle_index, ed25519_signature) tuples.
+    ///                         Length must be >= OracleThreshold.
     ///
     /// # Canonical message
-    /// Each oracle signs `borrower.to_xdr() || score.to_be_bytes() || expiration.to_be_bytes() || nonce`.
+    /// Each oracle signs
+    /// `borrower.to_xdr() || score.to_be_bytes() || expiration.to_be_bytes() || account_age_days.to_be_bytes() || nonce`.
     /// Off-chain signers MUST reproduce this byte sequence exactly.
     ///
     /// # Panics
@@ -284,6 +318,7 @@ impl VigenteBadge {
     /// - If borrower is currently in default.
     /// - If score > 1000.
     /// - If expiration is not strictly in the future.
+    /// - If account_age_days < MinWalletAgeDays.
     /// - If the nonce was already consumed.
     /// - If signatures.len() < OracleThreshold.
     /// - If any signature index is out of range or duplicated within this call.
@@ -293,6 +328,7 @@ impl VigenteBadge {
         borrower: Address,
         score: u32,
         expiration: u64,
+        account_age_days: u32,
         nonce: BytesN<32>,
         signatures: Vec<(u32, BytesN<64>)>,
     ) -> CreditBadge {
@@ -312,6 +348,17 @@ impl VigenteBadge {
         let now = env.ledger().timestamp();
         if expiration <= now {
             panic!("expiration must be in the future");
+        }
+
+        // Anti-Sybil floor: reject borrowers whose wallet is too young.
+        // Note: the age value is bundled into the signed message below, so a
+        // single rogue oracle cannot lie about it — the other k-1 honest
+        // oracles refuse to co-sign a forged age.
+        let min_age: u32 = env.storage().instance()
+            .get(&DataKey::MinWalletAgeDays)
+            .unwrap_or(DEFAULT_MIN_WALLET_AGE_DAYS);
+        if account_age_days < min_age {
+            panic!("wallet age below minimum");
         }
 
         // Anti-replay: the nonce must not have been used before.
@@ -336,7 +383,7 @@ impl VigenteBadge {
         }
 
         // Build the canonical mint message that every signature must verify against.
-        let msg: Bytes = Self::build_mint_message(&env, &borrower, score, expiration, &nonce);
+        let msg: Bytes = Self::build_mint_message(&env, &borrower, score, expiration, account_age_days, &nonce);
 
         // Verify each signature and enforce unique indices within this call.
         // We track seen indices in a Vec<u32>; the threshold is small (k <= n, typically
@@ -394,17 +441,21 @@ impl VigenteBadge {
     }
 
     /// Build the canonical byte sequence each oracle signs over.
-    /// Off-chain signers must reproduce this exactly.
+    /// Off-chain signers must reproduce this exactly:
+    /// `borrower.to_xdr() || score_be(4) || expiration_be(8) || account_age_days_be(4) || nonce(32)`
+    /// = 44 + 4 + 8 + 4 + 32 = 92 bytes for a G-address borrower.
     fn build_mint_message(
         env: &Env,
         borrower: &Address,
         score: u32,
         expiration: u64,
+        account_age_days: u32,
         nonce: &BytesN<32>,
     ) -> Bytes {
         let mut msg = borrower.clone().to_xdr(env);
         msg.extend_from_array(&score.to_be_bytes());
         msg.extend_from_array(&expiration.to_be_bytes());
+        msg.extend_from_array(&account_age_days.to_be_bytes());
         msg.append(&nonce.clone().into());
         msg
     }

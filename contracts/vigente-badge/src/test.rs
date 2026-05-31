@@ -65,34 +65,35 @@ impl OracleSet {
     }
 
     /// Build the canonical message exactly as the contract does:
-    /// borrower.to_xdr() || score.to_be_bytes() || expiration.to_be_bytes() || nonce
+    /// borrower.to_xdr() || score_be || expiration_be || account_age_days_be || nonce
     fn build_message_bytes(
         env: &Env,
         borrower: &Address,
         score: u32,
         expiration: u64,
+        account_age_days: u32,
         nonce: &[u8; 32],
     ) -> std::vec::Vec<u8> {
         let xdr_bytes: Bytes = borrower.clone().to_xdr(env);
         let mut msg: std::vec::Vec<u8> = xdr_bytes.iter().collect();
         msg.extend_from_slice(&score.to_be_bytes());
         msg.extend_from_slice(&expiration.to_be_bytes());
+        msg.extend_from_slice(&account_age_days.to_be_bytes());
         msg.extend_from_slice(nonce);
         msg
     }
 
-    /// Produce a Vec<(idx, BytesN<64>)> by signing the message with the first
-    /// `count` oracles.
     fn sign_with_first(
         &self,
         env: &Env,
         borrower: &Address,
         score: u32,
         expiration: u64,
+        account_age_days: u32,
         nonce: &[u8; 32],
         count: usize,
     ) -> Vec<(u32, BytesN<64>)> {
-        let msg = Self::build_message_bytes(env, borrower, score, expiration, nonce);
+        let msg = Self::build_message_bytes(env, borrower, score, expiration, account_age_days, nonce);
         let mut out = Vec::new(env);
         for i in 0..count {
             let sig_bytes = self.nodes[i].signing_key.sign(&msg).to_bytes();
@@ -101,17 +102,17 @@ impl OracleSet {
         out
     }
 
-    /// Sign using a specific list of oracle indices.
     fn sign_with_indices(
         &self,
         env: &Env,
         borrower: &Address,
         score: u32,
         expiration: u64,
+        account_age_days: u32,
         nonce: &[u8; 32],
         indices: &[u32],
     ) -> Vec<(u32, BytesN<64>)> {
-        let msg = Self::build_message_bytes(env, borrower, score, expiration, nonce);
+        let msg = Self::build_message_bytes(env, borrower, score, expiration, account_age_days, nonce);
         let mut out = Vec::new(env);
         for &idx in indices {
             let sig_bytes = self.nodes[idx as usize].signing_key.sign(&msg).to_bytes();
@@ -120,6 +121,10 @@ impl OracleSet {
         out
     }
 }
+
+/// Default account_age_days passed in tests — comfortably above the 30-day
+/// floor so existing scenarios stay green.
+const DEFAULT_AGE_DAYS: u32 = 60;
 
 fn fresh_nonce(seed: u8) -> [u8; 32] {
     let mut n = [0u8; 32];
@@ -158,7 +163,8 @@ fn setup(env: &Env) -> (Address, Address, Address, VigenteBadgeClient, OracleSet
     (admin, vault, borrower, client, oracles)
 }
 
-/// Convenience wrapper: build threshold-signed mint call with k=threshold signatures.
+/// Convenience wrapper: build threshold-signed mint call with k=threshold
+/// signatures and `account_age_days = DEFAULT_AGE_DAYS`.
 fn mint_default(
     env: &Env,
     client: &VigenteBadgeClient,
@@ -168,16 +174,37 @@ fn mint_default(
     expiration: u64,
     nonce_seed: u8,
 ) -> crate::CreditBadge {
+    mint_with_age(env, client, oracles, borrower, score, expiration, DEFAULT_AGE_DAYS, nonce_seed)
+}
+
+fn mint_with_age(
+    env: &Env,
+    client: &VigenteBadgeClient,
+    oracles: &OracleSet,
+    borrower: &Address,
+    score: u32,
+    expiration: u64,
+    age_days: u32,
+    nonce_seed: u8,
+) -> crate::CreditBadge {
     let nonce = fresh_nonce(nonce_seed);
     let sigs = oracles.sign_with_first(
         env,
         borrower,
         score,
         expiration,
+        age_days,
         &nonce,
         oracles.threshold as usize,
     );
-    client.mint(borrower, &score, &expiration, &BytesN::from_array(env, &nonce), &sigs)
+    client.mint(
+        borrower,
+        &score,
+        &expiration,
+        &age_days,
+        &BytesN::from_array(env, &nonce),
+        &sigs,
+    )
 }
 
 const DEFAULT_EXPIRATION: u64 = 1_700_000_000 + 7_776_000;
@@ -229,8 +256,8 @@ fn test_set_oracle_keys_replaces_set() {
     assert_eq!(client.get_oracle_threshold(), 2);
 
     let nonce = fresh_nonce(99);
-    let sigs = new_oracles.sign_with_first(&env, &borrower, 600, DEFAULT_EXPIRATION, &nonce, 2);
-    let badge = client.mint(&borrower, &600, &DEFAULT_EXPIRATION, &BytesN::from_array(&env, &nonce), &sigs);
+    let sigs = new_oracles.sign_with_first(&env, &borrower, 600, DEFAULT_EXPIRATION, DEFAULT_AGE_DAYS, &nonce, 2);
+    let badge = client.mint(&borrower, &600, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs);
     assert_eq!(badge.score, 600);
 }
 
@@ -586,9 +613,9 @@ fn test_mint_with_3_of_5_signatures_succeeds() {
     let (_, _, borrower, client, oracles) = setup(&env);
 
     let nonce = fresh_nonce(80);
-    let sigs = oracles.sign_with_indices(&env, &borrower, 700, DEFAULT_EXPIRATION, &nonce, &[0, 2, 4]);
+    let sigs = oracles.sign_with_indices(&env, &borrower, 700, DEFAULT_EXPIRATION, DEFAULT_AGE_DAYS, &nonce, &[0, 2, 4]);
 
-    let badge = client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &BytesN::from_array(&env, &nonce), &sigs);
+    let badge = client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs);
     assert_eq!(badge.score, 700);
 }
 
@@ -599,9 +626,9 @@ fn test_mint_fails_with_2_signatures() {
     let (_, _, borrower, client, oracles) = setup(&env);
 
     let nonce = fresh_nonce(81);
-    let sigs = oracles.sign_with_first(&env, &borrower, 700, DEFAULT_EXPIRATION, &nonce, 2);
+    let sigs = oracles.sign_with_first(&env, &borrower, 700, DEFAULT_EXPIRATION, DEFAULT_AGE_DAYS, &nonce, 2);
 
-    client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &BytesN::from_array(&env, &nonce), &sigs);
+    client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs);
 }
 
 #[test]
@@ -611,9 +638,9 @@ fn test_mint_fails_with_duplicate_index() {
     let (_, _, borrower, client, oracles) = setup(&env);
 
     let nonce = fresh_nonce(82);
-    let sigs = oracles.sign_with_indices(&env, &borrower, 700, DEFAULT_EXPIRATION, &nonce, &[0, 0, 0]);
+    let sigs = oracles.sign_with_indices(&env, &borrower, 700, DEFAULT_EXPIRATION, DEFAULT_AGE_DAYS, &nonce, &[0, 0, 0]);
 
-    client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &BytesN::from_array(&env, &nonce), &sigs);
+    client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs);
 }
 
 #[test]
@@ -623,12 +650,12 @@ fn test_mint_fails_with_replayed_nonce() {
     let (_, _, borrower, client, oracles) = setup(&env);
 
     let nonce = fresh_nonce(83);
-    let sigs1 = oracles.sign_with_first(&env, &borrower, 700, DEFAULT_EXPIRATION, &nonce, 3);
-    client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &BytesN::from_array(&env, &nonce), &sigs1);
+    let sigs1 = oracles.sign_with_first(&env, &borrower, 700, DEFAULT_EXPIRATION, DEFAULT_AGE_DAYS, &nonce, 3);
+    client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs1);
 
     let other_borrower = Address::generate(&env);
-    let sigs2 = oracles.sign_with_first(&env, &other_borrower, 500, DEFAULT_EXPIRATION, &nonce, 3);
-    client.mint(&other_borrower, &500, &DEFAULT_EXPIRATION, &BytesN::from_array(&env, &nonce), &sigs2);
+    let sigs2 = oracles.sign_with_first(&env, &other_borrower, 500, DEFAULT_EXPIRATION, DEFAULT_AGE_DAYS, &nonce, 3);
+    client.mint(&other_borrower, &500, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs2);
 }
 
 #[test]
@@ -639,9 +666,9 @@ fn test_mint_fails_with_invalid_signature() {
 
     // Sign over DIFFERENT score (999), submit against score=700 → ed25519 verify fails.
     let nonce = fresh_nonce(84);
-    let sigs = oracles.sign_with_first(&env, &borrower, 999, DEFAULT_EXPIRATION, &nonce, 3);
+    let sigs = oracles.sign_with_first(&env, &borrower, 999, DEFAULT_EXPIRATION, DEFAULT_AGE_DAYS, &nonce, 3);
 
-    client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &BytesN::from_array(&env, &nonce), &sigs);
+    client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs);
 }
 
 #[test]
@@ -651,14 +678,73 @@ fn test_mint_fails_with_out_of_range_index() {
     let (_, _, borrower, client, oracles) = setup(&env);
 
     let nonce = fresh_nonce(85);
-    let valid_sigs = oracles.sign_with_indices(&env, &borrower, 700, DEFAULT_EXPIRATION, &nonce, &[0, 1]);
+    let valid_sigs = oracles.sign_with_indices(&env, &borrower, 700, DEFAULT_EXPIRATION, DEFAULT_AGE_DAYS, &nonce, &[0, 1]);
     let bogus_sig = BytesN::from_array(&env, &[0u8; 64]);
     let mut combined = Vec::new(&env);
     combined.push_back(valid_sigs.get(0).unwrap());
     combined.push_back(valid_sigs.get(1).unwrap());
     combined.push_back((7u32, bogus_sig));
 
-    client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &BytesN::from_array(&env, &nonce), &combined);
+    client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &combined);
+}
+
+// =============================================================================
+// 9. PHASE B'.2 — WALLET AGE FLOOR
+// =============================================================================
+
+#[test]
+#[should_panic(expected = "wallet age below minimum")]
+fn test_mint_fails_for_account_below_age_floor() {
+    let env = Env::default();
+    let (_, _, borrower, client, oracles) = setup(&env);
+    // Default floor is 30 days; supply age 15 → reject.
+    mint_with_age(&env, &client, &oracles, &borrower, 750, DEFAULT_EXPIRATION, 15, 90);
+}
+
+#[test]
+fn test_mint_succeeds_exactly_at_age_floor() {
+    let env = Env::default();
+    let (_, _, borrower, client, oracles) = setup(&env);
+    // Floor is exact: age == min_age must pass.
+    let badge = mint_with_age(&env, &client, &oracles, &borrower, 750, DEFAULT_EXPIRATION, 30, 91);
+    assert_eq!(badge.score, 750);
+}
+
+#[test]
+fn test_admin_can_lower_age_floor() {
+    let env = Env::default();
+    let (_, _, borrower, client, oracles) = setup(&env);
+    assert_eq!(client.get_min_wallet_age(), 30);
+    client.set_min_wallet_age(&7);
+    assert_eq!(client.get_min_wallet_age(), 7);
+    // Now a 10-day-old account can mint.
+    let badge = mint_with_age(&env, &client, &oracles, &borrower, 600, DEFAULT_EXPIRATION, 10, 92);
+    assert_eq!(badge.score, 600);
+}
+
+#[test]
+#[should_panic]
+fn test_mint_fails_if_age_tampered_after_signing() {
+    // Oracles sign over age=60. The relayer tries to lie and submit age=15
+    // (still pretending it's above the new floor of 10). ed25519_verify must
+    // catch the mismatch and panic — the message bytes won't match the sigs.
+    let env = Env::default();
+    let (_, _, borrower, client, oracles) = setup(&env);
+    client.set_min_wallet_age(&10);
+
+    let nonce = fresh_nonce(93);
+    // Sign against age=60.
+    let sigs = oracles.sign_with_first(&env, &borrower, 700, DEFAULT_EXPIRATION, 60, &nonce, 3);
+    // Submit with age=15 (tampered). Signatures verify against age=60 message,
+    // not age=15 message → InvalidInput from ed25519_verify.
+    client.mint(
+        &borrower,
+        &700,
+        &DEFAULT_EXPIRATION,
+        &15u32,
+        &BytesN::from_array(&env, &nonce),
+        &sigs,
+    );
 }
 
 #[test]
