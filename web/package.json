@@ -18,7 +18,7 @@
     "test:web": "cross-env NODE_ENV=test tsx --test tests/horizon-scoring.test.ts tests/threshold-oracle.test.ts tests/xdr-parity.test.ts",
     "setup:oracle-keys": "tsx scripts/setup-oracle-keys.ts",
     "mint:onchain": "tsx scripts/mint-onchain.ts",
-    "validate-t1": "ts-node scripts/validate-t1.ts",
+    "validate-t1": "cross-env NODE_ENV=test tsx scripts/validate-t1.ts",
     "validate-t2": "ts-node scripts/validate-t2.ts",
     "validate-t3": "ts-node scripts/validate-t3.ts"
   },

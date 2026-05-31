@@ -228,16 +228,18 @@ Implementation: `web/src/services/scoring-engine.ts`. Pure function, no side eff
 
 ## 6. Threat Model (Summary)
 
-Full STRIDE analysis in `docs/THREAT_MODEL.md` (delivered as Tranche 1 documentation update). Key threats:
+**Full STRIDE analysis with code references and live testnet evidence lives in [docs/THREAT_MODEL.md](THREAT_MODEL.md).** That document is the authoritative source; the table below is a quick reviewer pointer.
 
-| Threat | Category | Severity | Mitigation |
-|--------|----------|----------|------------|
-| Oracle key compromise | Spoofing | Critical | Multi-sig oracle in T3; circuit breaker; immutable defaults survive oracle compromise |
-| Replay attack on score signature | Repudiation | High | Per-mint `data_hash` includes a nonce; contract tracks consumed nonces |
-| Sybil attack (multiple addresses, same RUT) | Spoofing | Medium | `data_hash` includes SHA-256(rut), enforcing one badge per real-world identity |
-| Score manipulation (tampered Payku response) | Tampering | High | Future: TLSNotary attestation prevents this end-to-end |
-| Reentrancy in vault | Elevation | Low | Soroban execution model inherently reentrancy-safe |
-| Pool drain via high-score badge | Tampering | High | Per-borrower 10% cap; score must come from valid badge (signed attestation in T3) |
+| Vector | Mitigation | Status | Code |
+|---|---|---|---|
+| Oracle key compromise (single signer) | k-of-n threshold ed25519 verification on-chain, anti-replay nonce | ✅ Shipped, live on testnet `CDLLO7QE…` | `contracts/vigente-badge/src/lib.rs` |
+| Sybil farms / throw-away wallets | 30-day wallet-age floor folded into the signed mint message | ✅ Shipped | `vigente-badge.mint()` |
+| Carousel / wash trading | Ecosystem-counterparty whitelist + 70% P2P penalty on volume and effective tx count | ✅ Shipped | `web/src/services/horizon-scoring.ts` |
+| Long-con default | Score-anchored credit ladder: first loan = 10% of tier ceiling; full ceiling unlocked only after first successful repay | ✅ Shipped | `contracts/reference-vault/src/lib.rs` |
+| Vault drainage / uncapped exposure | Circuit breaker + TVL cap + 85% utilization rail | ✅ Shipped | `contracts/reference-vault/src/lib.rs` |
+| LP bank run | 14-day withdrawal timelock + utilization floor leaving 15% pool liquid | ✅ Shipped | `contracts/reference-vault/src/lib.rs` |
+| Reentrancy in vault | Soroban execution model inherently reentrancy-safe | ✅ Inherent | n/a |
+| Tampered off-chain attestation (TLSNotary) | Documented as post-grant work | ⏳ Out of scope of the grant | n/a |
 
 ---
 
