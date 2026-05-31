@@ -12,9 +12,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { __internal, type OnchainFeatures } from "../src/services/horizon-scoring";
 import { calculateScoreFromMetrics } from "../src/services/scoring-engine";
+import {
+  ECOSYSTEM_P2P_FACTOR,
+  __resetEcosystemWhitelist,
+  isEcosystemCounterparty,
+} from "../src/services/ecosystem-whitelist";
 
 const ME = "GTESTPUBKEYTESTPUBKEYTESTPUBKEYTESTPUBKEYTESTPUBKEYTEST";
 const OTHER = "GOTHERPUBKEYOTHERPUBKEYOTHERPUBKEYOTHERPUBKEYOTHERPUBKEY";
+/** A counterparty present in the seed whitelist — counted at full weight. */
+const ECOSYSTEM_HUB = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -25,6 +32,7 @@ interface SyntheticTx {
   amount_xlm: number;
   amount_usd_equiv: number;
   asset_key: string;
+  is_ecosystem: boolean;
 }
 
 function tx(
@@ -32,16 +40,18 @@ function tx(
   amountUsd: number,
   asset: "XLM" | "USDC" = "USDC",
   direction: "in" | "out" = "in",
+  counterparty: string = OTHER,
 ): SyntheticTx {
   const ts_ms = Date.now() - daysAgo * DAY_MS;
   const amount_xlm = asset === "XLM" ? amountUsd / __internal.XLM_USD_PRICE : 0;
   return {
     ts_ms,
-    from: direction === "in" ? OTHER : ME,
-    to: direction === "in" ? ME : OTHER,
+    from: direction === "in" ? counterparty : ME,
+    to: direction === "in" ? ME : counterparty,
     amount_xlm,
     amount_usd_equiv: amountUsd,
     asset_key: asset === "XLM" ? "XLM" : "USDC:issuer123",
+    is_ecosystem: isEcosystemCounterparty(counterparty),
   };
 }
 
@@ -55,43 +65,34 @@ function tierOfFixture(payments: SyntheticTx[]): string {
 // Fixtures shaped to land in each tier band of the engine
 // ---------------------------------------------------------------------------
 
-test("gold profile: 6 active months at $3k/mo USDC → Gold", () => {
-  // 6 months × 10 tx/mo × $300 each = $3000/mo total, $18k over the window.
-  // Volume tier gold = $15k → 40 pts.
-  // Active months = 6, CV very low → 30 pts.
-  // 60 tx / 6 months = 10 tx/mo → 30 pts. Total: 100 pts.
+test("gold profile via ecosystem counterparty (full weight) → Gold", () => {
+  // 60 tx × $300 through an ecosystem hub. Full-weight volume = $18k → Gold tier.
   const payments: SyntheticTx[] = [];
   for (let m = 0; m < 6; m++) {
     for (let i = 0; i < 10; i++) {
-      payments.push(tx(m * 30 + i * 2, 300));
+      payments.push(tx(m * 30 + i * 2, 300, "USDC", "in", ECOSYSTEM_HUB));
     }
   }
   const tier = tierOfFixture(payments);
   assert.equal(tier, "Gold");
 });
 
-test("silver profile: 5 active months at $1.6k/mo → Silver", () => {
-  // 5 months × 4 tx × $400 = $8k volume (silver band: 5k-15k) → ~30 pts.
-  // 5 active months, monthly bins [1600×5, 0] → CV ~0.45 → 20 pts.
-  // 20 tx / 6 = 3.33 tx/mo → 10 pts. Total: ~60 pts → Silver.
+test("silver profile via ecosystem counterparty → Silver", () => {
   const payments: SyntheticTx[] = [];
   for (let m = 0; m < 5; m++) {
     for (let i = 0; i < 4; i++) {
-      payments.push(tx(m * 30 + i * 5, 400));
+      payments.push(tx(m * 30 + i * 5, 400, "USDC", "in", ECOSYSTEM_HUB));
     }
   }
   const tier = tierOfFixture(payments);
   assert.equal(tier, "Silver");
 });
 
-test("bronze profile: 3 active months at $700/mo → Bronze", () => {
-  // Volume $2100 (bronze band: 1.5k-5k) → ~15 pts.
-  // 3 active months → 10 pts.
-  // 9 tx / 6 = 1.5 tx/mo → 7 pts. Total: ~32 pts → Bronze.
+test("bronze profile via ecosystem counterparty → Bronze", () => {
   const payments: SyntheticTx[] = [];
   for (let m = 0; m < 3; m++) {
     for (let i = 0; i < 3; i++) {
-      payments.push(tx(m * 30 + i * 8, 233));
+      payments.push(tx(m * 30 + i * 8, 233, "USDC", "in", ECOSYSTEM_HUB));
     }
   }
   const tier = tierOfFixture(payments);
@@ -199,4 +200,75 @@ test("reciprocity ratio: 50/50 split → 0.5", () => {
 test("density CV is null for <2 transactions", () => {
   const features: OnchainFeatures = __internal.computeFeatures(ME, [tx(1, 100)], false, 30);
   assert.equal(features.density_cv, null);
+});
+
+// ---------------------------------------------------------------------------
+// Phase B'.1 — ecosystem whitelist + P2P penalty
+// ---------------------------------------------------------------------------
+
+test("pure P2P volume is discounted by ECOSYSTEM_P2P_FACTOR (Carousel mitigation)", () => {
+  // $18k churned between three wallets — none of them in the whitelist.
+  // Raw total = $18k, but adjusted = $18k × 0.3 = $5.4k → Silver tier band.
+  const payments: SyntheticTx[] = [];
+  for (let m = 0; m < 6; m++) {
+    for (let i = 0; i < 10; i++) {
+      payments.push(tx(m * 30 + i * 2, 300, "USDC", "in", OTHER));
+    }
+  }
+  const features = __internal.computeFeatures(ME, payments, false, 365);
+  assert.equal(features.total_volume_usd_equiv, 18_000);
+  assert.equal(features.contract_volume_usd_equiv, 0);
+  assert.equal(features.p2p_volume_usd_equiv, 18_000);
+  assert.equal(
+    features.adjusted_volume_usd_equiv,
+    18_000 * ECOSYSTEM_P2P_FACTOR,
+  );
+  assert.equal(features.ecosystem_payment_ratio, 0);
+  // A would-be Gold profile collapses out of the Gold band thanks to the penalty.
+  const tier = tierOfFixture(payments);
+  assert.notEqual(tier, "Gold");
+});
+
+test("same volume via ecosystem counterparty gets full weight", () => {
+  const payments: SyntheticTx[] = [];
+  for (let m = 0; m < 6; m++) {
+    for (let i = 0; i < 10; i++) {
+      payments.push(tx(m * 30 + i * 2, 300, "USDC", "in", ECOSYSTEM_HUB));
+    }
+  }
+  const features = __internal.computeFeatures(ME, payments, false, 365);
+  assert.equal(features.contract_volume_usd_equiv, 18_000);
+  assert.equal(features.p2p_volume_usd_equiv, 0);
+  assert.equal(features.adjusted_volume_usd_equiv, 18_000);
+  assert.equal(features.ecosystem_payment_ratio, 1);
+});
+
+test("mixed ecosystem and P2P traffic produces ratio between 0 and 1", () => {
+  const payments: SyntheticTx[] = [
+    tx(5, 100, "USDC", "in", ECOSYSTEM_HUB),
+    tx(10, 100, "USDC", "in", OTHER),
+    tx(15, 100, "USDC", "in", ECOSYSTEM_HUB),
+    tx(20, 100, "USDC", "in", OTHER),
+  ];
+  const features = __internal.computeFeatures(ME, payments, false, 365);
+  assert.equal(features.contract_volume_usd_equiv, 200);
+  assert.equal(features.p2p_volume_usd_equiv, 200);
+  assert.equal(features.adjusted_volume_usd_equiv, 200 + 200 * ECOSYSTEM_P2P_FACTOR);
+  assert.equal(features.ecosystem_payment_ratio, 0.5);
+});
+
+test("isEcosystemCounterparty recognises the seed list", () => {
+  __resetEcosystemWhitelist();
+  assert.equal(isEcosystemCounterparty(ECOSYSTEM_HUB), true);
+  assert.equal(isEcosystemCounterparty(OTHER), false);
+  assert.equal(isEcosystemCounterparty(""), false);
+});
+
+test("VIGENTE_ECOSYSTEM_EXTRA_ADDRESSES env var injects new entries", () => {
+  process.env.VIGENTE_ECOSYSTEM_EXTRA_ADDRESSES = `${OTHER}, GFOO`;
+  __resetEcosystemWhitelist();
+  assert.equal(isEcosystemCounterparty(OTHER), true);
+  delete process.env.VIGENTE_ECOSYSTEM_EXTRA_ADDRESSES;
+  __resetEcosystemWhitelist();
+  assert.equal(isEcosystemCounterparty(OTHER), false);
 });
