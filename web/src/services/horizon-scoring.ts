@@ -27,6 +27,10 @@ import {
   type ScoreResult,
   type ScoringMetrics,
 } from "./scoring-engine";
+import {
+  ECOSYSTEM_P2P_FACTOR,
+  isEcosystemCounterparty,
+} from "./ecosystem-whitelist";
 
 const HORIZON_URL =
   process.env.HORIZON_URL || "https://horizon-testnet.stellar.org";
@@ -48,8 +52,23 @@ export interface OnchainFeatures {
   window_days: number;
   capped: boolean;            // true if 200-op cap fired before 180d window
   total_volume_xlm: number;
+  /** Raw USD-equiv volume in the window. Kept for backward-compatibility. */
   total_volume_usd_equiv: number;
-  monthly_volumes_usd: number[];   // length 6, index 0 = most recent month
+  /** USD-equiv volume whose counterparty is in the ecosystem whitelist. */
+  contract_volume_usd_equiv: number;
+  /** USD-equiv volume whose counterparty is NOT in the whitelist (= P2P). */
+  p2p_volume_usd_equiv: number;
+  /** contract_volume + p2p_volume × ECOSYSTEM_P2P_FACTOR. This is what feeds scoring. */
+  adjusted_volume_usd_equiv: number;
+  /** contract_volume / (contract_volume + p2p_volume). null if no flow. */
+  ecosystem_payment_ratio: number | null;
+  /** Number of payments whose counterparty is in the whitelist. */
+  contract_tx_count: number;
+  /** Number of payments whose counterparty is NOT in the whitelist. */
+  p2p_tx_count: number;
+  /** contract_tx_count + p2p_tx_count × ECOSYSTEM_P2P_FACTOR (rounded). */
+  effective_tx_count: number;
+  monthly_volumes_usd: number[];   // length 6, index 0 = most recent month; adjusted basis
   density_cv: number | null;       // null if <2 ops
   reciprocity_ratio: number | null; // in / (in + out); null if no flow
   asset_diversity: number;          // distinct assets seen in window
@@ -74,6 +93,8 @@ interface NormalizedPayment {
   amount_xlm: number;
   amount_usd_equiv: number;
   asset_key: string; // "XLM" | "USDC:<issuer>" | "OTHER:<code>:<issuer>"
+  /** True if either side of the payment is in the ecosystem whitelist. */
+  is_ecosystem: boolean;
 }
 
 function classifyAsset(op: Record<string, unknown>): { key: string; usd: number; xlm: number } | null {
@@ -140,6 +161,10 @@ function normalizePaymentRecord(
   // Only count ops that involve this pubkey directly
   if (from !== pubkey && to !== pubkey) return null;
 
+  // Counterparty = the side that is NOT the pubkey under evaluation.
+  const counterparty = from === pubkey ? to : from;
+  const is_ecosystem = isEcosystemCounterparty(counterparty);
+
   return {
     ts_ms,
     from,
@@ -147,6 +172,7 @@ function normalizePaymentRecord(
     amount_xlm: assetInfo.xlm,
     amount_usd_equiv: assetInfo.usd,
     asset_key: assetInfo.key,
+    is_ecosystem,
   };
 }
 
@@ -213,14 +239,39 @@ function computeFeatures(pubkey: string, payments: NormalizedPayment[], capped: 
   const total_volume_xlm = payments.reduce((s, p) => s + p.amount_xlm, 0);
   const total_volume_usd_equiv = payments.reduce((s, p) => s + p.amount_usd_equiv, 0);
 
-  // Monthly buckets — index 0 = most recent month
+  // Phase B'.1: split BOTH volume AND tx count by whitelist membership. The
+  // scoring engine then sees adjusted figures across all three dimensions
+  // (volume, consistency, frequency) — a carousel attacker can't keep the
+  // frequency points by churning between their own wallets.
+  const contract_payments = payments.filter((p) => p.is_ecosystem);
+  const contract_volume_usd_equiv = contract_payments.reduce(
+    (s, p) => s + p.amount_usd_equiv,
+    0,
+  );
+  const p2p_volume_usd_equiv = total_volume_usd_equiv - contract_volume_usd_equiv;
+  const adjusted_volume_usd_equiv =
+    contract_volume_usd_equiv + p2p_volume_usd_equiv * ECOSYSTEM_P2P_FACTOR;
+  const ecosystem_payment_ratio =
+    total_volume_usd_equiv > 0
+      ? contract_volume_usd_equiv / total_volume_usd_equiv
+      : null;
+
+  const contract_tx_count = contract_payments.length;
+  const p2p_tx_count = payments.length - contract_tx_count;
+  const effective_tx_count = Math.round(
+    contract_tx_count + p2p_tx_count * ECOSYSTEM_P2P_FACTOR,
+  );
+
+  // Monthly buckets — index 0 = most recent month. Each entry uses the
+  // adjusted basis so consistency / frequency math sees the same penalty.
   const now = Date.now();
   const monthly_volumes_usd: number[] = [0, 0, 0, 0, 0, 0];
   for (const p of payments) {
     const age_ms = now - p.ts_ms;
     const monthIdx = Math.floor(age_ms / MONTH_MS);
     if (monthIdx >= 0 && monthIdx < 6) {
-      monthly_volumes_usd[monthIdx] += p.amount_usd_equiv;
+      const weight = p.is_ecosystem ? 1 : ECOSYSTEM_P2P_FACTOR;
+      monthly_volumes_usd[monthIdx] += p.amount_usd_equiv * weight;
     }
   }
 
@@ -254,6 +305,13 @@ function computeFeatures(pubkey: string, payments: NormalizedPayment[], capped: 
     capped,
     total_volume_xlm,
     total_volume_usd_equiv,
+    contract_volume_usd_equiv,
+    p2p_volume_usd_equiv,
+    adjusted_volume_usd_equiv,
+    ecosystem_payment_ratio,
+    contract_tx_count,
+    p2p_tx_count,
+    effective_tx_count,
     monthly_volumes_usd,
     density_cv,
     reciprocity_ratio,
@@ -263,10 +321,14 @@ function computeFeatures(pubkey: string, payments: NormalizedPayment[], capped: 
 }
 
 function featuresToMetrics(features: OnchainFeatures): ScoringMetrics {
+  // Phase B'.1: scoring runs entirely on the adjusted (whitelist-weighted)
+  // basis. monthly_volumes_usd is already adjusted. effective_tx_count
+  // applies the same factor to the count so frequency can't be gamed by
+  // churning many small payments between an attacker's own wallets.
   return {
-    totalVolumeUSD: features.total_volume_usd_equiv,
+    totalVolumeUSD: features.adjusted_volume_usd_equiv,
     monthlyVolumesUSD: features.monthly_volumes_usd,
-    completedCount: features.ops_evaluated,
+    completedCount: features.effective_tx_count,
   };
 }
 
