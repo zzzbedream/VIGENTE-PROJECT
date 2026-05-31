@@ -25,7 +25,7 @@
 use soroban_sdk::{
     contract, contractimpl, contracttype, symbol_short,
     xdr::ToXdr,
-    Address, BytesN, Env, Vec,
+    Address, Bytes, BytesN, Env, Vec,
 };
 
 // External test module
@@ -41,9 +41,19 @@ mod test;
 pub enum DataKey {
     /// Contract administrator
     Admin,
-    /// List of authorized oracle addresses
-    AuthOracles,
-    /// List of authorized vault addresses
+    /// Ordered vector of authorized oracle ed25519 public keys (k-of-n threshold).
+    /// Indices are stable: a signature references its oracle by index into this vector.
+    OracleKeys,
+    /// Threshold k — number of valid signatures required to authorize a mint.
+    /// Invariant: 0 < OracleThreshold <= OracleKeys.len().
+    OracleThreshold,
+    /// Anti-replay marker: presence of UsedNonce(nonce) means the nonce was already consumed.
+    /// Stored in persistent storage with infinite retention for the lifetime of the contract
+    /// (sprint scope; cleanup tied to badge expiration is a post-grant optimization documented
+    /// in docs/ARCHITECTURE.md).
+    UsedNonce(BytesN<32>),
+    /// List of authorized vault addresses (Address-based ACL — vaults remain single-signer
+    /// contracts in Soroban; threshold semantics only apply to the oracle side).
     AuthVaults,
     /// Active CreditBadge for a user
     Badge(Address),
@@ -105,6 +115,9 @@ impl VigenteBadge {
 
     /// Initialize the contract with an admin address.
     /// Can only be called once.
+    ///
+    /// Oracle threshold ACL starts empty; admin must call `set_oracle_keys()` before
+    /// any `mint()` can succeed. Vault ACL also starts empty; admin calls `add_vault()`.
     pub fn initialize(env: Env, admin: Address) {
         if env.storage().instance().has(&DataKey::Admin) {
             panic!("already initialized");
@@ -112,10 +125,12 @@ impl VigenteBadge {
         admin.require_auth();
 
         env.storage().instance().set(&DataKey::Admin, &admin);
-        // Initialize empty authorization lists
-        let empty_oracles: Vec<Address> = Vec::new(&env);
+        // Initialize empty oracle threshold ACL (admin sets these atomically later)
+        let empty_keys: Vec<BytesN<32>> = Vec::new(&env);
+        env.storage().instance().set(&DataKey::OracleKeys, &empty_keys);
+        env.storage().instance().set(&DataKey::OracleThreshold, &0u32);
+        // Initialize empty vault authorization list
         let empty_vaults: Vec<Address> = Vec::new(&env);
-        env.storage().instance().set(&DataKey::AuthOracles, &empty_oracles);
         env.storage().instance().set(&DataKey::AuthVaults, &empty_vaults);
         env.storage().instance().set(&DataKey::Paused, &false);
 
@@ -132,45 +147,71 @@ impl VigenteBadge {
     // ACCESS CONTROL
     // =========================================================================
 
-    /// Add an oracle address to the authorization list.
-    /// Only the admin can call this.
-    pub fn add_oracle(env: Env, oracle: Address) {
+    /// Atomically replace the oracle key set and threshold.
+    ///
+    /// # Access Control
+    /// Admin only.
+    ///
+    /// # Invariants enforced
+    /// - `keys.len() > 0`
+    /// - `0 < threshold <= keys.len()`
+    /// - keys are unique (no duplicate pubkeys)
+    ///
+    /// # Rationale
+    /// Atomic replacement (vs add/remove individual keys) prevents the bricked-contract
+    /// failure mode where keys.len() drops below threshold mid-rotation. The admin
+    /// must always present a self-consistent set in a single transaction.
+    pub fn set_oracle_keys(env: Env, keys: Vec<BytesN<32>>, threshold: u32) {
         let admin: Address = Self::require_admin(&env);
         admin.require_auth();
 
-        let mut oracles: Vec<Address> = env.storage().instance()
-            .get(&DataKey::AuthOracles)
-            .unwrap_or(Vec::new(&env));
-
-        // Prevent duplicates
-        if !oracles.contains(&oracle) {
-            oracles.push_back(oracle.clone());
-            env.storage().instance().set(&DataKey::AuthOracles, &oracles);
+        let n = keys.len();
+        if n == 0 {
+            panic!("oracle key set must be non-empty");
+        }
+        if threshold == 0 {
+            panic!("threshold must be > 0");
+        }
+        if threshold > n {
+            panic!("threshold exceeds oracle key count");
         }
 
+        // Reject duplicates — every pubkey must be unique in the set.
+        let mut i: u32 = 0;
+        while i < n {
+            let key_i = keys.get(i).unwrap();
+            let mut j: u32 = i + 1;
+            while j < n {
+                let key_j = keys.get(j).unwrap();
+                if key_i == key_j {
+                    panic!("duplicate oracle pubkey in set");
+                }
+                j += 1;
+            }
+            i += 1;
+        }
+
+        env.storage().instance().set(&DataKey::OracleKeys, &keys);
+        env.storage().instance().set(&DataKey::OracleThreshold, &threshold);
+
         env.events().publish(
-            (symbol_short!("acl"), symbol_short!("oracle")),
-            oracle,
+            (symbol_short!("acl"), symbol_short!("oracles")),
+            (n, threshold),
         );
     }
 
-    /// Remove an oracle address from the authorization list.
-    /// Only the admin can call this.
-    pub fn remove_oracle(env: Env, oracle: Address) {
-        let admin: Address = Self::require_admin(&env);
-        admin.require_auth();
+    /// Read-only: current oracle pubkey set.
+    pub fn get_oracle_keys(env: Env) -> Vec<BytesN<32>> {
+        env.storage().instance()
+            .get(&DataKey::OracleKeys)
+            .unwrap_or(Vec::new(&env))
+    }
 
-        let oracles: Vec<Address> = env.storage().instance()
-            .get(&DataKey::AuthOracles)
-            .unwrap_or(Vec::new(&env));
-
-        let mut new_oracles: Vec<Address> = Vec::new(&env);
-        for o in oracles.iter() {
-            if o != oracle {
-                new_oracles.push_back(o);
-            }
-        }
-        env.storage().instance().set(&DataKey::AuthOracles, &new_oracles);
+    /// Read-only: current threshold.
+    pub fn get_oracle_threshold(env: Env) -> u32 {
+        env.storage().instance()
+            .get(&DataKey::OracleThreshold)
+            .unwrap_or(0)
     }
 
     /// Add a vault address to the authorization list.
@@ -217,50 +258,115 @@ impl VigenteBadge {
     // CORE FUNCTIONS
     // =========================================================================
 
-    /// Mint a CreditBadge for a borrower.
+    /// Mint a CreditBadge for a borrower, authorized by a k-of-n threshold of oracle signatures.
     ///
     /// # Access Control
-    /// Only an authorized oracle can call this function.
+    /// No single oracle authorizes mint. Instead, at least `OracleThreshold` valid
+    /// ed25519 signatures over the canonical mint message must be provided, each one
+    /// referencing its oracle by index into `OracleKeys`. Signature indices must be
+    /// unique within a single call (a single oracle cannot vote twice).
     ///
     /// # Arguments
-    /// - `caller`:     The oracle address invoking mint (must be authorized)
-    /// - `borrower`:   The address receiving the badge
-    /// - `score`:      Credit score (0–1000)
-    /// - `expiration`: Ledger timestamp when the badge expires
+    /// - `borrower`:   The address receiving the badge.
+    /// - `score`:      Credit score (0–1000).
+    /// - `expiration`: Ledger timestamp when the badge expires.
+    /// - `nonce`:      32-byte anti-replay marker chosen off-chain. Each nonce can be
+    ///                 used exactly once across the contract's lifetime.
+    /// - `signatures`: Vec of (oracle_index, ed25519_signature) tuples. Length must be
+    ///                 >= OracleThreshold.
+    ///
+    /// # Canonical message
+    /// Each oracle signs `borrower.to_xdr() || score.to_be_bytes() || expiration.to_be_bytes() || nonce`.
+    /// Off-chain signers MUST reproduce this byte sequence exactly.
     ///
     /// # Panics
-    /// - If caller is not an authorized oracle
-    /// - If borrower is currently in default
-    /// - If score > 1000
-    /// - If contract is paused
+    /// - If contract is paused.
+    /// - If borrower is currently in default.
+    /// - If score > 1000.
+    /// - If expiration is not strictly in the future.
+    /// - If the nonce was already consumed.
+    /// - If signatures.len() < OracleThreshold.
+    /// - If any signature index is out of range or duplicated within this call.
+    /// - If any signature fails ed25519 verification.
     pub fn mint(
         env: Env,
-        caller: Address,
         borrower: Address,
         score: u32,
         expiration: u64,
+        nonce: BytesN<32>,
+        signatures: Vec<(u32, BytesN<64>)>,
     ) -> CreditBadge {
         Self::require_not_paused(&env);
-        caller.require_auth();
-        Self::require_oracle(&env, &caller);
 
-        // Cannot mint for a defaulted borrower
+        // Cannot mint for a defaulted borrower.
         if Self::is_defaulted(env.clone(), borrower.clone()) {
             panic!("borrower is in default");
         }
 
-        // Validate score
+        // Validate score.
         if score > 1000 {
             panic!("invalid score: must be 0-1000");
         }
 
-        // Validate expiration is in the future
+        // Validate expiration is in the future.
         let now = env.ledger().timestamp();
         if expiration <= now {
             panic!("expiration must be in the future");
         }
 
-        // Create badge — data_hash binds the badge to this specific borrower address
+        // Anti-replay: the nonce must not have been used before.
+        let nonce_key = DataKey::UsedNonce(nonce.clone());
+        if env.storage().persistent().has(&nonce_key) {
+            panic!("nonce already used");
+        }
+
+        // Threshold verification: load oracle key set + threshold from storage.
+        let oracle_keys: Vec<BytesN<32>> = env.storage().instance()
+            .get(&DataKey::OracleKeys)
+            .unwrap_or(Vec::new(&env));
+        let threshold: u32 = env.storage().instance()
+            .get(&DataKey::OracleThreshold)
+            .unwrap_or(0);
+
+        if threshold == 0 || oracle_keys.is_empty() {
+            panic!("oracle threshold ACL not configured");
+        }
+        if signatures.len() < threshold {
+            panic!("insufficient signatures: threshold not met");
+        }
+
+        // Build the canonical mint message that every signature must verify against.
+        let msg: Bytes = Self::build_mint_message(&env, &borrower, score, expiration, &nonce);
+
+        // Verify each signature and enforce unique indices within this call.
+        // We track seen indices in a Vec<u32>; the threshold is small (k <= n, typically
+        // single-digit), so a linear scan is cheaper than a Map here.
+        let n_keys = oracle_keys.len();
+        let n_sigs = signatures.len();
+        let mut seen_indices: Vec<u32> = Vec::new(&env);
+        let mut i: u32 = 0;
+        while i < n_sigs {
+            let (idx, sig) = signatures.get(i).unwrap();
+            if idx >= n_keys {
+                panic!("oracle index out of range");
+            }
+            if seen_indices.contains(&idx) {
+                panic!("duplicate oracle index in signatures");
+            }
+            seen_indices.push_back(idx);
+
+            let pk = oracle_keys.get(idx).unwrap();
+            // ed25519_verify panics on invalid signature — propagates as host error.
+            env.crypto().ed25519_verify(&pk, &msg, &sig);
+
+            i += 1;
+        }
+
+        // Mark the nonce consumed (anti-replay) before mutating any other persistent state.
+        env.storage().persistent().set(&nonce_key, &true);
+        env.storage().persistent().extend_ttl(&nonce_key, 1_555_200, 1_555_200);
+
+        // Create badge — data_hash binds the badge to this specific borrower address.
         let data_hash: BytesN<32> = env.crypto().sha256(&borrower.clone().to_xdr(&env)).into();
         let badge = CreditBadge {
             score,
@@ -270,7 +376,7 @@ impl VigenteBadge {
             slashed: false,
         };
 
-        // Store in persistent storage
+        // Store in persistent storage.
         env.storage().persistent().set(&DataKey::Badge(borrower.clone()), &badge);
         env.storage().persistent().extend_ttl(
             &DataKey::Badge(borrower.clone()),
@@ -278,13 +384,29 @@ impl VigenteBadge {
             1_555_200,
         );
 
-        // Emit mint event
+        // Emit mint event.
         env.events().publish(
             (symbol_short!("mint"), borrower.clone()),
             (score, now, expiration),
         );
 
         badge
+    }
+
+    /// Build the canonical byte sequence each oracle signs over.
+    /// Off-chain signers must reproduce this exactly.
+    fn build_mint_message(
+        env: &Env,
+        borrower: &Address,
+        score: u32,
+        expiration: u64,
+        nonce: &BytesN<32>,
+    ) -> Bytes {
+        let mut msg = borrower.clone().to_xdr(env);
+        msg.extend_from_array(&score.to_be_bytes());
+        msg.extend_from_array(&expiration.to_be_bytes());
+        msg.append(&nonce.clone().into());
+        msg
     }
 
     /// Slash (burn) a borrower's active badge and record a permanent default.
@@ -485,16 +607,6 @@ impl VigenteBadge {
         env.storage().instance()
             .get(&DataKey::Admin)
             .expect("not initialized")
-    }
-
-    fn require_oracle(env: &Env, caller: &Address) {
-        let oracles: Vec<Address> = env.storage().instance()
-            .get(&DataKey::AuthOracles)
-            .unwrap_or(Vec::new(env));
-
-        if !oracles.contains(caller) {
-            panic!("caller is not an authorized oracle");
-        }
     }
 
     fn require_vault(env: &Env, caller: &Address) {
