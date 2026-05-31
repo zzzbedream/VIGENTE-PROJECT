@@ -224,6 +224,42 @@ fn smoke_invalid_signature_fails() {
 }
 
 #[test]
+fn smoke_address_xdr_parity_check() {
+    // Print the canonical XDR bytes for a known testnet address so the TypeScript
+    // off-chain signer can be validated byte-for-byte against the same input.
+    // This must be kept in sync with web/src/services/threshold-oracle.ts (B.6).
+    use soroban_sdk::xdr::ToXdr;
+
+    let env = Env::default();
+    // Mother account from Day 1 (T3): GBV676BNXDPVZDLUAB6O7DHWUIS42OTIWI5MIKCFJOWMJWTVKQNXFWCM
+    let addr = soroban_sdk::Address::from_string(&soroban_sdk::String::from_str(
+        &env,
+        "GBV676BNXDPVZDLUAB6O7DHWUIS42OTIWI5MIKCFJOWMJWTVKQNXFWCM",
+    ));
+    let bytes = addr.clone().to_xdr(&env);
+    let v: std::vec::Vec<u8> = bytes.iter().collect();
+    std::println!(
+        "=== ADDRESS XDR PARITY (mother account) ===\nlen: {}\nhex: {}",
+        v.len(),
+        v.iter().map(|b| std::format!("{:02x}", b)).collect::<std::string::String>()
+    );
+
+    // Also dump a fully-assembled mint message for reproducibility.
+    let score: u32 = 850;
+    let expiration: u64 = 1_700_086_400;
+    let nonce = [0xABu8; 32];
+    let mut msg: std::vec::Vec<u8> = v.clone();
+    msg.extend_from_slice(&score.to_be_bytes());
+    msg.extend_from_slice(&expiration.to_be_bytes());
+    msg.extend_from_slice(&nonce);
+    std::println!(
+        "=== MINT MESSAGE (score=850, expiration=1700086400, nonce=0xAB*32) ===\nlen: {}\nhex: {}",
+        msg.len(),
+        msg.iter().map(|b| std::format!("{:02x}", b)).collect::<std::string::String>()
+    );
+}
+
+#[test]
 fn smoke_payload_size_within_envelope() {
     // Approximate the wire size of a Vec<(u32, BytesN<64>)> with 3 entries.
     // This is what mint() will accept as the `signatures` argument.
