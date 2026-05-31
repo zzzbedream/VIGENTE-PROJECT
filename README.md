@@ -34,11 +34,13 @@ A minimal but complete Soroban lending contract that demonstrates credit-gated u
 | Resource | Value |
 |----------|-------|
 | **Live App** | https://vigente-hackathon-final.vercel.app |
-| **Badge Contract (v2 — k-of-n threshold oracle, current)** | `CCD7KNYIJAVN4JRZKCMZWCBK3ED43VYEBX5PSYHOBOR6BHMVMN2GUMA5` |
+| **Badge Contract (v3 — threshold + age floor, current)** | `CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD` |
+| **Badge Contract (v2 — k-of-n threshold oracle, historical)** | `CCD7KNYIJAVN4JRZKCMZWCBK3ED43VYEBX5PSYHOBOR6BHMVMN2GUMA5` |
 | **Badge Contract (v1 — legacy, single oracle ACL)** | `CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W` |
 | **Network** | Stellar Testnet |
-| **v2 Explorer** | [stellar.expert](https://stellar.expert/explorer/testnet/contract/CCD7KNYIJAVN4JRZKCMZWCBK3ED43VYEBX5PSYHOBOR6BHMVMN2GUMA5) |
-| **End-to-end mint tx (3-of-5 sigs)** | [`e5e3a392…`](https://stellar.expert/explorer/testnet/tx/e5e3a39286339b794349e4bb8eaac6ff811a5e9c9153c8a1840b21ce6996c482) |
+| **v3 Explorer** | [stellar.expert](https://stellar.expert/explorer/testnet/contract/CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD) |
+| **v3 mint tx with age=90 (3-of-5 sigs)** | [`8b9fccfc…`](https://stellar.expert/explorer/testnet/tx/8b9fccfc9daaf594e457e19808ef9c0746e8e45f37aab8417b5fe8d59641bc85) |
+| **v2 mint tx with no age (historical)** | [`e5e3a392…`](https://stellar.expert/explorer/testnet/tx/e5e3a39286339b794349e4bb8eaac6ff811a5e9c9153c8a1840b21ce6996c482) |
 | **Repository** | https://github.com/zzzbedream/VIGENTE-PROJECT |
 
 ---
