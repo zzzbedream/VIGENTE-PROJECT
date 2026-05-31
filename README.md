@@ -34,9 +34,11 @@ A minimal but complete Soroban lending contract that demonstrates credit-gated u
 | Resource | Value |
 |----------|-------|
 | **Live App** | https://vigente-hackathon-final.vercel.app |
-| **Badge Contract** | `CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W` |
+| **Badge Contract (v2 — k-of-n threshold oracle, current)** | `CCD7KNYIJAVN4JRZKCMZWCBK3ED43VYEBX5PSYHOBOR6BHMVMN2GUMA5` |
+| **Badge Contract (v1 — legacy, single oracle ACL)** | `CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W` |
 | **Network** | Stellar Testnet |
-| **Explorer** | [stellar.expert](https://stellar.expert/explorer/testnet/contract/CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W) |
+| **v2 Explorer** | [stellar.expert](https://stellar.expert/explorer/testnet/contract/CCD7KNYIJAVN4JRZKCMZWCBK3ED43VYEBX5PSYHOBOR6BHMVMN2GUMA5) |
+| **End-to-end mint tx (3-of-5 sigs)** | [`e5e3a392…`](https://stellar.expert/explorer/testnet/tx/e5e3a39286339b794349e4bb8eaac6ff811a5e9c9153c8a1840b21ce6996c482) |
 | **Repository** | https://github.com/zzzbedream/VIGENTE-PROJECT |
 
 ---
