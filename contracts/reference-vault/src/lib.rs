@@ -58,6 +58,21 @@ pub enum VaultKey {
     Paused,
     LPBalance(Address),
     Loan(Address),
+    // --- Phase B' hardening ---
+    /// Hard cap on total deposited USDC. Rejects deposits that would push
+    /// total_deposits above this ceiling.
+    MaxTvlUsdc,
+    /// Maximum utilization (borrowed / deposited) in basis points.
+    /// 8500 = 85%. Reserves at least 15% of the pool for LP withdrawals.
+    MaxUtilizationBps,
+    /// Withdrawal timelock window in seconds. Default 14 days.
+    WithdrawalTimelock,
+    /// Number of successful repays by this borrower. Drives the credit
+    /// ladder: first loan capped at 10% of the score-anchored ceiling,
+    /// subsequent loans get the full ceiling.
+    RepayCount(Address),
+    /// Active withdrawal request for an LP. Only one at a time per LP.
+    WithdrawalRequest(Address),
 }
 
 /// Active loan record.
@@ -70,6 +85,56 @@ pub struct LoanRecord {
     pub due_at: u64,
     pub score_at_origination: u32,
     pub repaid: bool,
+}
+
+/// Pending LP withdrawal request. Created by `request_withdraw`, drained
+/// by `claim_withdraw` once the timelock has elapsed, cleared by
+/// `cancel_withdraw` if the LP changes their mind.
+#[derive(Clone, Debug, PartialEq)]
+#[contracttype]
+pub struct WithdrawalRequestRecord {
+    pub amount: i128,
+    pub requested_at: u64,
+}
+
+// =============================================================================
+// CREDIT LADDER & RISK PARAMETERS
+// =============================================================================
+
+/// Bands and ceilings for the score-anchored credit ladder. Mirrors the
+/// math in plan section 10.bis.1. Ceilings are denominated in USDC stroops
+/// (7 decimals). Source of truth lives here so the vault is self-contained
+/// — the badge contract carries only the raw 0-1000 score.
+const TIER_GOLD_FLOOR_SCORE: u32 = 800;
+const TIER_SILVER_FLOOR_SCORE: u32 = 550;
+const TIER_BRONZE_FLOOR_SCORE: u32 = 300;
+
+/// Tier ceilings in USDC stroops (7 decimals): 1 USDC = 10_000_000.
+const TIER_GOLD_CEILING: i128 = 2_000 * 10_000_000;   // $2,000
+const TIER_SILVER_CEILING: i128 = 500 * 10_000_000;   // $500
+const TIER_BRONZE_CEILING: i128 = 100 * 10_000_000;   // $100
+
+/// First loan throttle: 10% of the score-anchored ceiling. Lifts to 100%
+/// after the borrower's first successful repay.
+const FIRST_LOAN_FACTOR_BPS: u32 = 1_000;
+
+/// Default values used when initialize() arguments are zero (sentinel "use
+/// defaults" pattern keeps the call site short for sprint demos).
+const DEFAULT_MAX_UTILIZATION_BPS: u32 = 8_500;          // 85%
+const DEFAULT_WITHDRAWAL_TIMELOCK_SECS: u64 = 14 * 24 * 60 * 60; // 14 days
+
+/// Maps a score to the tier ceiling. Below `TIER_BRONZE_FLOOR_SCORE` the
+/// borrower has no tier and cannot borrow.
+fn tier_ceiling_for_score(score: u32) -> i128 {
+    if score >= TIER_GOLD_FLOOR_SCORE {
+        TIER_GOLD_CEILING
+    } else if score >= TIER_SILVER_FLOOR_SCORE {
+        TIER_SILVER_CEILING
+    } else if score >= TIER_BRONZE_FLOOR_SCORE {
+        TIER_BRONZE_CEILING
+    } else {
+        0
+    }
 }
 
 // =============================================================================
@@ -85,7 +150,13 @@ impl ReferenceVault {
     // INITIALIZATION
     // -------------------------------------------------------------------------
 
-    /// One-time setup. Sets admin and references to badge + token contracts.
+    /// One-time setup. Sets admin and references to badge + token contracts,
+    /// plus the three risk parameters introduced in Phase B':
+    ///
+    /// - `max_tvl_usdc`: hard ceiling on total deposits (stroops). 0 = no cap.
+    /// - `max_utilization_bps`: max borrowed / deposited ratio. 0 = use default 85%.
+    /// - `withdrawal_timelock`: seconds an LP withdrawal request must age before
+    ///    `claim_withdraw` can drain it. 0 = use default 14 days.
     pub fn initialize(
         env: Env,
         admin: Address,
@@ -93,6 +164,9 @@ impl ReferenceVault {
         token_contract: Address,
         interest_rate_bps: u32,
         loan_duration: u64,
+        max_tvl_usdc: i128,
+        max_utilization_bps: u32,
+        withdrawal_timelock: u64,
     ) {
         if env.storage().instance().has(&VaultKey::Admin) {
             panic!("already initialized");
@@ -105,6 +179,23 @@ impl ReferenceVault {
         if loan_duration == 0 {
             panic!("loan duration must be positive");
         }
+        if max_tvl_usdc < 0 {
+            panic!("max_tvl_usdc must be non-negative");
+        }
+        if max_utilization_bps > 10_000 {
+            panic!("max_utilization_bps cannot exceed 10000 (100%)");
+        }
+
+        let effective_util_cap = if max_utilization_bps == 0 {
+            DEFAULT_MAX_UTILIZATION_BPS
+        } else {
+            max_utilization_bps
+        };
+        let effective_timelock = if withdrawal_timelock == 0 {
+            DEFAULT_WITHDRAWAL_TIMELOCK_SECS
+        } else {
+            withdrawal_timelock
+        };
 
         env.storage().instance().set(&VaultKey::Admin, &admin);
         env.storage().instance().set(&VaultKey::BadgeContract, &badge_contract);
@@ -114,6 +205,9 @@ impl ReferenceVault {
         env.storage().instance().set(&VaultKey::TotalDeposits, &0_i128);
         env.storage().instance().set(&VaultKey::TotalBorrowed, &0_i128);
         env.storage().instance().set(&VaultKey::Paused, &false);
+        env.storage().instance().set(&VaultKey::MaxTvlUsdc, &max_tvl_usdc);
+        env.storage().instance().set(&VaultKey::MaxUtilizationBps, &effective_util_cap);
+        env.storage().instance().set(&VaultKey::WithdrawalTimelock, &effective_timelock);
 
         env.storage().instance().extend_ttl(1_555_200, 1_555_200);
 
@@ -136,15 +230,26 @@ impl ReferenceVault {
             panic!("amount must be positive");
         }
 
-        let token = Self::token_client(&env);
-        let vault_address = env.current_contract_address();
-        token.transfer(&depositor, &vault_address, &amount);
-
         let total_deposits: i128 = env
             .storage()
             .instance()
             .get(&VaultKey::TotalDeposits)
             .unwrap_or(0);
+
+        // TVL cap (Phase B'.4). 0 = uncapped; otherwise reject deposits that
+        // would push the pool above the configured ceiling.
+        let max_tvl: i128 = env
+            .storage()
+            .instance()
+            .get(&VaultKey::MaxTvlUsdc)
+            .unwrap_or(0);
+        if max_tvl > 0 && total_deposits + amount > max_tvl {
+            panic!("deposit exceeds TVL cap");
+        }
+
+        let token = Self::token_client(&env);
+        let vault_address = env.current_contract_address();
+        token.transfer(&depositor, &vault_address, &amount);
 
         // LP shares: 1:1 for first deposit, otherwise proportional
         let current_balance: i128 = env
@@ -202,7 +307,7 @@ impl ReferenceVault {
             .get_score(&borrower)
             .expect("no active credit badge — mint a badge first");
 
-        // Calculate max loan
+        // --- Liquidity & utilization (Phase B'.4) ---
         let total_deposits: i128 = env
             .storage()
             .instance()
@@ -218,11 +323,49 @@ impl ReferenceVault {
             panic!("no available liquidity");
         }
 
-        // max_loan = (available / 10) × (score / 1000), with 10% per-borrower cap
-        let per_borrower_cap = available / 10;
-        let max_loan = (per_borrower_cap * (score as i128)) / 1000;
+        let max_util_bps: u32 = env
+            .storage()
+            .instance()
+            .get(&VaultKey::MaxUtilizationBps)
+            .unwrap_or(DEFAULT_MAX_UTILIZATION_BPS);
+        // (total_borrowed + amount) * 10000 must not exceed total_deposits * max_util_bps.
+        if (total_borrowed + amount).saturating_mul(10_000)
+            > total_deposits.saturating_mul(max_util_bps as i128)
+        {
+            panic!("amount exceeds utilization cap");
+        }
 
-        if amount > max_loan {
+        // --- Score-anchored credit ladder (Phase B'.3) ---
+        let tier_ceiling = tier_ceiling_for_score(score);
+        if tier_ceiling == 0 {
+            panic!("score below minimum tier (Bronze floor)");
+        }
+        let score_anchored = (tier_ceiling * score as i128) / 1000;
+
+        let repays: u32 = env
+            .storage()
+            .persistent()
+            .get(&VaultKey::RepayCount(borrower.clone()))
+            .unwrap_or(0);
+
+        // First-loan throttle: until the borrower repays at least once, they
+        // can only access FIRST_LOAN_FACTOR_BPS / 10_000 of the ceiling.
+        let credit_cap = if repays == 0 {
+            (score_anchored * FIRST_LOAN_FACTOR_BPS as i128) / 10_000
+        } else {
+            score_anchored
+        };
+
+        // Per-pool cap stays in force as a defense in depth: even a Gold
+        // borrower can't take more than 10% of available liquidity.
+        let per_pool_cap = available / 10;
+        let allowed = if credit_cap < per_pool_cap {
+            credit_cap
+        } else {
+            per_pool_cap
+        };
+
+        if amount > allowed {
             panic!("amount exceeds credit limit for score");
         }
 
@@ -311,6 +454,23 @@ impl ReferenceVault {
         loan.repaid = true;
         env.storage().persistent().set(&loan_key, &loan);
 
+        // Bump the repay count so the next loan exits the first-loan throttle
+        // (Phase B'.3). This is the only place that updates RepayCount.
+        let repays: u32 = env
+            .storage()
+            .persistent()
+            .get(&VaultKey::RepayCount(borrower.clone()))
+            .unwrap_or(0);
+        env.storage().persistent().set(
+            &VaultKey::RepayCount(borrower.clone()),
+            &(repays + 1),
+        );
+        env.storage().persistent().extend_ttl(
+            &VaultKey::RepayCount(borrower.clone()),
+            1_555_200,
+            1_555_200,
+        );
+
         // Update aggregates: principal returns, interest is added to deposits (LP yield)
         let total_borrowed: i128 = env
             .storage()
@@ -333,6 +493,149 @@ impl ReferenceVault {
             (symbol_short!("repay"), borrower),
             (loan.principal, loan.interest),
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // CORE: LP WITHDRAWAL WITH TIMELOCK (Phase B'.5)
+    // -------------------------------------------------------------------------
+
+    /// LP signals intent to withdraw `amount`. Funds are NOT transferred until
+    /// `claim_withdraw` is called after the timelock elapses. Only one active
+    /// request per LP at a time.
+    pub fn request_withdraw(env: Env, lp: Address, amount: i128) {
+        Self::require_not_paused(&env);
+        lp.require_auth();
+
+        if amount <= 0 {
+            panic!("amount must be positive");
+        }
+
+        let balance: i128 = env
+            .storage()
+            .persistent()
+            .get(&VaultKey::LPBalance(lp.clone()))
+            .unwrap_or(0);
+        if amount > balance {
+            panic!("request exceeds LP balance");
+        }
+
+        if env
+            .storage()
+            .persistent()
+            .has(&VaultKey::WithdrawalRequest(lp.clone()))
+        {
+            panic!("withdrawal already requested");
+        }
+
+        let req = WithdrawalRequestRecord {
+            amount,
+            requested_at: env.ledger().timestamp(),
+        };
+        env.storage()
+            .persistent()
+            .set(&VaultKey::WithdrawalRequest(lp.clone()), &req);
+        env.storage().persistent().extend_ttl(
+            &VaultKey::WithdrawalRequest(lp.clone()),
+            1_555_200,
+            1_555_200,
+        );
+
+        env.events().publish(
+            (symbol_short!("wd_req"), lp),
+            (amount, req.requested_at),
+        );
+    }
+
+    /// Drains a previously-requested withdrawal once the timelock has elapsed
+    /// AND the vault has enough free liquidity. Caps at the LP's current
+    /// balance in case it shrank since the request (defaulted loans, etc.).
+    pub fn claim_withdraw(env: Env, lp: Address) {
+        Self::require_not_paused(&env);
+        lp.require_auth();
+
+        let req: WithdrawalRequestRecord = env
+            .storage()
+            .persistent()
+            .get(&VaultKey::WithdrawalRequest(lp.clone()))
+            .expect("no pending withdrawal");
+
+        let now = env.ledger().timestamp();
+        let timelock: u64 = env
+            .storage()
+            .instance()
+            .get(&VaultKey::WithdrawalTimelock)
+            .unwrap_or(DEFAULT_WITHDRAWAL_TIMELOCK_SECS);
+        if now < req.requested_at + timelock {
+            panic!("withdrawal is still locked");
+        }
+
+        let balance: i128 = env
+            .storage()
+            .persistent()
+            .get(&VaultKey::LPBalance(lp.clone()))
+            .unwrap_or(0);
+        let payout = if req.amount <= balance {
+            req.amount
+        } else {
+            balance
+        };
+        if payout <= 0 {
+            // Balance fully eaten by losses since the request — nothing to send,
+            // but we still consume the request so the LP can retry later.
+            env.storage()
+                .persistent()
+                .remove(&VaultKey::WithdrawalRequest(lp.clone()));
+            return;
+        }
+
+        let total_deposits: i128 = env
+            .storage()
+            .instance()
+            .get(&VaultKey::TotalDeposits)
+            .unwrap_or(0);
+        let total_borrowed: i128 = env
+            .storage()
+            .instance()
+            .get(&VaultKey::TotalBorrowed)
+            .unwrap_or(0);
+        let available = total_deposits - total_borrowed;
+        if payout > available {
+            panic!("insufficient available liquidity");
+        }
+
+        let token = Self::token_client(&env);
+        let vault_address = env.current_contract_address();
+        token.transfer(&vault_address, &lp, &payout);
+
+        env.storage()
+            .persistent()
+            .set(&VaultKey::LPBalance(lp.clone()), &(balance - payout));
+        env.storage()
+            .instance()
+            .set(&VaultKey::TotalDeposits, &(total_deposits - payout));
+        env.storage()
+            .persistent()
+            .remove(&VaultKey::WithdrawalRequest(lp.clone()));
+
+        env.events()
+            .publish((symbol_short!("wd_claim"), lp), payout);
+    }
+
+    /// LP cancels an active withdrawal request. Safe at any time.
+    pub fn cancel_withdraw(env: Env, lp: Address) {
+        lp.require_auth();
+        if !env
+            .storage()
+            .persistent()
+            .has(&VaultKey::WithdrawalRequest(lp.clone()))
+        {
+            panic!("no pending withdrawal");
+        }
+        env.storage()
+            .persistent()
+            .remove(&VaultKey::WithdrawalRequest(lp.clone()));
+        env.events()
+            .publish((symbol_short!("wd_canc"), lp), env.ledger().timestamp());
     }
 
     // -------------------------------------------------------------------------
@@ -431,14 +734,96 @@ impl ReferenceVault {
         env.storage().persistent().get(&VaultKey::Loan(borrower))
     }
 
-    /// Calculate max borrowable amount for a given score against current liquidity.
+    /// Calculate the long-term ceiling (post first-repay) for a given score
+    /// against current liquidity. Returns the smaller of the score-anchored
+    /// ceiling and the per-pool cap.
     pub fn max_loan_for_score(env: Env, score: u32) -> i128 {
         let available = Self::get_available_liquidity(env);
         if available <= 0 || score == 0 {
             return 0;
         }
-        let per_borrower_cap = available / 10;
-        (per_borrower_cap * (score as i128)) / 1000
+        let tier_ceiling = tier_ceiling_for_score(score);
+        if tier_ceiling == 0 {
+            return 0;
+        }
+        let score_anchored = (tier_ceiling * score as i128) / 1000;
+        let per_pool_cap = available / 10;
+        if score_anchored < per_pool_cap {
+            score_anchored
+        } else {
+            per_pool_cap
+        }
+    }
+
+    /// Calculate the *currently applicable* loan ceiling for a specific
+    /// borrower, factoring in whether they have repayments on record.
+    /// First-time borrowers are throttled to 10% of the score-anchored ceiling.
+    pub fn max_loan_for_borrower(env: Env, borrower: Address) -> i128 {
+        let badge = Self::badge_client(&env);
+        if badge.is_defaulted(&borrower) {
+            return 0;
+        }
+        let score = match badge.get_score(&borrower) {
+            Some(s) => s,
+            None => return 0,
+        };
+        let available = Self::get_available_liquidity(env.clone());
+        if available <= 0 {
+            return 0;
+        }
+        let tier_ceiling = tier_ceiling_for_score(score);
+        if tier_ceiling == 0 {
+            return 0;
+        }
+        let score_anchored = (tier_ceiling * score as i128) / 1000;
+        let repays: u32 = env
+            .storage()
+            .persistent()
+            .get(&VaultKey::RepayCount(borrower))
+            .unwrap_or(0);
+        let credit_cap = if repays == 0 {
+            (score_anchored * FIRST_LOAN_FACTOR_BPS as i128) / 10_000
+        } else {
+            score_anchored
+        };
+        let per_pool_cap = available / 10;
+        if credit_cap < per_pool_cap {
+            credit_cap
+        } else {
+            per_pool_cap
+        }
+    }
+
+    pub fn get_repay_count(env: Env, borrower: Address) -> u32 {
+        env.storage()
+            .persistent()
+            .get(&VaultKey::RepayCount(borrower))
+            .unwrap_or(0)
+    }
+
+    pub fn get_withdrawal_request(env: Env, lp: Address) -> Option<WithdrawalRequestRecord> {
+        env.storage().persistent().get(&VaultKey::WithdrawalRequest(lp))
+    }
+
+    pub fn get_max_tvl(env: Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&VaultKey::MaxTvlUsdc)
+            .unwrap_or(0)
+    }
+
+    pub fn get_max_utilization_bps(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&VaultKey::MaxUtilizationBps)
+            .unwrap_or(DEFAULT_MAX_UTILIZATION_BPS)
+    }
+
+    pub fn get_withdrawal_timelock(env: Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&VaultKey::WithdrawalTimelock)
+            .unwrap_or(DEFAULT_WITHDRAWAL_TIMELOCK_SECS)
     }
 
     pub fn get_admin(env: Env) -> Address {

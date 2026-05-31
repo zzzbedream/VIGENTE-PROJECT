@@ -63,19 +63,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "f2da929e1ffbe66f166265edfecf337235c647e85164f26bff1dbd0532a02b5a"
+                      "bytes": "073d82d8bd4676387e3df216fbbc0e5df9426f225b882fbca2092b9df2772c8c"
                     },
                     {
-                      "bytes": "ad2c9233683c302cdcaacebc2b807ab140c1a9f9cccb4381ef92e5a3ad7d2579"
+                      "bytes": "f297a8c9d67d380dbee64739683b2a201eeddb56b1815e49535ae9d17013cdb3"
                     },
                     {
-                      "bytes": "9e39a98904434d6ba7d2f8040661d1f5cccf051ae09392da27c47d601e1395a3"
+                      "bytes": "db2228d2868887f181296250d341c4a523cbffd5d1d70efbbc83070a376c165e"
                     },
                     {
-                      "bytes": "21a5694206cadfd7c48001f2d939e13e13fb5a7eb268681f9ffb7a9155376b90"
+                      "bytes": "6fef051fa79dd36abd10e03757f731c1e5917eb5eb82dce554c4a8e4387b090a"
                     },
                     {
-                      "bytes": "67076858f831dc9ffa68be46448e715cf40c221f1ec049ceda196f6687a6df35"
+                      "bytes": "94cb362560a7d33a4014efa44ddc1a3f382d7dea141eb3db0d5a2e8d461f030c"
                     }
                   ]
                 },
@@ -112,6 +112,18 @@
                 },
                 {
                   "u64": 518400
+                },
+                {
+                  "i128": {
+                    "hi": 0,
+                    "lo": 100000000000000
+                  }
+                },
+                {
+                  "u32": 0
+                },
+                {
+                  "u64": 0
                 }
               ]
             }
@@ -254,7 +266,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 10000000000
+                    "lo": 1000000000
                   }
                 }
               ]
@@ -659,7 +671,7 @@
                 "val": {
                   "i128": {
                     "hi": 0,
-                    "lo": 510000000000
+                    "lo": 501000000000
                   }
                 }
               }
@@ -707,7 +719,7 @@
                 "val": {
                   "i128": {
                     "hi": 0,
-                    "lo": 990000000000
+                    "lo": 999000000000
                   }
                 }
               }
@@ -991,19 +1003,19 @@
                         "val": {
                           "vec": [
                             {
-                              "bytes": "f2da929e1ffbe66f166265edfecf337235c647e85164f26bff1dbd0532a02b5a"
+                              "bytes": "073d82d8bd4676387e3df216fbbc0e5df9426f225b882fbca2092b9df2772c8c"
                             },
                             {
-                              "bytes": "ad2c9233683c302cdcaacebc2b807ab140c1a9f9cccb4381ef92e5a3ad7d2579"
+                              "bytes": "f297a8c9d67d380dbee64739683b2a201eeddb56b1815e49535ae9d17013cdb3"
                             },
                             {
-                              "bytes": "9e39a98904434d6ba7d2f8040661d1f5cccf051ae09392da27c47d601e1395a3"
+                              "bytes": "db2228d2868887f181296250d341c4a523cbffd5d1d70efbbc83070a376c165e"
                             },
                             {
-                              "bytes": "21a5694206cadfd7c48001f2d939e13e13fb5a7eb268681f9ffb7a9155376b90"
+                              "bytes": "6fef051fa79dd36abd10e03757f731c1e5917eb5eb82dce554c4a8e4387b090a"
                             },
                             {
-                              "bytes": "67076858f831dc9ffa68be46448e715cf40c221f1ec049ceda196f6687a6df35"
+                              "bytes": "94cb362560a7d33a4014efa44ddc1a3f382d7dea141eb3db0d5a2e8d461f030c"
                             }
                           ]
                         }
@@ -1150,7 +1162,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 500000000
+                          "lo": 50000000
                         }
                       }
                     },
@@ -1161,7 +1173,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 10000000000
+                          "lo": 1000000000
                         }
                       }
                     },
@@ -1265,6 +1277,33 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "MaxTvlUsdc"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "i128": {
+                            "hi": 0,
+                            "lo": 100000000000000
+                          }
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "MaxUtilizationBps"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 8500
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "Paused"
                             }
                           ]
@@ -1296,7 +1335,7 @@
                         "val": {
                           "i128": {
                             "hi": 0,
-                            "lo": 10000000000
+                            "lo": 1000000000
                           }
                         }
                       },
@@ -1313,6 +1352,18 @@
                             "hi": 0,
                             "lo": 1000000000000
                           }
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "WithdrawalTimelock"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u64": 1209600
                         }
                       }
                     ]
@@ -1502,19 +1553,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "f2da929e1ffbe66f166265edfecf337235c647e85164f26bff1dbd0532a02b5a"
+                      "bytes": "073d82d8bd4676387e3df216fbbc0e5df9426f225b882fbca2092b9df2772c8c"
                     },
                     {
-                      "bytes": "ad2c9233683c302cdcaacebc2b807ab140c1a9f9cccb4381ef92e5a3ad7d2579"
+                      "bytes": "f297a8c9d67d380dbee64739683b2a201eeddb56b1815e49535ae9d17013cdb3"
                     },
                     {
-                      "bytes": "9e39a98904434d6ba7d2f8040661d1f5cccf051ae09392da27c47d601e1395a3"
+                      "bytes": "db2228d2868887f181296250d341c4a523cbffd5d1d70efbbc83070a376c165e"
                     },
                     {
-                      "bytes": "21a5694206cadfd7c48001f2d939e13e13fb5a7eb268681f9ffb7a9155376b90"
+                      "bytes": "6fef051fa79dd36abd10e03757f731c1e5917eb5eb82dce554c4a8e4387b090a"
                     },
                     {
-                      "bytes": "67076858f831dc9ffa68be46448e715cf40c221f1ec049ceda196f6687a6df35"
+                      "bytes": "94cb362560a7d33a4014efa44ddc1a3f382d7dea141eb3db0d5a2e8d461f030c"
                     }
                   ]
                 },
@@ -1613,6 +1664,18 @@
                 },
                 {
                   "u64": 518400
+                },
+                {
+                  "i128": {
+                    "hi": 0,
+                    "lo": 100000000000000
+                  }
+                },
+                {
+                  "u32": 0
+                },
+                {
+                  "u64": 0
                 }
               ]
             }
@@ -2133,7 +2196,7 @@
                           "u32": 0
                         },
                         {
-                          "bytes": "c15776813a831c9f2da13b69cb2905a176d943021bb13a5ad0cb0a42927f751c9ac02606cdf5e206102021fabcdd73fa4b9aa553c5153894b82420a6c27df20a"
+                          "bytes": "a9a5f99328e19386919e22473710fc3c668c3ec5df5bfc806ca74f80934602c86c6861cc21c0cf6b9c69e280a30c20e9bbbe135d6f72e30178ff54e80bbf1009"
                         }
                       ]
                     },
@@ -2143,7 +2206,7 @@
                           "u32": 1
                         },
                         {
-                          "bytes": "24110357feeeb4edf9b001251ca6d1806d2274edebf62da82973a558d884bc86fc3d1de6640930f8c5cd54f3ea7fa9fa9f1c3fc0fff3bfdcff6645598c728503"
+                          "bytes": "018b35cb0c1bd9e18883eeaaaa354d5616df78da8098bbd73bcf61e7c270954f05ac029ab4ab1da1e22cd76c72b7172c8dff50d841054fc0ae1690de56c81a0e"
                         }
                       ]
                     },
@@ -2153,7 +2216,7 @@
                           "u32": 2
                         },
                         {
-                          "bytes": "5f54def5966d29d64988c6680c80c002fa9f5f79e8b776ad26fa80c6942cce33cb70d21b69ffc5fd2182540d9c73a1ad98f8f53ce4abcb3823fe78a7d78fd403"
+                          "bytes": "d5d885aefa3078750459229d432ac0677bbbd44b46824374f2a66738cae9b79b4ce93db447ac0ba9151b2c7482ba47b21ada887c6b72cb71760d05216310f40d"
                         }
                       ]
                     }
@@ -2289,7 +2352,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 10000000000
+                    "lo": 1000000000
                   }
                 }
               ]
@@ -2426,7 +2489,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 10000000000
+                    "lo": 1000000000
                   }
                 }
               ]
@@ -2457,7 +2520,7 @@
             "data": {
               "i128": {
                 "hi": 0,
-                "lo": 10000000000
+                "lo": 1000000000
               }
             }
           }
@@ -2506,7 +2569,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 10000000000
+                    "lo": 1000000000
                   }
                 },
                 {
