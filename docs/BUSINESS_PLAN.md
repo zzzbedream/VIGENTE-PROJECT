@@ -1,6 +1,13 @@
 # Vigente Protocol — Business Plan
 
 > Pre-submission business plan per SCF criteria. Addresses Feedback Item 4 from prior submission: *"Business use case and go-to-market plan are not clearly defined."*
+>
+> **Update for this resubmission.** The protocol no longer requires any fintech partnership to operate. The synthetic scoring engine reads only Stellar Horizon and produces verifiable credit profiles independently of Payku, Fintoc, or any third-party API. Payku is preserved in the codebase as an *optional enrichment adapter* — it can add detail to a borrower's profile when commercial agreements exist, but the protocol does not depend on its presence to function. This decoupling resolves the "no confirmed partnerships" criticism by making partnerships an upgrade path rather than a critical dependency.
+
+## Post-Grant North Star — Subcollateralized Debt & On-Chain Credit Bonds
+
+Tranches 1 and 2 focus strictly on establishing the threshold-signed credit badge as a robust, sybil-resistant scoring primitive. Once the scoring engine is validated at scale, the protocol bootstraps a **decentralized fixed-income market** on top of the primitive. Verifiable credit profiles enable the issuance of **on-chain credit bonds**: high-tier (Gold / Silver) users access subcollateralized lending pools, liquidity providers underwrite debt based on transparent on-chain behavioral data, and traditional bond mechanics arrive in the Stellar ecosystem. Solving identity and creditworthiness first is the only honest way to bring institutional liquidity to undercollateralized lending — and it's the work that Tranches 1–3 fund.
+
 
 ---
 
