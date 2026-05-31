@@ -80,18 +80,26 @@ The `vigente-badge` contract (`contracts/vigente-badge/src/lib.rs`) implements a
 
 The test suite (`contracts/vigente-badge/src/test.rs`) contains 30 tests covering the slash lifecycle, including the cases where a defaulted borrower cannot re-mint and where double-slashing is prevented.
 
-### Centralized oracle: documented as Tranche 1 baseline, decentralization roadmap explicit
+### Centralized oracle: SHIPPED as k-of-n threshold ed25519 on-chain (Phase B, pre-submission)
 
-The current oracle is server-side and trusted. We are not hiding this. The submission proposes a phased decentralization:
+Between the rejection and this resubmission we did not just document a roadmap — we built the multi-signature oracle in code, audited it against a Soroban resource budget probe, deployed it to testnet, and proved cross-language signature parity end-to-end. The trust assumption changed from "trust the Vigente oracle" to "trust no single oracle of the n configured; a k-quorum is required for every mint".
 
-| Phase | Model | Trust Assumption |
-|-------|-------|------------------|
-| Pre-submission baseline | Server-side oracle with HMAC-signed claims | Trust Vigente oracle is honest |
-| Tranche 2 deliverable | Open banking adapter (Fintoc) with attestation flow | Trust Fintoc TLS + Vigente oracle |
-| Tranche 3 deliverable | Multi-signature oracle authorization in `vigente-badge.add_oracle()` | Trust quorum of oracles |
-| Post-grant roadmap | TLSNotary client-side attestation (architectural spec in `docs/ARCHITECTURE.md`) | Trustless: cryptographic proof from user's own device |
+| Phase | Model | Trust Assumption | Status |
+|-------|-------|------------------|--------|
+| Pre-rejection baseline | Server-side oracle with HMAC-signed claims | Trust Vigente oracle is honest | Replaced |
+| **Phase B (pre-submission)** | **k-of-n threshold ed25519 verification on-chain** in `vigente-badge.mint()`. Default `k=3, n=5`. Indices into `OracleKeys: Vec<BytesN<32>>` are unique per call; anti-replay nonce stored as `UsedNonce(BytesN<32>)`. | **Trust quorum (k) of independently-keyed oracles** | **Live on testnet at `CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD`.** |
+| Tranche 2 deliverable | Open banking adapter (Fintoc) feeding distinct oracle nodes | Same threshold guarantees, more diverse data inputs | Planned |
+| Post-grant roadmap | TLSNotary client-side attestation (architectural spec in `docs/ARCHITECTURE.md`) | Trustless: cryptographic proof from user's own device | Out of scope of the grant ask |
 
-The TLSNotary endgame is documented in the architecture but is **not** a Tranche deliverable. We learned from the prior submission that promising client-side ZK attestation within a 6-month grant was unrealistic. The work that fits in the grant is server-side oracle hardening plus multi-sig authorization, which we can ship and verify.
+Evidence that this is real, not a promise:
+
+- **Code:** `contracts/vigente-badge/src/lib.rs` — `DataKey::OracleKeys`, `DataKey::OracleThreshold`, `set_oracle_keys` (atomic replacement with duplicate-pubkey and `threshold <= keys.len()` invariants), `mint()` verifying k signatures via `env.crypto().ed25519_verify`.
+- **Budget probe:** 3× `ed25519_verify` consumes 1.27M CPU instructions, 1.3% of the testnet ceiling. Documented in `docs/notes/soroban-budget-day1.md`.
+- **Live positive mint (3-of-5 sigs, age=90):** [tx `8b9fccfc…`](https://stellar.expert/explorer/testnet/tx/8b9fccfc9daaf594e457e19808ef9c0746e8e45f37aab8417b5fe8d59641bc85). `get_score(borrower)` returns the exact score the simulator signed.
+- **Live negative mint (age=10 tampered):** trapped at Soroban simulation with `Error(WasmVm, InvalidAction)`, recorded in `docs/notes/phase-b-prime-acceptance.md`.
+- **Tests:** 7 threshold-specific unit tests + 2 XDR-parity tests + 9 simulator tests. See `docs/THREAT_MODEL.md` § 5 for the full proof trail.
+
+This is the change we owed the previous review: the centralized oracle critique is no longer applicable to the contract on testnet today.
 
 ---
 
@@ -202,14 +210,19 @@ To prevent any ambiguity between "what is built" and "what is the deliverable be
 
 | Artifact | Location | Verification |
 |----------|----------|--------------|
-| Vigente v1 contract (legacy `VigenteProtocol`) | `contracts/src/lib.rs` | Deployed at `CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W` on testnet |
-| `vigente-badge` contract (production) | `contracts/vigente-badge/src/lib.rs` | 30 unit tests pass via `cd contracts/vigente-badge && cargo test`. Deployment scheduled before submission (see Tranche 1). |
-| `reference-vault` contract | `contracts/reference-vault/src/lib.rs` | 10 integration tests pass (full lifecycle + slash cascade), deployed alongside `vigente-badge` and `mock-usdc` in test env. |
+| Vigente v1 contract (legacy `VigenteProtocol`) | `contracts/src/lib.rs` | Deployed at `CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W` on testnet; historical reference, no longer the active path. |
+| **`vigente-badge` v3** (current, threshold + age floor) | `contracts/vigente-badge/src/lib.rs` | **41 unit tests + 5 smoke tests pass**. Deployed at `CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD`. Live positive mint: tx `8b9fccfc…`. |
+| `reference-vault` contract (Phase B' hardened) | `contracts/reference-vault/src/lib.rs` | 23 integration tests pass — full lifecycle, default cascade, credit ladder, TVL cap, utilization cap, LP withdrawal timelock. |
 | `mock-usdc` SEP-41 token | `contracts/mock-usdc/src/lib.rs` | 5 tests pass; replaced by Stellar USDC SAC on mainnet (Tranche 3). |
-| Payku oracle adapter | `web/src/services/payku-client.ts`, `payku-oracle.ts` | HMAC signing, retry, fallback. Tests in TypeScript. |
-| Frontend with end-to-end flow | `web/src/app/page.tsx` | Live at https://vigente-hackathon-final.vercel.app |
+| **Off-chain threshold oracle simulator** | `web/src/services/threshold-oracle.ts` | 9 unit tests + 2 XDR parity tests. Cross-language byte-for-byte parity with Rust contract validated empirically. |
+| **Synthetic scoring engine** (no fintech dependency) | `web/src/services/horizon-scoring.ts` | 17 tests covering tier bands, P2P penalty, ecosystem whitelist, density CV, reciprocity, account-age cap. |
+| **/v3 threshold demo UI** | `web/src/app/v3/page.tsx`, `web/src/app/api/mint-v3/route.ts` | End-to-end mint via the browser; relay endpoint validated with tx `3f498e54…`. |
+| Payku oracle adapter (optional) | `web/src/services/payku-client.ts`, `payku-oracle.ts` | Preserved as an enrichment adapter; not on the critical path. |
+| Threat model | `docs/THREAT_MODEL.md` | STRIDE-style analysis with code + test references for 6 vectors. |
 | Architecture documentation | `docs/ARCHITECTURE.md` | Complete pre-submission per SCF criteria |
 | Business plan | `docs/BUSINESS_PLAN.md` | Market analysis, GTM, competitive positioning |
+
+**Test count at submission:** 104 green tests across the matrix (41 badge + 5 smoke + 23 vault + 5 mock-usdc + 30 web).
 
 ### To be delivered through the grant
 
@@ -218,6 +231,17 @@ Everything in `docs/TRANCHE_1_DELIVERABLES.md` (production-grade MVP), `docs/TRA
 We are not asking the grant to fund work that is already done. We are asking the grant to fund the production hardening, the reference vault integration, the mainnet deployment, and the commercial pilot.
 
 ---
+
+## Threat Model & Risk Mitigation
+
+In direct response to the *"underspecified components"* feedback, we have written `docs/THREAT_MODEL.md` — a STRIDE-style analysis of six attack vectors (carousel/wash trading, Sybil farms, long-con default, vault drainage, centralized-oracle compromise, LP bank run). For each vector the document gives:
+
+- the attack story,
+- the exact mitigation in code (file + function name),
+- the tests or live testnet transactions that prove it works,
+- the boundary of what we deliberately do not try to mitigate (validator collapse, compromised wallets, etc.).
+
+Five of the six vectors have shipped mitigations in code as of this submission. The sixth (mint-fee escrow) is documented as deferred to a post-grant deliverable rather than promised as part of Tranche 1.
 
 ## Closing
 
