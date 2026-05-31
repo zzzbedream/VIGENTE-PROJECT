@@ -14,6 +14,8 @@
     "setup:mother": "tsx scripts/setup-mother-account.ts",
     "evaluate": "tsx scripts/evaluate.ts",
     "test:horizon": "tsx --test tests/horizon-scoring.test.ts",
+    "test:threshold": "tsx --test tests/threshold-oracle.test.ts tests/xdr-parity.test.ts",
+    "test:web": "tsx --test tests/horizon-scoring.test.ts tests/threshold-oracle.test.ts tests/xdr-parity.test.ts",
     "validate-t1": "ts-node scripts/validate-t1.ts",
     "validate-t2": "ts-node scripts/validate-t2.ts",
     "validate-t3": "ts-node scripts/validate-t3.ts"
