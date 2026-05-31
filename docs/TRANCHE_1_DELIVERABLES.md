@@ -1,10 +1,19 @@
-# Tranche 1 — MVP: Production-Grade Badge Contract & Payku Oracle
+# Tranche 1 — MVP: Threshold-Signed Badge Contract & Synthetic Scoring
 
 **Project:** Vigente Protocol
 **Track:** Stellar Community Fund — Open Track / Build Award
 **Payment:** 20% of total grant = **$12,000 USD**
 **Timeline:** 6 weeks from award acceptance
 **Lead:** Founder + Full-stack Engineer
+
+> **Pre-submission update.** Between the original rejection and this
+> resubmission we shipped the bulk of what was scheduled for Tranche 1
+> (and several Tranche 3 items) ahead of time. Sections below are
+> marked **✅ shipped** where the work is already in the repo and on
+> testnet, and **scheduled** where the grant payment funds the remaining
+> production hardening. The scope of the grant is not reduced — it is
+> tightened to the production work that genuinely needs paid effort
+> rather than a 6-week pre-build of code that already exists.
 
 ---
 
@@ -22,22 +31,46 @@ Per SCF Build guidelines, Tranche 1 is **shippable product**, not architecture, 
 
 **Location:** `contracts/vigente-badge/`
 
-**Status at submission time:** code complete, 30 unit tests pass locally, deployed to testnet.
+**Status at submission time:** ✅ **Shipped pre-submission.** k-of-n threshold ed25519 verification on-chain, anti-replay nonce, configurable wallet-age floor (default 30 days), 41 unit tests + 5 smoke tests. Deployed to testnet as v3 at `CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD`. End-to-end mint validated with tx `8b9fccfc…`.
+
+**Tranche 1 work (post-funding) — remaining production hardening:**
+
+1. ✅ ~~**Multi-oracle authorization**~~ — *Shipped.* `set_oracle_keys` atomically replaces the entire pubkey set with `0 < threshold <= keys.len()` invariants enforced in a single transaction. Atomic replacement was chosen over add/remove to prevent the bricked-contract failure mode.
+2. **Slash reason taxonomy expansion** — currently 4 reason codes. Expand to 8 categories aligned with credit reporting standards: payment_delinquency, technical_default, fraud_confirmed, identity_dispute, regulatory_freeze, collateral_shortfall, voluntary_termination, unspecified.
+3. **Storage TTL refresh helper** — admin-callable function to extend TTL on badges and default records nearing expiry.
+4. **Event indexing schema** — document event topics + payloads for Mercury/SubQuery indexers. Publish JSON schema for downstream consumers.
+5. **Mint fee escrow with refund on first repay** — anti-Sybil economic disincentive paired with the existing 30-day age floor. Documented in `docs/THREAT_MODEL.md` § 2 as deliberately deferred pending the grant.
+
+**Deliverable acceptance:**
+- `cargo test --package vigente-badge` → ≥41 tests pass *(currently 41 + 5 smoke = 46)*.
+- `cargo tarpaulin --package vigente-badge` → line coverage > 90%.
+- Testnet contract responds to `get_admin()`, `is_defaulted()`, `get_score()`, `get_oracle_keys()`, `get_oracle_threshold()`, `get_min_wallet_age()`.
+- Contract ID published in `README.md` and `web/.env.local`.
+- `npm run validate-t1` returns `status: "complete"` with the threshold demo block all-green.
+
+### 2.2 Off-Chain Threshold Oracle Simulator (Phase B.6)
+
+**Location:** `web/src/services/threshold-oracle.ts`, `web/src/app/api/oracle/sign-threshold/route.ts`
+
+**Status:** ✅ **Shipped pre-submission.** Five ed25519 keypairs persisted via `VIGENTE_ORACLE_SEEDS_HEX`, deterministic across process restarts. `signMint(borrower, score, expiration, accountAgeDays, nonce)` produces k=3 signatures over the canonical 92-byte message. Cross-language XDR parity with the Rust contract validated by 2 dedicated tests + the live mint on testnet.
 
 **Tranche 1 work (post-funding):**
 
-1. **Multi-oracle authorization with rotation policy** — replace the single-oracle list with a rotation-aware ACL that tracks oracle activity and supports retirement of compromised keys without redeploying.
-2. **Slash reason taxonomy expansion** — currently 4 reason codes (unspecified/non_payment/fraud/collateral_shortfall). Expand to include 8 categories aligned with credit reporting standards: payment_delinquency, technical_default, fraud_confirmed, identity_dispute, regulatory_freeze, collateral_shortfall, voluntary_termination, unspecified.
-3. **Storage TTL refresh helper** — admin-callable function to extend TTL on any badge or default record nearing expiry. Prevents accidental data loss during periods of low contract activity.
-4. **Event indexing schema** — document event topics + payloads for Mercury/SubQuery indexers. Publish JSON schema for downstream consumers.
+1. **Operational deployment of multiple independent oracle nodes** — separate the simulator pubkeys into N distinct processes / hosts so a single host compromise does not threaten the k threshold. Document the rotation procedure.
+2. **Monitoring** — oracle latency, sign-rate, refusal rate (badge requests below the age floor), and disagreement rate between nodes.
 
-**Deliverable acceptance:**
-- `cargo test --package vigente-badge` → all tests pass (current: 30; target: 40+).
-- `cargo tarpaulin --package vigente-badge` → line coverage > 90%.
-- Testnet contract responds to `get_admin()`, `is_defaulted()`, `get_score()` invocations.
-- Contract ID published in `README.md` and `web/.env.local`.
+### 2.3 Synthetic Scoring Engine (no fintech dependency)
 
-### 2.2 Payku Oracle Adapter — Production Operability
+**Location:** `web/src/services/horizon-scoring.ts`, `web/src/services/ecosystem-whitelist.ts`, `web/src/services/scoring-engine.ts`
+
+**Status:** ✅ **Shipped pre-submission.** Reverse-paginated Horizon read with 180-day / 200-op cap, ecosystem-counterparty whitelist with 70% P2P penalty, classified V/F/C tier output. 17 unit tests cover tier bands, P2P penalty, ecosystem ratio, density CV, reciprocity, and the age cap.
+
+**Tranche 1 work (post-funding):**
+
+1. Persist the score JSON in Redis (currently in-memory Map) so the 5-minute TTL survives across Vercel function invocations.
+2. Extend the whitelist seed to ~25 verified ecosystem addresses (anchors, AMM routers, lending pools, MoneyGram bridge on mainnet).
+
+### 2.4 Payku Oracle Adapter (preserved as optional enrichment)
 
 **Location:** `web/src/services/payku-client.ts`, `payku-oracle.ts`, `payku-payout.ts`
 

@@ -1,5 +1,7 @@
 # Tranche 2 — Testnet Expansion: Reference Lending Vault & Cross-Contract Integration
 
+> **Pre-submission update.** `reference-vault` is already in the repo with 23 integration tests and the Phase B' threat-model hardening shipped — TVL cap, 85% utilization rail, score-anchored credit ladder with 10% first-loan throttle, 14-day LP withdrawal timelock, slash cascade on liquidation, multi-user isolation. See `docs/THREAT_MODEL.md` §§ 3, 4, 6 for the full picture. The grant payment for this tranche funds **mainnet deploy + real USDC SAC integration + monitoring + 5-10 design partners onboarded to testnet vault**, not the foundational code which is done.
+
 **Project:** Vigente Protocol
 **Track:** Stellar Community Fund — Open Track / Build Award
 **Payment:** 30% of total grant = **$18,000 USD**
