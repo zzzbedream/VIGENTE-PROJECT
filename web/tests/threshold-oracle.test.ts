@@ -47,7 +47,7 @@ test("oracle set has 5 entries with 32-byte raw pubkeys", () => {
 
 test("signMint produces threshold signatures of 64 bytes", () => {
   const nonce = Buffer.alloc(32, 0x42);
-  const sigs = signMint(TEST_BORROWER, 750, 1_700_086_400n, nonce);
+  const sigs = signMint(TEST_BORROWER, 750, 1_700_086_400n, 60, nonce);
   assert.equal(sigs.length, ORACLE_THRESHOLD);
   for (const s of sigs) {
     assert.equal(s.signature.length, 64);
@@ -58,9 +58,9 @@ test("each signature verifies against its own oracle pubkey", () => {
   const nonce = Buffer.alloc(32, 0x7f);
   const score = 850;
   const expiration = 1_700_086_400n;
-  const msg = buildMintMessage(TEST_BORROWER, score, expiration, nonce);
+  const msg = buildMintMessage(TEST_BORROWER, score, expiration, 60, nonce);
 
-  const sigs = signMint(TEST_BORROWER, score, expiration, nonce);
+  const sigs = signMint(TEST_BORROWER, score, expiration, 60, nonce);
   const pks = getOraclePubkeys();
   for (const s of sigs) {
     const pk = pubkeyToKeyObject(pks[s.index]);
@@ -71,8 +71,8 @@ test("each signature verifies against its own oracle pubkey", () => {
 
 test("signature from oracle 0 does NOT verify with oracle 1's pubkey", () => {
   const nonce = Buffer.alloc(32, 0x11);
-  const msg = buildMintMessage(TEST_BORROWER, 500, 1_700_086_400n, nonce);
-  const sigs = signMint(TEST_BORROWER, 500, 1_700_086_400n, nonce);
+  const msg = buildMintMessage(TEST_BORROWER, 500, 1_700_086_400n, 60, nonce);
+  const sigs = signMint(TEST_BORROWER, 500, 1_700_086_400n, 60, nonce);
   const pks = getOraclePubkeys();
 
   const wrongPk = pubkeyToKeyObject(pks[1]);
@@ -84,8 +84,8 @@ test("signature from oracle 0 does NOT verify with oracle 1's pubkey", () => {
 test("changing the nonce changes every signature", () => {
   const nonceA = Buffer.alloc(32, 0x01);
   const nonceB = Buffer.alloc(32, 0x02);
-  const a = signMint(TEST_BORROWER, 600, 1_700_086_400n, nonceA);
-  const b = signMint(TEST_BORROWER, 600, 1_700_086_400n, nonceB);
+  const a = signMint(TEST_BORROWER, 600, 1_700_086_400n, 60, nonceA);
+  const b = signMint(TEST_BORROWER, 600, 1_700_086_400n, 60, nonceB);
   for (let i = 0; i < a.length; i++) {
     assert.notEqual(
       a[i].signature.toString("hex"),
@@ -96,18 +96,18 @@ test("changing the nonce changes every signature", () => {
 
 test("buildSignedMintRequest returns JSON-safe payload", () => {
   const nonce = Buffer.alloc(32, 0x33);
-  const req = buildSignedMintRequest(TEST_BORROWER, 920, 1_700_086_400n, nonce);
-  // Round-trip through JSON to confirm no bigints/Buffers leak.
+  const req = buildSignedMintRequest(TEST_BORROWER, 920, 1_700_086_400n, 60, nonce);
   const json = JSON.stringify(req);
   const parsed = JSON.parse(json);
   assert.equal(parsed.borrower, TEST_BORROWER);
   assert.equal(parsed.score, 920);
   assert.equal(parsed.expiration, "1700086400");
-  assert.equal(parsed.nonce.length, 64); // 32 bytes hex
+  assert.equal(parsed.accountAgeDays, 60);
+  assert.equal(parsed.nonce.length, 64);
   assert.equal(parsed.signatures.length, ORACLE_THRESHOLD);
   for (const s of parsed.signatures) {
     assert.equal(typeof s.index, "number");
-    assert.equal(s.signature.length, 128); // 64 bytes hex
+    assert.equal(s.signature.length, 128);
   }
 });
 
@@ -122,7 +122,7 @@ test("freshNonce produces 32 distinct bytes", () => {
 test("requesting fewer than threshold signatures throws", () => {
   const nonce = freshNonce();
   assert.throws(
-    () => signMint(TEST_BORROWER, 500, 1_700_086_400n, nonce, ORACLE_THRESHOLD - 1),
+    () => signMint(TEST_BORROWER, 500, 1_700_086_400n, 60, nonce, ORACLE_THRESHOLD - 1),
     /threshold/,
   );
 });
@@ -130,7 +130,31 @@ test("requesting fewer than threshold signatures throws", () => {
 test("requesting more than oracle count throws", () => {
   const nonce = freshNonce();
   assert.throws(
-    () => signMint(TEST_BORROWER, 500, 1_700_086_400n, nonce, ORACLE_COUNT + 1),
+    () => signMint(TEST_BORROWER, 500, 1_700_086_400n, 60, nonce, ORACLE_COUNT + 1),
     /only/,
   );
+});
+
+test("buildMintMessage rejects out-of-range accountAgeDays", () => {
+  const nonce = freshNonce();
+  assert.throws(
+    () => buildMintMessage(TEST_BORROWER, 500, 1_700_086_400n, -1, nonce),
+    /accountAgeDays/,
+  );
+  assert.throws(
+    () => buildMintMessage(TEST_BORROWER, 500, 1_700_086_400n, 1.5, nonce),
+    /accountAgeDays/,
+  );
+});
+
+test("changing accountAgeDays changes every signature", () => {
+  const nonce = Buffer.alloc(32, 0x55);
+  const a = signMint(TEST_BORROWER, 600, 1_700_086_400n, 30, nonce);
+  const b = signMint(TEST_BORROWER, 600, 1_700_086_400n, 31, nonce);
+  for (let i = 0; i < a.length; i++) {
+    assert.notEqual(
+      a[i].signature.toString("hex"),
+      b[i].signature.toString("hex"),
+    );
+  }
 });

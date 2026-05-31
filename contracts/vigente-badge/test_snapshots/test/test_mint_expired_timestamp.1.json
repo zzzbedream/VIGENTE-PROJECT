@@ -35,19 +35,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "738311ff85d9a38ca235cd83b5ae3ff93354a69147f0b5336f8b448b8f0db5fa"
+                      "bytes": "d535c89d1c78a3603467524e3c6d0710841342fa7591fa5500eba3a37995d61f"
                     },
                     {
-                      "bytes": "a8123bd74bc3ea1db1278f7ccdfa0c052a427d635254d8c9390c43f762869ccd"
+                      "bytes": "b9e6ad8fb8b4072142742bdb7ab624e2e12bea31a415ffab713d7c2106e66504"
                     },
                     {
-                      "bytes": "169128d425791a3eefcabc9871f13e097703bf3039264b101f85c276158c8eec"
+                      "bytes": "8916b6d21859e8ed8772df2bf2ce81bed33da9f2a198ecb5b7abfb2919079cf0"
                     },
                     {
-                      "bytes": "f003ab832a5db78a9d2b803b7239dc54034e6390bc1893fd166820e23a9c6267"
+                      "bytes": "9729fdac86fc3c758d4b65a04ac298aeefed75a9cf73bb1f77fc77f6221d6fff"
                     },
                     {
-                      "bytes": "71a4ae9c7407915e65cc6ffeccb2c34b6be91c36d844212a96f3ea579b9ff48c"
+                      "bytes": "43409630371fb733cb98790b5afdfff709171c1e88a1aa9f16350113f36b4ed8"
                     }
                   ]
                 },
@@ -147,6 +147,18 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "MinWalletAgeDays"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 30
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "OracleKeys"
                             }
                           ]
@@ -154,19 +166,19 @@
                         "val": {
                           "vec": [
                             {
-                              "bytes": "738311ff85d9a38ca235cd83b5ae3ff93354a69147f0b5336f8b448b8f0db5fa"
+                              "bytes": "d535c89d1c78a3603467524e3c6d0710841342fa7591fa5500eba3a37995d61f"
                             },
                             {
-                              "bytes": "a8123bd74bc3ea1db1278f7ccdfa0c052a427d635254d8c9390c43f762869ccd"
+                              "bytes": "b9e6ad8fb8b4072142742bdb7ab624e2e12bea31a415ffab713d7c2106e66504"
                             },
                             {
-                              "bytes": "169128d425791a3eefcabc9871f13e097703bf3039264b101f85c276158c8eec"
+                              "bytes": "8916b6d21859e8ed8772df2bf2ce81bed33da9f2a198ecb5b7abfb2919079cf0"
                             },
                             {
-                              "bytes": "f003ab832a5db78a9d2b803b7239dc54034e6390bc1893fd166820e23a9c6267"
+                              "bytes": "9729fdac86fc3c758d4b65a04ac298aeefed75a9cf73bb1f77fc77f6221d6fff"
                             },
                             {
-                              "bytes": "71a4ae9c7407915e65cc6ffeccb2c34b6be91c36d844212a96f3ea579b9ff48c"
+                              "bytes": "43409630371fb733cb98790b5afdfff709171c1e88a1aa9f16350113f36b4ed8"
                             }
                           ]
                         }
@@ -421,19 +433,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "738311ff85d9a38ca235cd83b5ae3ff93354a69147f0b5336f8b448b8f0db5fa"
+                      "bytes": "d535c89d1c78a3603467524e3c6d0710841342fa7591fa5500eba3a37995d61f"
                     },
                     {
-                      "bytes": "a8123bd74bc3ea1db1278f7ccdfa0c052a427d635254d8c9390c43f762869ccd"
+                      "bytes": "b9e6ad8fb8b4072142742bdb7ab624e2e12bea31a415ffab713d7c2106e66504"
                     },
                     {
-                      "bytes": "169128d425791a3eefcabc9871f13e097703bf3039264b101f85c276158c8eec"
+                      "bytes": "8916b6d21859e8ed8772df2bf2ce81bed33da9f2a198ecb5b7abfb2919079cf0"
                     },
                     {
-                      "bytes": "f003ab832a5db78a9d2b803b7239dc54034e6390bc1893fd166820e23a9c6267"
+                      "bytes": "9729fdac86fc3c758d4b65a04ac298aeefed75a9cf73bb1f77fc77f6221d6fff"
                     },
                     {
-                      "bytes": "71a4ae9c7407915e65cc6ffeccb2c34b6be91c36d844212a96f3ea579b9ff48c"
+                      "bytes": "43409630371fb733cb98790b5afdfff709171c1e88a1aa9f16350113f36b4ed8"
                     }
                   ]
                 },
@@ -598,6 +610,9 @@
                   "u64": 1600000000
                 },
                 {
+                  "u32": 60
+                },
+                {
                   "bytes": "150000000000000000000000000000000000000000000000000000000000006f"
                 },
                 {
@@ -608,7 +623,7 @@
                           "u32": 0
                         },
                         {
-                          "bytes": "7aaf37ea335baabdbf4538ddbf24ba52f4be13fec9ca159771f95dc47bd1dee41dbed5cd81871de3ac9e372d5299d6000a94fc4d67e5b95d3814f765681cc607"
+                          "bytes": "c8981ac708ef55293ed342bc59e94f90525a128218f23c4dc6f2c6611f304c0b360c773a549a14924b8bb5deeb0282b0e092176211383d176b2e5c8a201a2e0f"
                         }
                       ]
                     },
@@ -618,7 +633,7 @@
                           "u32": 1
                         },
                         {
-                          "bytes": "1d10ece9dca02c18436088d959906b6cbdfa610a6e59172b27d997c17e7db7b99a2ef82dc5021faacaa7ee88bcb01ca8d326da8f49a70759199ff96192e8bb08"
+                          "bytes": "8907d1eab2e702474bd294cf79d911b90588bc463d56d327a23d6b81e7a75a884eb64b405f410b7f6d032db396e08d4a6b4543e96703374d119cd8a0bc4a1209"
                         }
                       ]
                     },
@@ -628,7 +643,7 @@
                           "u32": 2
                         },
                         {
-                          "bytes": "9df2181e6b5daa5c907c50f534e6adfc3652c4f2918488a7d72fcb6e04d029e65adeef6a26d730086406c838802797cd8c7e051a80bbe5b06ba21ac3dae2360a"
+                          "bytes": "26f26710176dfde611da0eb1b3a912861f36a9f779edae2c1931afa7ac88d28c9ca88e6beedd88ee2e5d2014f88de895c39664f3e7816b9fdd3fead148182c09"
                         }
                       ]
                     }
@@ -668,6 +683,9 @@
                   "u64": 1600000000
                 },
                 {
+                  "u32": 60
+                },
+                {
                   "bytes": "150000000000000000000000000000000000000000000000000000000000006f"
                 },
                 {
@@ -678,7 +696,7 @@
                           "u32": 0
                         },
                         {
-                          "bytes": "7aaf37ea335baabdbf4538ddbf24ba52f4be13fec9ca159771f95dc47bd1dee41dbed5cd81871de3ac9e372d5299d6000a94fc4d67e5b95d3814f765681cc607"
+                          "bytes": "c8981ac708ef55293ed342bc59e94f90525a128218f23c4dc6f2c6611f304c0b360c773a549a14924b8bb5deeb0282b0e092176211383d176b2e5c8a201a2e0f"
                         }
                       ]
                     },
@@ -688,7 +706,7 @@
                           "u32": 1
                         },
                         {
-                          "bytes": "1d10ece9dca02c18436088d959906b6cbdfa610a6e59172b27d997c17e7db7b99a2ef82dc5021faacaa7ee88bcb01ca8d326da8f49a70759199ff96192e8bb08"
+                          "bytes": "8907d1eab2e702474bd294cf79d911b90588bc463d56d327a23d6b81e7a75a884eb64b405f410b7f6d032db396e08d4a6b4543e96703374d119cd8a0bc4a1209"
                         }
                       ]
                     },
@@ -698,7 +716,7 @@
                           "u32": 2
                         },
                         {
-                          "bytes": "9df2181e6b5daa5c907c50f534e6adfc3652c4f2918488a7d72fcb6e04d029e65adeef6a26d730086406c838802797cd8c7e051a80bbe5b06ba21ac3dae2360a"
+                          "bytes": "26f26710176dfde611da0eb1b3a912861f36a9f779edae2c1931afa7ac88d28c9ca88e6beedd88ee2e5d2014f88de895c39664f3e7816b9fdd3fead148182c09"
                         }
                       ]
                     }
@@ -773,6 +791,9 @@
                       "u64": 1600000000
                     },
                     {
+                      "u32": 60
+                    },
+                    {
                       "bytes": "150000000000000000000000000000000000000000000000000000000000006f"
                     },
                     {
@@ -783,7 +804,7 @@
                               "u32": 0
                             },
                             {
-                              "bytes": "7aaf37ea335baabdbf4538ddbf24ba52f4be13fec9ca159771f95dc47bd1dee41dbed5cd81871de3ac9e372d5299d6000a94fc4d67e5b95d3814f765681cc607"
+                              "bytes": "c8981ac708ef55293ed342bc59e94f90525a128218f23c4dc6f2c6611f304c0b360c773a549a14924b8bb5deeb0282b0e092176211383d176b2e5c8a201a2e0f"
                             }
                           ]
                         },
@@ -793,7 +814,7 @@
                               "u32": 1
                             },
                             {
-                              "bytes": "1d10ece9dca02c18436088d959906b6cbdfa610a6e59172b27d997c17e7db7b99a2ef82dc5021faacaa7ee88bcb01ca8d326da8f49a70759199ff96192e8bb08"
+                              "bytes": "8907d1eab2e702474bd294cf79d911b90588bc463d56d327a23d6b81e7a75a884eb64b405f410b7f6d032db396e08d4a6b4543e96703374d119cd8a0bc4a1209"
                             }
                           ]
                         },
@@ -803,7 +824,7 @@
                               "u32": 2
                             },
                             {
-                              "bytes": "9df2181e6b5daa5c907c50f534e6adfc3652c4f2918488a7d72fcb6e04d029e65adeef6a26d730086406c838802797cd8c7e051a80bbe5b06ba21ac3dae2360a"
+                              "bytes": "26f26710176dfde611da0eb1b3a912861f36a9f779edae2c1931afa7ac88d28c9ca88e6beedd88ee2e5d2014f88de895c39664f3e7816b9fdd3fead148182c09"
                             }
                           ]
                         }

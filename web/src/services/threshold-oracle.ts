@@ -150,11 +150,15 @@ function u64BE(n: bigint): Buffer {
  * Build the canonical mint message that every oracle must sign.
  * MUST byte-match `build_mint_message` in contracts/vigente-badge/src/lib.rs.
  * Validated by web/tests/xdr-parity.test.ts.
+ *
+ * Phase B'.2 added `accountAgeDays` (u32 BE) between `expiration` and `nonce`
+ * so the on-chain age floor cannot be bypassed by a tampered relayer.
  */
 export function buildMintMessage(
   borrowerStrkey: string,
   score: number,
   expiration: bigint,
+  accountAgeDays: number,
   nonce: Buffer,
 ): Buffer {
   if (nonce.length !== 32) {
@@ -163,10 +167,19 @@ export function buildMintMessage(
   if (score < 0 || score > 1000) {
     throw new Error(`score out of range: ${score}`);
   }
+  if (!Number.isInteger(accountAgeDays) || accountAgeDays < 0 || accountAgeDays > 0xffff_ffff) {
+    throw new Error(`accountAgeDays out of range: ${accountAgeDays}`);
+  }
   const addrXdr = Buffer.from(
     Address.fromString(borrowerStrkey).toScVal().toXDR(),
   );
-  return Buffer.concat([addrXdr, u32BE(score), u64BE(expiration), nonce]);
+  return Buffer.concat([
+    addrXdr,
+    u32BE(score),
+    u64BE(expiration),
+    u32BE(accountAgeDays),
+    nonce,
+  ]);
 }
 
 export interface ThresholdSignature {
@@ -179,8 +192,9 @@ export interface ThresholdSignature {
 export interface SignedMintRequest {
   borrower: string;
   score: number;
-  expiration: string;     // bigint serialized to string for JSON safety
-  nonce: string;          // hex
+  expiration: string;         // bigint serialized to string for JSON safety
+  accountAgeDays: number;
+  nonce: string;              // hex
   signatures: Array<{ index: number; signature: string }>;
   threshold: number;
   oracleCount: number;
@@ -188,14 +202,13 @@ export interface SignedMintRequest {
 
 /**
  * Produce `count` ed25519 signatures over the canonical mint message.
- * Default `count = ORACLE_THRESHOLD`. Signatures come from the first N oracles
- * in index order; the contract accepts any unique-index combination, but
- * choosing low indices keeps the test/sim flow deterministic.
+ * Default `count = ORACLE_THRESHOLD`.
  */
 export function signMint(
   borrowerStrkey: string,
   score: number,
   expiration: bigint,
+  accountAgeDays: number,
   nonce: Buffer,
   count: number = ORACLE_THRESHOLD,
 ): ThresholdSignature[] {
@@ -209,7 +222,7 @@ export function signMint(
       `requested ${count} signatures but only ${ORACLE_COUNT} oracles exist`,
     );
   }
-  const msg = buildMintMessage(borrowerStrkey, score, expiration, nonce);
+  const msg = buildMintMessage(borrowerStrkey, score, expiration, accountAgeDays, nonce);
   const oracles = getOracles();
   const out: ThresholdSignature[] = [];
   for (let i = 0; i < count; i++) {
@@ -230,13 +243,15 @@ export function buildSignedMintRequest(
   borrowerStrkey: string,
   score: number,
   expiration: bigint,
+  accountAgeDays: number,
   nonce: Buffer,
 ): SignedMintRequest {
-  const sigs = signMint(borrowerStrkey, score, expiration, nonce);
+  const sigs = signMint(borrowerStrkey, score, expiration, accountAgeDays, nonce);
   return {
     borrower: borrowerStrkey,
     score,
     expiration: expiration.toString(),
+    accountAgeDays,
     nonce: nonce.toString("hex"),
     signatures: sigs.map((s) => ({
       index: s.index,

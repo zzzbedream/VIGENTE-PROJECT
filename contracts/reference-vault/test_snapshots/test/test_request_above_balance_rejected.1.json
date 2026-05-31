@@ -63,19 +63,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "c70a4bc4f179dab094b66136d65ae623ea7226b678745d9447b7915888bea321"
+                      "bytes": "1ec3a97e474942e9edddcc353598fafacb711574c3393c304351813df71b86d2"
                     },
                     {
-                      "bytes": "147a03dd6160c5b4a85d67b565b9c5cb6fcca527c8b7141008444005849d1841"
+                      "bytes": "fa47ce56321a5cc9c51006248b9e2b67465708df6882e402b95450b366306e18"
                     },
                     {
-                      "bytes": "01e55ebd27a2a2cac4668a4d4584e33d6fc0fefa48229d0e3e747689fe851e6e"
+                      "bytes": "935eb87b397800e24432a0b3c4d5b2ec29420084b7fe366b9fd527e561db7b1c"
                     },
                     {
-                      "bytes": "1bede72f1caf30385ec760ec3973d732273915288f688e9ea7bb8b29c1d8370f"
+                      "bytes": "d338d73fd01f35d4d4506477f3464909a23005d6257f2a1cb57ef7f068873ea8"
                     },
                     {
-                      "bytes": "489f29bf9b0dcf723594c43e60f349fcd8544dc7414e3be245dbb25b04740046"
+                      "bytes": "2d1c1fa195bf1330624dcd2871e723a45015a5f39b80716390914e6aef0e9801"
                     }
                   ]
                 },
@@ -806,6 +806,18 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "MinWalletAgeDays"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 30
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "OracleKeys"
                             }
                           ]
@@ -813,19 +825,19 @@
                         "val": {
                           "vec": [
                             {
-                              "bytes": "c70a4bc4f179dab094b66136d65ae623ea7226b678745d9447b7915888bea321"
+                              "bytes": "1ec3a97e474942e9edddcc353598fafacb711574c3393c304351813df71b86d2"
                             },
                             {
-                              "bytes": "147a03dd6160c5b4a85d67b565b9c5cb6fcca527c8b7141008444005849d1841"
+                              "bytes": "fa47ce56321a5cc9c51006248b9e2b67465708df6882e402b95450b366306e18"
                             },
                             {
-                              "bytes": "01e55ebd27a2a2cac4668a4d4584e33d6fc0fefa48229d0e3e747689fe851e6e"
+                              "bytes": "935eb87b397800e24432a0b3c4d5b2ec29420084b7fe366b9fd527e561db7b1c"
                             },
                             {
-                              "bytes": "1bede72f1caf30385ec760ec3973d732273915288f688e9ea7bb8b29c1d8370f"
+                              "bytes": "d338d73fd01f35d4d4506477f3464909a23005d6257f2a1cb57ef7f068873ea8"
                             },
                             {
-                              "bytes": "489f29bf9b0dcf723594c43e60f349fcd8544dc7414e3be245dbb25b04740046"
+                              "bytes": "2d1c1fa195bf1330624dcd2871e723a45015a5f39b80716390914e6aef0e9801"
                             }
                           ]
                         }
@@ -1263,19 +1275,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "c70a4bc4f179dab094b66136d65ae623ea7226b678745d9447b7915888bea321"
+                      "bytes": "1ec3a97e474942e9edddcc353598fafacb711574c3393c304351813df71b86d2"
                     },
                     {
-                      "bytes": "147a03dd6160c5b4a85d67b565b9c5cb6fcca527c8b7141008444005849d1841"
+                      "bytes": "fa47ce56321a5cc9c51006248b9e2b67465708df6882e402b95450b366306e18"
                     },
                     {
-                      "bytes": "01e55ebd27a2a2cac4668a4d4584e33d6fc0fefa48229d0e3e747689fe851e6e"
+                      "bytes": "935eb87b397800e24432a0b3c4d5b2ec29420084b7fe366b9fd527e561db7b1c"
                     },
                     {
-                      "bytes": "1bede72f1caf30385ec760ec3973d732273915288f688e9ea7bb8b29c1d8370f"
+                      "bytes": "d338d73fd01f35d4d4506477f3464909a23005d6257f2a1cb57ef7f068873ea8"
                     },
                     {
-                      "bytes": "489f29bf9b0dcf723594c43e60f349fcd8544dc7414e3be245dbb25b04740046"
+                      "bytes": "2d1c1fa195bf1330624dcd2871e723a45015a5f39b80716390914e6aef0e9801"
                     }
                   ]
                 },
@@ -1917,7 +1929,7 @@
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'request exceeds LP balance' from contract function 'Symbol(obj#423)'"
+                  "string": "caught panic 'request exceeds LP balance' from contract function 'Symbol(obj#435)'"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"

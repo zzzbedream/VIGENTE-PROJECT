@@ -72,11 +72,17 @@ export async function POST(request: Request) {
   const expiration = parseExpiration(body.expiration);
   if (expiration === null) return badRequest("expiration must be a positive integer (seconds since epoch)");
 
+  const ageRaw = body.accountAgeDays ?? body.account_age_days;
+  if (typeof ageRaw !== "number" || !Number.isInteger(ageRaw) || ageRaw < 0 || ageRaw > 0xffff_ffff) {
+    return badRequest("accountAgeDays must be a non-negative integer fitting in u32");
+  }
+  const accountAgeDays = ageRaw;
+
   const nonce = parseNonce(body.nonce);
   if (nonce === null) return badRequest("nonce must be a 32-byte hex string (with or without 0x prefix)");
 
   try {
-    const signed = buildSignedMintRequest(borrower, score, expiration, nonce);
+    const signed = buildSignedMintRequest(borrower, score, expiration, accountAgeDays, nonce);
     return NextResponse.json(signed);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
