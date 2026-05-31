@@ -18,11 +18,16 @@
  */
 
 import {
+  createPrivateKey,
+  createPublicKey,
   generateKeyPairSync,
   sign as nodeSign,
   type KeyObject,
 } from "node:crypto";
 import { Address } from "@stellar/stellar-sdk";
+
+/** PKCS8 DER prefix for an ed25519 private key followed by the 32-byte seed. */
+const PKCS8_ED25519_PREFIX = Buffer.from("302e020100300506032b657004220420", "hex");
 
 export const ORACLE_COUNT = 5;
 export const ORACLE_THRESHOLD = 3;
@@ -45,7 +50,49 @@ function rawPubkeyFromDer(der: Buffer): Buffer {
   return der.subarray(12);
 }
 
+function nodeFromSeed(index: number, seedHex: string): OracleNode {
+  const seed = Buffer.from(seedHex.trim(), "hex");
+  if (seed.length !== 32) {
+    throw new Error(
+      `oracle seed at index ${index} is ${seed.length} bytes, expected 32`,
+    );
+  }
+  const pkcs8 = Buffer.concat([PKCS8_ED25519_PREFIX, seed]);
+  const privateKey = createPrivateKey({ key: pkcs8, format: "der", type: "pkcs8" });
+  const publicKey = createPublicKey(privateKey);
+  const der = publicKey.export({ format: "der", type: "spki" }) as Buffer;
+  return {
+    index,
+    pubkey: rawPubkeyFromDer(der),
+    privateKey,
+  };
+}
+
 function initOracleSet(): OracleNode[] {
+  // Production path: deterministic keys persisted via env. Required for the
+  // off-chain simulator to keep producing signatures that verify against the
+  // pubkeys committed to the contract via set_oracle_keys.
+  const envSeeds = process.env.VIGENTE_ORACLE_SEEDS_HEX;
+  if (envSeeds) {
+    const seeds = envSeeds.split(",").map((s) => s.trim()).filter(Boolean);
+    if (seeds.length !== ORACLE_COUNT) {
+      throw new Error(
+        `VIGENTE_ORACLE_SEEDS_HEX must list exactly ${ORACLE_COUNT} comma-separated ` +
+          `32-byte hex seeds, got ${seeds.length}`,
+      );
+    }
+    return seeds.map((hex, i) => nodeFromSeed(i, hex));
+  }
+
+  // Development fallback: ephemeral keys. Print a one-line warning so anyone
+  // running this in a non-test context sees the gap explicitly.
+  if (process.env.NODE_ENV !== "test") {
+    console.warn(
+      "[threshold-oracle] VIGENTE_ORACLE_SEEDS_HEX not set — generating ephemeral " +
+        "keypairs. These will NOT match anything registered on-chain. Run " +
+        "`npm run setup:oracle-keys` before deploying or calling set_oracle_keys.",
+    );
+  }
   const nodes: OracleNode[] = [];
   for (let i = 0; i < ORACLE_COUNT; i++) {
     const { publicKey, privateKey } = generateKeyPairSync("ed25519");
