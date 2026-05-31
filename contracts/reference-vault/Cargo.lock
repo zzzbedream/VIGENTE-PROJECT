@@ -921,7 +921,9 @@ dependencies = [
 name = "reference-vault"
 version = "0.1.0"
 dependencies = [
+ "ed25519-dalek",
  "mock-usdc",
+ "rand",
  "soroban-sdk",
  "vigente-badge",
 ]
