@@ -63,19 +63,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "adbc287858f0e0c7b43afa3f7c16703aa476a94a79bffdbd9b31962ce7bda003"
+                      "bytes": "908a67ccb5069ea2e9322aa6819abcd30bf1641cb30c5d9b2ee0fb93597446b1"
                     },
                     {
-                      "bytes": "0e81cfd06310ebef1486c3d7e0ea49eb21f5093e03889f7fd618ec1b577f5861"
+                      "bytes": "650fe497d1a7ad59e6dcd48b8d2a0d0a8cb2a8c2f444b32c2a0f26258f9d42ca"
                     },
                     {
-                      "bytes": "8116b3f6739d2d0cbbbc0661427813fbf5acb29d0243a0c79b6a2c7d40724138"
+                      "bytes": "4ae67f57a188bc9292c4f22faeca20a52ff028ad285516fff482ffc4ffcc09ae"
                     },
                     {
-                      "bytes": "8c73e80c8d17d2c6e29def603c08dc2d871b1ce1646508bd5326d586c1093528"
+                      "bytes": "3d0e04599560cbb0b4e14ef1ff544ecb5772510f11dacb4b4d8c065324f4f721"
                     },
                     {
-                      "bytes": "2e6d1a9be5ef4a522dd34753035bb09a4728435671a0dc255f6823f65bdb22d3"
+                      "bytes": "9eace98d229c3812a20031b58300880c54b5b56f1a66548aac67bd3c3c70dcc6"
                     }
                   ]
                 },
@@ -116,11 +116,11 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 100000000000000
+                    "lo": 10000000000
                   }
                 },
                 {
-                  "u32": 0
+                  "u32": 100
                 },
                 {
                   "u64": 0
@@ -216,7 +216,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 1000000000000
+                    "lo": 10000000000
                   }
                 }
               ]
@@ -238,7 +238,7 @@
                     {
                       "i128": {
                         "hi": 0,
-                        "lo": 1000000000000
+                        "lo": 10000000000
                       }
                     }
                   ]
@@ -565,7 +565,7 @@
                 "val": {
                   "i128": {
                     "hi": 0,
-                    "lo": 0
+                    "lo": 990000000000
                   }
                 }
               }
@@ -661,7 +661,7 @@
                 "val": {
                   "i128": {
                     "hi": 0,
-                    "lo": 1000000000000
+                    "lo": 10000000000
                   }
                 }
               }
@@ -818,7 +818,7 @@
                         "symbol": "score"
                       },
                       "val": {
-                        "u32": 500
+                        "u32": 1000
                       }
                     },
                     {
@@ -848,7 +848,7 @@
                   "symbol": "UsedNonce"
                 },
                 {
-                  "bytes": "040000000000000000000000000000000000000000000000000000000000005e"
+                  "bytes": "1e00000000000000000000000000000000000000000000000000000000000078"
                 }
               ]
             },
@@ -868,7 +868,7 @@
                       "symbol": "UsedNonce"
                     },
                     {
-                      "bytes": "040000000000000000000000000000000000000000000000000000000000005e"
+                      "bytes": "1e00000000000000000000000000000000000000000000000000000000000078"
                     }
                   ]
                 },
@@ -945,19 +945,19 @@
                         "val": {
                           "vec": [
                             {
-                              "bytes": "adbc287858f0e0c7b43afa3f7c16703aa476a94a79bffdbd9b31962ce7bda003"
+                              "bytes": "908a67ccb5069ea2e9322aa6819abcd30bf1641cb30c5d9b2ee0fb93597446b1"
                             },
                             {
-                              "bytes": "0e81cfd06310ebef1486c3d7e0ea49eb21f5093e03889f7fd618ec1b577f5861"
+                              "bytes": "650fe497d1a7ad59e6dcd48b8d2a0d0a8cb2a8c2f444b32c2a0f26258f9d42ca"
                             },
                             {
-                              "bytes": "8116b3f6739d2d0cbbbc0661427813fbf5acb29d0243a0c79b6a2c7d40724138"
+                              "bytes": "4ae67f57a188bc9292c4f22faeca20a52ff028ad285516fff482ffc4ffcc09ae"
                             },
                             {
-                              "bytes": "8c73e80c8d17d2c6e29def603c08dc2d871b1ce1646508bd5326d586c1093528"
+                              "bytes": "3d0e04599560cbb0b4e14ef1ff544ecb5772510f11dacb4b4d8c065324f4f721"
                             },
                             {
-                              "bytes": "2e6d1a9be5ef4a522dd34753035bb09a4728435671a0dc255f6823f65bdb22d3"
+                              "bytes": "9eace98d229c3812a20031b58300880c54b5b56f1a66548aac67bd3c3c70dcc6"
                             }
                           ]
                         }
@@ -1034,7 +1034,7 @@
                 "val": {
                   "i128": {
                     "hi": 0,
-                    "lo": 1000000000000
+                    "lo": 10000000000
                   }
                 }
               }
@@ -1126,7 +1126,7 @@
                         "val": {
                           "i128": {
                             "hi": 0,
-                            "lo": 100000000000000
+                            "lo": 10000000000
                           }
                         }
                       },
@@ -1139,7 +1139,7 @@
                           ]
                         },
                         "val": {
-                          "u32": 8500
+                          "u32": 100
                         }
                       },
                       {
@@ -1192,7 +1192,7 @@
                         "val": {
                           "i128": {
                             "hi": 0,
-                            "lo": 1000000000000
+                            "lo": 10000000000
                           }
                         }
                       },
@@ -1395,19 +1395,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "adbc287858f0e0c7b43afa3f7c16703aa476a94a79bffdbd9b31962ce7bda003"
+                      "bytes": "908a67ccb5069ea2e9322aa6819abcd30bf1641cb30c5d9b2ee0fb93597446b1"
                     },
                     {
-                      "bytes": "0e81cfd06310ebef1486c3d7e0ea49eb21f5093e03889f7fd618ec1b577f5861"
+                      "bytes": "650fe497d1a7ad59e6dcd48b8d2a0d0a8cb2a8c2f444b32c2a0f26258f9d42ca"
                     },
                     {
-                      "bytes": "8116b3f6739d2d0cbbbc0661427813fbf5acb29d0243a0c79b6a2c7d40724138"
+                      "bytes": "4ae67f57a188bc9292c4f22faeca20a52ff028ad285516fff482ffc4ffcc09ae"
                     },
                     {
-                      "bytes": "8c73e80c8d17d2c6e29def603c08dc2d871b1ce1646508bd5326d586c1093528"
+                      "bytes": "3d0e04599560cbb0b4e14ef1ff544ecb5772510f11dacb4b4d8c065324f4f721"
                     },
                     {
-                      "bytes": "2e6d1a9be5ef4a522dd34753035bb09a4728435671a0dc255f6823f65bdb22d3"
+                      "bytes": "9eace98d229c3812a20031b58300880c54b5b56f1a66548aac67bd3c3c70dcc6"
                     }
                   ]
                 },
@@ -1510,11 +1510,11 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 100000000000000
+                    "lo": 10000000000
                   }
                 },
                 {
-                  "u32": 0
+                  "u32": 100
                 },
                 {
                   "u64": 0
@@ -1842,7 +1842,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 1000000000000
+                    "lo": 10000000000
                   }
                 }
               ]
@@ -1881,7 +1881,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 1000000000000
+                    "lo": 10000000000
                   }
                 }
               ]
@@ -1912,7 +1912,7 @@
             "data": {
               "i128": {
                 "hi": 0,
-                "lo": 1000000000000
+                "lo": 10000000000
               }
             }
           }
@@ -1961,13 +1961,13 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 1000000000000
+                    "lo": 10000000000
                   }
                 },
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 1000000000000
+                    "lo": 10000000000
                   }
                 }
               ]
@@ -2022,13 +2022,13 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 },
                 {
-                  "u32": 500
+                  "u32": 1000
                 },
                 {
                   "u64": 1707776000
                 },
                 {
-                  "bytes": "040000000000000000000000000000000000000000000000000000000000005e"
+                  "bytes": "1e00000000000000000000000000000000000000000000000000000000000078"
                 },
                 {
                   "vec": [
@@ -2038,7 +2038,7 @@
                           "u32": 0
                         },
                         {
-                          "bytes": "00f3756292d2fbdac49756b49e6e71b8e1791c429aebf085c057d1e53814541fedddc2e514a7e97d503649aedc1f55703b55b380fa5fb8b3c57f05847836860e"
+                          "bytes": "ec6a0e70e6e2b1f808a9f0cc06f3197db459807162f1718e93654a73732deb39c8a3a4f6b22de1ffa3d18cb4ba6f9dac39c5b1fa7914d2165b5c408acf19700c"
                         }
                       ]
                     },
@@ -2048,7 +2048,7 @@
                           "u32": 1
                         },
                         {
-                          "bytes": "4e178c8a4b8e34c322e841aecd5b45c85d5c283ad6fbaba5a80322dc8917c9adb8cf5a8cf36f3689cbaf6f23c4e1b2011e554790074b162c29b7e5a25349d70e"
+                          "bytes": "4a9adaed29e025559519b127c5ca946d7d119c6cbed81050fa8b27e77412392f644d80592a1f2525fb8c68d822b7968403e3bf87ada47f6b15a1325cfe54b501"
                         }
                       ]
                     },
@@ -2058,7 +2058,7 @@
                           "u32": 2
                         },
                         {
-                          "bytes": "c4318c738bea070e8434d2dfd26b81c003d8c8cce9986d5c3f3e0717504271ece7106f4fc68810c1aa7851fec9a4b4a2f4702d4e23178621d2b8f6ea8a5aa90b"
+                          "bytes": "2bbc554f2706379863dec602fd18da01b52e576ecf1142133c962958a36db899bc098c79f07f76629150cdaf8ef608b6112469f70233c3db0b26a5f2f2f5fd00"
                         }
                       ]
                     }
@@ -2089,7 +2089,7 @@
             "data": {
               "vec": [
                 {
-                  "u32": 500
+                  "u32": 1000
                 },
                 {
                   "u64": 1700000000
@@ -2150,7 +2150,7 @@
                     "symbol": "score"
                   },
                   "val": {
-                    "u32": 500
+                    "u32": 1000
                   }
                 },
                 {
@@ -2194,7 +2194,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 500000000
+                    "lo": 200000000
                   }
                 }
               ]
@@ -2295,7 +2295,7 @@
               }
             ],
             "data": {
-              "u32": 500
+              "u32": 1000
             }
           }
         }
@@ -2317,7 +2317,7 @@
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'amount exceeds credit limit for score' from contract function 'Symbol(borrow)'"
+                  "string": "caught panic 'amount exceeds utilization cap' from contract function 'Symbol(borrow)'"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
@@ -2325,7 +2325,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 500000000
+                    "lo": 200000000
                   }
                 }
               ]
@@ -2393,7 +2393,7 @@
                     {
                       "i128": {
                         "hi": 0,
-                        "lo": 500000000
+                        "lo": 200000000
                       }
                     }
                   ]
