@@ -4,6 +4,12 @@
  */
 import { ImageResponse } from "next/og";
 
+// Force per-request generation. Prerendering this on Windows during the
+// build crashes Satori with a libuv assertion (Turbopack worker). On
+// Vercel's Linux runtime it works fine; dynamic skips the build step
+// without changing the rendered image.
+export const dynamic = "force-dynamic";
+
 export const alt = "Vigente Protocol — credit without permission";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
