@@ -22,6 +22,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 
 const WEBHOOK_SECRET = process.env.VIGENTE_WEBHOOK_SECRET ?? "";
 const SITE_ORIGIN = (
@@ -159,8 +160,7 @@ export function genericErrorResponse(
   err: unknown,
   status: number = 500,
 ): NextResponse {
-  // eslint-disable-next-line no-console -- before G.4 logger lands, console is the only sink we have
-  console.error(`[${scope}] error:`, err);
+  logger.error(scope, "error:", err);
   return NextResponse.json({ error: "Internal server error" }, { status });
 }
 
