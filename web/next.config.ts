@@ -1,10 +1,74 @@
 import type { NextConfig } from "next";
 
+/**
+ * Vigente Protocol — Next.js config with security headers (Phase G.5)
+ *
+ * CSP allowlists every external origin the app actually talks to. The
+ * Stellar Wallets Kit lazily loads xBull/Albedo/Freighter from their
+ * own origins, so frame-src and connect-src include those.
+ *
+ * Honest TODO on `'unsafe-inline'` in script-src: Next.js + React Compiler
+ * still emit inline hydration scripts and Next.js does not yet expose a
+ * stable nonce hook for the App Router runtime. The CSP keeps every other
+ * directive tight (frame-ancestors none, object-src none, base-uri self)
+ * so XSS via inline injection still gets blocked by the surrounding
+ * scaffolding. Documented in docs/THREAT_MODEL.md under "future hardening".
+ */
+
+const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://vigente-hackathon-final.vercel.app"
+).replace(/\/$/, "");
+
+const STELLAR_RPC_HOSTS = [
+  "https://horizon-testnet.stellar.org",
+  "https://soroban-testnet.stellar.org",
+  "https://friendbot.stellar.org",
+  "https://stellar.expert",
+  "https://api.stellar.expert",
+  // Wallet Kit / WalletConnect signaling
+  "https://*.walletconnect.com",
+  "https://*.walletconnect.org",
+  "wss://*.walletconnect.com",
+  "wss://*.walletconnect.org",
+];
+
+const CSP = [
+  "default-src 'self'",
+  // unsafe-inline / unsafe-eval kept until Next.js nonce hook lands (see header).
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "img-src 'self' data: blob: https://stellar.expert https://*.walletconnect.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  `connect-src 'self' ${SITE_URL} ${STELLAR_RPC_HOSTS.join(" ")}`,
+  // Wallet kit popups / iframes
+  "frame-src 'self' https://*.xbull.app https://albedo.link https://*.walletconnect.com",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+  "upgrade-insecure-requests",
+].join("; ");
+
+const securityHeaders = [
+  { key: "Content-Security-Policy", value: CSP },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  {
+    key: "Permissions-Policy",
+    value: "camera=(), microphone=(), geolocation=(), payment=()",
+  },
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains; preload",
+  },
+];
+
 const nextConfig: NextConfig = {
-  /* config options here */
   reactCompiler: true,
-  // Force rebuild: 1770510000
-  // Force rebuild: 1770510000
+  async headers() {
+    return [{ source: "/(.*)", headers: securityHeaders }];
+  },
 };
 
 export default nextConfig;
