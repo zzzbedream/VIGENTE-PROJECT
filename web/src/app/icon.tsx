@@ -5,6 +5,10 @@
  */
 import { ImageResponse } from "next/og";
 
+// See opengraph-image.tsx for the rationale. Same Windows-only Satori
+// crash; same dynamic escape.
+export const dynamic = "force-dynamic";
+
 export const size = { width: 32, height: 32 };
 export const contentType = "image/png";
 
