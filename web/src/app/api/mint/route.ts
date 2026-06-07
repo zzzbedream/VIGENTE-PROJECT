@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Keypair, Contract, rpc, TransactionBuilder, nativeToScVal, xdr, TimeoutInfinite } from "@stellar/stellar-sdk";
 import { createHmac } from "crypto";
+import { guardApiRequest, genericErrorResponse } from "@/lib/api-guard";
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,10 @@ function cleanRut(rut: string): string {
 }
 
 export async function POST(req: Request) {
+  // G.2: legacy V1 on-chain mint — same rate limit as v3.
+  const blocked = guardApiRequest(req, { limit: 3 });
+  if (blocked) return blocked;
+
   try {
     const body = await req.json().catch(() => null);
 
@@ -90,8 +95,7 @@ export async function POST(req: Request) {
       mintedTo: userKey.publicKey() // Informamos al frontend a quién se le minteó
     });
 
-  } catch (error: any) {
-    console.error("Mint API Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return genericErrorResponse("mint-legacy", error, 500);
   }
 }

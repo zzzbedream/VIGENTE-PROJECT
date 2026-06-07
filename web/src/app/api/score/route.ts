@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import { fetchPaykuData, calculateTransactionStats } from "@/services/payku-oracle";
 import { calculateCreditScore } from "@/services/scoring-engine";
-import { Keypair, xdr, nativeToScVal, Address } from "@stellar/stellar-sdk";
+import { Keypair, Address } from "@stellar/stellar-sdk";
 import { createHmac } from "crypto";
+import { guardApiRequest, genericErrorResponse } from "@/lib/api-guard";
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+    // G.2: read + sign (no on-chain submit) — permissive limit.
+    const blocked = guardApiRequest(req, { limit: 30 });
+    if (blocked) return blocked;
+
     try {
         const { searchParams } = new URL(req.url);
         const rut = searchParams.get("rut");
@@ -48,24 +53,27 @@ export async function GET(req: Request) {
         // ---------------------------------------------------------------------
         // 3. GENERATE ORACLE SIGNATURE
         // ---------------------------------------------------------------------
-        let signature = null;
-        let adminPublicKey = null;
-        let signError: string | null = null;
-        const hasSecret = !!process.env.ADMIN_SECRET;
+        // G.1 collateral: removed the `process.env.ADMIN_SECRET || 'fallback'`
+        // path. If ADMIN_SECRET is missing the dataHash is simply null and
+        // the response carries no signature material — the predictable
+        // 'fallback' string is gone entirely. The only HMAC key accepted is
+        // the real ADMIN_SECRET set at deploy time.
+        let signature: string | null = null;
+        let adminPublicKey: string | null = null;
+        let dataHashHex: string | null = null;
+        const adminSecret = process.env.ADMIN_SECRET;
 
-        // Calculate data_hash
-        const rutClean = rut.replace(/[^0-9kK]/g, '').toUpperCase();
-        const dataHash = createHmac('sha256', process.env.ADMIN_SECRET || 'fallback').update(rutClean).digest();
-
-        if (userAddress && process.env.ADMIN_SECRET) {
-            console.log("SERVER DEBUG: Signing for User:", userAddress);
+        if (adminSecret && userAddress) {
             try {
-                const adminKeypair = Keypair.fromSecret(process.env.ADMIN_SECRET);
+                const rutClean = rut.replace(/[^0-9kK]/g, '').toUpperCase();
+                const dataHash = createHmac('sha256', adminSecret).update(rutClean).digest();
+                dataHashHex = dataHash.toString('hex');
+
+                const adminKeypair = Keypair.fromSecret(adminSecret);
                 adminPublicKey = adminKeypair.publicKey();
 
                 const tierBuf = Buffer.alloc(4);
                 tierBuf.writeUInt32BE(scoreResult.tier);
-
                 const scoreBuf = Buffer.alloc(4);
                 scoreBuf.writeUInt32BE(scoreResult.totalScore);
 
@@ -81,16 +89,22 @@ export async function GET(req: Request) {
                 ]);
 
                 signature = adminKeypair.sign(payload).toString('hex');
-            } catch (err: any) {
-                signError = err?.message || String(err);
-                console.error("Signing error:", signError);
+            } catch (err) {
+                // Log server-side, never leak the reason to the client. Falling
+                // through with signature=null surfaces as "unsigned response"
+                // to the UI without exposing why.
+                console.error("[score] signing error:", err);
             }
         }
 
+        // G.5: dropped the `_debug` field — it leaked `hasSecret`, `signError`
+        // and server-side state to anonymous callers. The response now
+        // carries only legitimate signed payload fields. dataHash is only
+        // present when ADMIN_SECRET is configured AND userAddress is supplied
+        // (i.e. when the signature is meaningful).
         return NextResponse.json({
             found: true,
             rut: rut || "N/A",
-            _debug: { hasSecret, hasUserAddress: !!userAddress, signError },
             paykuMerchantId: oracleResponse.merchant.id,
             profile: {
                 name: oracleResponse.merchant.name,
@@ -109,14 +123,13 @@ export async function GET(req: Request) {
                         scoreResult.tier === 3 ? "FAIR" : "INSUFFICIENT",
                 signature,
                 adminPublicKey,
-                dataHash: dataHash.toString('hex')
+                dataHash: dataHashHex
             },
             stats: {
                 monthlyVolume: stats.avgPerMonth,
                 historyMonths: Number((stats.oldestTransactionDays / 30).toFixed(1)),
                 totalTransactions: stats.transactionCount
             },
-            // Transacciones para el gráfico
             history: oracleResponse.transactions.map((tx: any) => ({
                 date: tx.date,
                 amount: tx.amountUSD,
@@ -126,12 +139,7 @@ export async function GET(req: Request) {
             }))
         });
 
-    } catch (error: any) {
-        console.error("Scoring API Error:", error);
-        return NextResponse.json({
-            error: "Failed to calculate score",
-            message: "There was an error processing your request. Please try again.",
-            details: error.message
-        }, { status: 500 });
+    } catch (error: unknown) {
+        return genericErrorResponse("score", error, 500);
     }
 }

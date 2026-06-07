@@ -18,10 +18,16 @@ import { calculateCreditScore } from "@/services/scoring-engine";
 import { createPayout, formatCLP } from "@/services/payku-payout";
 import { Keypair, Contract, rpc, TransactionBuilder, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { createHmac } from "crypto";
+import { guardApiRequest, genericErrorResponse } from "@/lib/api-guard";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  // G.2: combined evaluate + mint + payout — strict limit because it
+  // triggers a Soroban tx via the admin keypair.
+  const blocked = guardApiRequest(req, { limit: 3 });
+  if (blocked) return blocked;
+
   const startTime = Date.now();
   const steps: { step: string; status: string; detail?: string }[] = [];
 
@@ -234,13 +240,10 @@ export async function GET(req: Request) {
       elapsedMs: Date.now() - startTime,
     });
 
-  } catch (error: any) {
-    console.error("evaluate-and-fund error:", error);
-    return NextResponse.json({
-      error: "Pipeline failed",
-      message: error.message,
-      steps,
-      elapsedMs: Date.now() - startTime,
-    }, { status: 500 });
+  } catch (error: unknown) {
+    // G.2: drop steps/message/elapsedMs from the public error body — those
+    // leak partial-execution state and internal pipeline structure. The
+    // server log keeps everything; the client only sees a generic 500.
+    return genericErrorResponse("evaluate-and-fund", error, 500);
   }
 }
