@@ -37,7 +37,11 @@ const CSP = [
   // unsafe-inline / unsafe-eval kept until Next.js nonce hook lands (see header).
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "img-src 'self' data: blob: https://stellar.expert https://*.walletconnect.com",
+  // stellar.creit.tech and onekey-asset.com serve the wallet icons used by
+  // the Stellar Wallets Kit modal (xbull, albedo, freighter, rabet, lobstr,
+  // hana, klever, bitget, fordefi, cactuslink, onekey). Adding them here
+  // keeps the modal pretty without dropping CSP on the floor.
+  "img-src 'self' data: blob: https://stellar.expert https://*.walletconnect.com https://stellar.creit.tech https://uni.onekey-asset.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   `connect-src 'self' ${SITE_URL} ${STELLAR_RPC_HOSTS.join(" ")}`,
   // Wallet kit popups / iframes

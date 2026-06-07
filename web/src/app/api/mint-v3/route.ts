@@ -132,6 +132,47 @@ export async function POST(request: Request) {
   try {
     const motherKeypair = Keypair.fromSecret(MOTHER_SECRET);
     const server = new rpc.Server(RPC_URL);
+    const contract = new Contract(CONTRACT_V3);
+
+    // Pre-flight: read the on-chain age floor and bounce the call BEFORE we
+    // burn a tx. Without this, an underage wallet hits the contract panic
+    // ("wallet age below minimum") and the host returns the unhelpful
+    // Error(WasmVm, InvalidAction) / UnreachableCodeReached that we see in
+    // logs. Reading the floor is a free simulation.
+    let minAge = 30;
+    try {
+      const preAccount = await server.getAccount(motherKeypair.publicKey());
+      const ageOp = contract.call("get_min_wallet_age");
+      const ageTx = new TransactionBuilder(preAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: NETWORK_PASSPHRASE,
+      })
+        .addOperation(ageOp)
+        .setTimeout(30)
+        .build();
+      const sim = await server.simulateTransaction(ageTx);
+      if (rpc.Api.isSimulationSuccess(sim) && sim.result?.retval) {
+        const v = scValToNative(sim.result.retval);
+        if (typeof v === "number" && Number.isFinite(v)) minAge = v;
+        else if (typeof v === "bigint") minAge = Number(v);
+      }
+    } catch {
+      // If the simulation fails we fall through with the default floor and
+      // let the actual mint surface the error. Worst case is the same 500
+      // we had before this guard.
+    }
+    if (ageRaw < minAge) {
+      return NextResponse.json(
+        {
+          error: "wallet age below minimum",
+          detail: `This wallet is ${ageRaw} days old. The contract requires at least ${minAge} days as an anti-Sybil floor. Either use an older wallet, or ask the admin to lower the floor for the demo (set_min_wallet_age).`,
+          account_age_days: ageRaw,
+          min_wallet_age_days: minAge,
+        },
+        { status: 400 },
+      );
+    }
+
     const now = Math.floor(Date.now() / 1000);
     const expiration = BigInt(now + expirationDays * 24 * 60 * 60);
     const nonce = freshNonce();
@@ -148,8 +189,6 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
-
-    const contract = new Contract(CONTRACT_V3);
     const op = contract.call(
       "mint",
       Address.fromString(borrower).toScVal(),
