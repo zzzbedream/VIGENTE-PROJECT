@@ -24,3 +24,9 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Phase D landing typography */
+.hero-title {
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+}
