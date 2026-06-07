@@ -21,6 +21,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useWalletKit } from "@/contexts/WalletKitContext";
 import { waitForAccountIndexed } from "@/lib/poll-account";
+import {
+  CreditHistoryHeatmap,
+  type HeatmapDay,
+} from "@/components/CreditHistoryHeatmap";
 
 const PUBKEY_RE = /^G[A-Z2-7]{55}$/;
 const FRIENDBOT_URL = "https://friendbot.stellar.org";
@@ -50,6 +54,7 @@ interface ScoreResponse {
     density_cv: number | null;
     reciprocity_ratio: number | null;
     asset_diversity: number;
+    daily_activity?: HeatmapDay[];
     data_source: string;
   };
   score: {
@@ -565,6 +570,15 @@ export default function V3Page() {
               en el message threshold antes de mintear, junto con account_age,
               expiration y nonce.
             </p>
+          </section>
+        )}
+
+        {scoreResponse && (
+          <section>
+            <CreditHistoryHeatmap
+              activity={scoreResponse.features.daily_activity ?? []}
+              windowDays={scoreResponse.features.window_days || 180}
+            />
           </section>
         )}
 

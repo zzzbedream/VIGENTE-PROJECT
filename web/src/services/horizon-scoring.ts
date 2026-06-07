@@ -72,7 +72,24 @@ export interface OnchainFeatures {
   density_cv: number | null;       // null if <2 ops
   reciprocity_ratio: number | null; // in / (in + out); null if no flow
   asset_diversity: number;          // distinct assets seen in window
+  /**
+   * Aggregated activity per UTC day, sorted ascending by day. Powers the
+   * GitHub-style credit history heat map in the UI. Days with no activity
+   * are omitted; the renderer reconstructs the empty cells.
+   */
+  daily_activity: DailyActivity[];
   data_source: "stellar_onchain";
+}
+
+export interface DailyActivity {
+  /** UTC date in YYYY-MM-DD form, derived from ts_ms via toISOString slicing. */
+  date: string;
+  /** USD-equivalent volume that day (sum of all involved payments). */
+  volume_usd: number;
+  /** Number of payments touching this account that day. */
+  tx_count: number;
+  /** Fraction of volume that came from / went to ecosystem contracts. 0..1. */
+  ecosystem_ratio: number;
 }
 
 export interface OnchainScoreResult {
@@ -297,6 +314,34 @@ function computeFeatures(pubkey: string, payments: NormalizedPayment[], capped: 
   // Asset diversity — distinct asset keys observed
   const asset_keys = new Set(payments.map((p) => p.asset_key));
 
+  // Daily activity buckets — for the credit history heat map in the UI.
+  // Keyed by UTC day; we collapse the 180-day window into one row per day
+  // that had any flow. Empty days are reconstructed client-side.
+  const dayBuckets = new Map<
+    string,
+    { volume_usd: number; tx_count: number; ecosystem_usd: number }
+  >();
+  for (const p of payments) {
+    const day = new Date(p.ts_ms).toISOString().slice(0, 10);
+    const bucket = dayBuckets.get(day) ?? {
+      volume_usd: 0,
+      tx_count: 0,
+      ecosystem_usd: 0,
+    };
+    bucket.volume_usd += p.amount_usd_equiv;
+    bucket.tx_count += 1;
+    if (p.is_ecosystem) bucket.ecosystem_usd += p.amount_usd_equiv;
+    dayBuckets.set(day, bucket);
+  }
+  const daily_activity: DailyActivity[] = Array.from(dayBuckets.entries())
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([date, b]) => ({
+      date,
+      volume_usd: b.volume_usd,
+      tx_count: b.tx_count,
+      ecosystem_ratio: b.volume_usd > 0 ? b.ecosystem_usd / b.volume_usd : 0,
+    }));
+
   return {
     pubkey,
     account_age_days: accountAgeDays,
@@ -316,6 +361,7 @@ function computeFeatures(pubkey: string, payments: NormalizedPayment[], capped: 
     density_cv,
     reciprocity_ratio,
     asset_diversity: asset_keys.size,
+    daily_activity,
     data_source: "stellar_onchain",
   };
 }
