@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchPaykuData } from "@/services/payku-oracle";
 import { calculateCreditScore } from "@/services/scoring-engine";
 import * as crypto from "crypto";
+import { guardApiRequest, genericErrorResponse } from "@/lib/api-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,11 @@ function requireHmacSecret(): string {
 const ORACLE_HMAC_SECRET = requireHmacSecret();
 
 export async function GET(req: Request) {
+    // G.2: read-only Payku-backed scoring — permissive limit (30/min) for
+    // the demo UI, blocks anonymous cross-origin spam.
+    const blocked = guardApiRequest(req, { limit: 30 });
+    if (blocked) return blocked;
+
     try {
         const { searchParams } = new URL(req.url);
         const rut = searchParams.get("rut") || searchParams.get("userId");
@@ -88,10 +94,6 @@ export async function GET(req: Request) {
         // Full detail server-side, generic message to client. The startup
         // guard re-throws here as well, so the absence of ORACLE_HMAC_SECRET
         // surfaces as a 500 with a clear log entry on the first request.
-        console.error("[oracle/score] error:", error);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 },
-        );
+        return genericErrorResponse("oracle/score", error, 500);
     }
 }

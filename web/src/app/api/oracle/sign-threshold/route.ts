@@ -22,6 +22,7 @@ import {
   ORACLE_COUNT,
   ORACLE_THRESHOLD,
 } from "@/services/threshold-oracle";
+import { guardApiRequest, genericErrorResponse } from "@/lib/api-guard";
 
 const PUBKEY_RE = /^G[A-Z2-7]{55}$/;
 
@@ -53,6 +54,15 @@ function parseNonce(raw: unknown): Buffer | null {
 }
 
 export async function POST(request: Request) {
+  // G.2: server-to-server only. Browsers never need to call this directly —
+  // the mint-v3 relay assembles signatures internally. Reject same-origin
+  // callers and force the webhook secret.
+  const blocked = guardApiRequest(request, {
+    allowSameOrigin: false,
+    limit: 20,
+  });
+  if (blocked) return blocked;
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -85,11 +95,7 @@ export async function POST(request: Request) {
     const signed = buildSignedMintRequest(borrower, score, expiration, accountAgeDays, nonce);
     return NextResponse.json(signed);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json(
-      { error: "signing failed", detail: msg },
-      { status: 500 },
-    );
+    return genericErrorResponse("sign-threshold", err, 500);
   }
 }
 
@@ -99,7 +105,14 @@ export async function POST(request: Request) {
  * script to call `set_oracle_keys` with the same pubkeys the signing endpoint
  * will produce signatures for.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  // G.2: deploy script only. Same gate as POST.
+  const blocked = guardApiRequest(request, {
+    allowSameOrigin: false,
+    limit: 20,
+  });
+  if (blocked) return blocked;
+
   const pubkeys = getOraclePubkeys().map((b) => b.toString("hex"));
   return NextResponse.json({
     threshold: ORACLE_THRESHOLD,

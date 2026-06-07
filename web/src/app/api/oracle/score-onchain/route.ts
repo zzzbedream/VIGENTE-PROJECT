@@ -14,6 +14,7 @@
 
 import { NextResponse } from "next/server";
 import { scoreFromStellar, type OnchainScoreResult } from "@/services/horizon-scoring";
+import { guardApiRequest, genericErrorResponse } from "@/lib/api-guard";
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const PUBKEY_RE = /^G[A-Z2-7]{55}$/;
@@ -49,6 +50,12 @@ function writeCache(pubkey: string, result: OnchainScoreResult): void {
 }
 
 export async function GET(request: Request) {
+  // G.2: read-only synthetic scoring — permissive limit (30/min) so the
+  // landing/v3 UI doesn't trip it under normal use, but still capped to
+  // prevent Horizon-quota burn from a single hostile caller.
+  const blocked = guardApiRequest(request, { limit: 30 });
+  if (blocked) return blocked;
+
   const url = new URL(request.url);
   const pubkey = url.searchParams.get("pubkey")?.trim() ?? "";
 
@@ -82,16 +89,15 @@ export async function GET(request: Request) {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // Horizon "Resource Missing" → account does not exist
+    // "Account not found" is the documented benign branch — keep the 404
+    // explicit so the UI can offer Friendbot. Everything else collapses to
+    // a generic 502 (gateway error against Horizon).
     if (msg.includes("404") || msg.includes("Resource Missing") || msg.includes("Not Found")) {
       return NextResponse.json(
         { error: "account not found on Stellar testnet", pubkey, cache_hit: false },
         { status: 404 },
       );
     }
-    return NextResponse.json(
-      { error: "horizon fetch failed", detail: msg, pubkey, cache_hit: false },
-      { status: 502 },
-    );
+    return genericErrorResponse("score-onchain", err, 502);
   }
 }

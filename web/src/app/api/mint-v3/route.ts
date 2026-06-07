@@ -37,6 +37,7 @@ import {
   freshNonce,
   ORACLE_THRESHOLD,
 } from "@/services/threshold-oracle";
+import { guardApiRequest, genericErrorResponse } from "@/lib/api-guard";
 
 dotenvConfig({ path: path.resolve(process.cwd(), ".env.local") });
 
@@ -68,9 +69,17 @@ function buildSignaturesScVal(
 }
 
 export async function POST(request: Request) {
+  // G.2: drains the mother account if abused — strict rate limit, gate by
+  // same-origin (browser) or webhook secret (server-to-server). Anonymous
+  // cross-origin callers get 401.
+  const blocked = guardApiRequest(request, { limit: 3 });
+  if (blocked) return blocked;
+
   if (!MOTHER_SECRET) {
+    // Configuration error — surface generic 500 to the client, log details server-side.
+    console.error("[mint-v3] VIGENTE_MOTHER_SECRET missing");
     return NextResponse.json(
-      { error: "relayer not configured (VIGENTE_MOTHER_SECRET missing)" },
+      { error: "Internal server error" },
       { status: 500 },
     );
   }
@@ -221,10 +230,9 @@ export async function POST(request: Request) {
       score_on_chain: scoreOnChain,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json(
-      { error: "mint relay failed", detail: msg },
-      { status: 500 },
-    );
+    // G.2: log the full error server-side, return generic to the client so
+    // we don't leak stack traces, RPC endpoints, or secret material via
+    // error messages.
+    return genericErrorResponse("mint-v3", err, 500);
   }
 }
