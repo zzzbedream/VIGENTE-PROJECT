@@ -1,0 +1,1033 @@
+"use client";
+
+/**
+ * Vigente Protocol — Landing page (Phase D refresh)
+ *
+ * Implements the prompt structure: hero with floating pill navbar, staggered
+ * lowercase typography, three stat blocks at the corners; three functional
+ * modules below the fold (live score evaluator, threshold sig visualizer,
+ * pinned testnet tx evidence).
+ *
+ * Background: subtle radial gradient + grid (placeholder for the eventual
+ * looping mp4). Palette is strictly black / white / navy / green-500 — no
+ * cyan-purple from the old landing.
+ *
+ * The page is wired against existing endpoints:
+ *   - GET /api/oracle/score-onchain  (Module 1)
+ *   - static known mint hashes       (Module 3)
+ */
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { useWalletKit } from "@/contexts/WalletKitContext";
+
+const VIGENTE_GREEN = "#22c55e";
+const VIGENTE_GREEN_HOVER = "#4ade80";
+const VIGENTE_NAVY = "#1e3a5f";
+const APP_BG = "#050505";
+const PILL_BG = "#0d0f11";
+
+// ===========================================================================
+// i18n — minimal in-component dictionary. No external library, no SSR drama.
+// ===========================================================================
+
+type Lang = "en" | "es" | "pt";
+
+const LANG_OPTIONS: { code: Lang; flag: string; label: string }[] = [
+  { code: "en", flag: "🇺🇸", label: "EN" },
+  { code: "es", flag: "🇪🇸", label: "ES" },
+  { code: "pt", flag: "🇧🇷", label: "PT" },
+];
+
+const HERO_WORDS_BY_LANG: Record<Lang, [string, string, string]> = {
+  en: ["credit", "without", "permission"],
+  es: ["crédito", "sin", "permiso"],
+  pt: ["crédito", "sem", "permissão"],
+};
+
+const HERO_POSITIONS = [
+  "left-4 md:left-10 top-[18%]",
+  "right-4 md:right-10 top-[38%]",
+  "left-[18%] md:left-[28%] top-[58%]",
+] as const;
+
+const STRINGS: Record<Lang, Record<string, string>> = {
+  en: {
+    description:
+      "a k-of-n threshold credit oracle on stellar soroban. your borrowing reputation lives on-chain, signed by an independent quorum, with zero fintech in the trust path.",
+    statSigsLabel: "ed25519 threshold sigs",
+    statTestsLabel: "tests green across the matrix",
+    statBytesLabel: "canonical mint message",
+    cta_connect: "connect wallet",
+    cta_connecting: "connecting…",
+    cta_open: "open app →",
+    cta_disconnect: "disconnect",
+    nav_protocol: "protocol",
+    nav_architecture: "architecture",
+    nav_threatModel: "threat model",
+    nav_github: "github",
+    mod1_title: "evaluate any stellar address",
+    mod1_sub:
+      "real horizon read, 180-day window, p2p churn discounted 70%. no signup, no fintech credentials. paste any G-address.",
+    mod1_btn: "evaluate",
+    mod1_evaluating: "evaluating…",
+    mod1_invalidFmt: "format must be G + 55 base32 characters.",
+    mod1_empty: "run an evaluation to see live features",
+    mod1_loading: "calling horizon + scoring engine…",
+    mod2_title: "watch the threshold sign",
+    mod2_sub:
+      "every mint requires k of n independent oracle signatures over the canonical 92-byte message. no single party can authorise alone.",
+    mod2_canonical: "canonical signed message — 92 bytes",
+    mod2_note:
+      "each oracle signs the same byte sequence with ed25519. the contract calls env.crypto().ed25519_verify k times. fewer than k valid signatures, a duplicated oracle index, or any single tampered byte rejects the mint at simulation — no ledger pollution, no gas spent.",
+    mod3_title: "see it live on testnet",
+    mod3_sub:
+      "two real soroban calls against CDLLO7QE…. the negative one shows the age floor enforcing on-chain through the signed account_age bytes.",
+    mod3_pos: "positive mint",
+    mod3_neg: "age-floor trap",
+    mod3_cta: "try a mint yourself",
+    howto_title: "how it works",
+    howto_sub: "four steps. no fintech, no KYC, no email.",
+    howto_step1_title: "connect your wallet",
+    howto_step1_body:
+      "click connect wallet at the top. you'll see a modal listing every Stellar wallet — xBull, Albedo, Freighter, Rabet, WalletConnect, Lobstr, Hana, Hot, Klever, Ledger, Trezor. pick one. nothing is signed yet.",
+    howto_step2_title: "let us read your on-chain history",
+    howto_step2_body:
+      "we read your last 180 days on Horizon. if your account was just created, Friendbot funds it silently. counterparties in our ecosystem whitelist get full weight; pure peer-to-peer flow is discounted 70% to make wash-trading uneconomical.",
+    howto_step3_title: "5 oracle nodes sign your badge",
+    howto_step3_body:
+      "your score is bundled into a 92-byte canonical message together with the expiration, your wallet age and an anti-replay nonce. three of five independent ed25519 keypairs sign it. one bad oracle alone cannot grant you a badge — and cannot block you.",
+    howto_step4_title: "mint and download",
+    howto_step4_body:
+      "the soroban contract verifies the three signatures on-chain and emits your credit badge as a soulbound token. you get a transaction hash, a stellar.expert link, and a downloadable PDF certificate. the badge becomes your reputation across any vault that integrates Vigente.",
+    footerLine: "vigente protocol · stellar soroban · testnet",
+  },
+  es: {
+    description:
+      "un oráculo de crédito threshold k-de-n sobre stellar soroban. tu reputación crediticia vive on-chain, firmada por un quórum independiente, sin ninguna fintech en la cadena de confianza.",
+    statSigsLabel: "firmas threshold ed25519",
+    statTestsLabel: "tests verdes en toda la matriz",
+    statBytesLabel: "mensaje de mint canónico",
+    cta_connect: "conectar wallet",
+    cta_connecting: "conectando…",
+    cta_open: "abrir app →",
+    cta_disconnect: "desconectar",
+    nav_protocol: "protocolo",
+    nav_architecture: "arquitectura",
+    nav_threatModel: "modelo de amenazas",
+    nav_github: "github",
+    mod1_title: "evalúa cualquier dirección Stellar",
+    mod1_sub:
+      "lectura real de Horizon, ventana de 180 días, descuento de 70% al volumen P2P. sin registro, sin credenciales fintech. pega cualquier G-address.",
+    mod1_btn: "evaluar",
+    mod1_evaluating: "evaluando…",
+    mod1_invalidFmt: "el formato debe ser G + 55 caracteres base32.",
+    mod1_empty: "ejecuta una evaluación para ver features en vivo",
+    mod1_loading: "llamando Horizon + motor de scoring…",
+    mod2_title: "mira cómo firma el threshold",
+    mod2_sub:
+      "cada mint requiere k de n firmas independientes sobre el mensaje canónico de 92 bytes. ninguna parte aislada puede autorizar sola.",
+    mod2_canonical: "mensaje canónico firmado — 92 bytes",
+    mod2_note:
+      "cada oracle firma la misma secuencia con ed25519. el contrato llama env.crypto().ed25519_verify k veces. menos de k firmas válidas, un índice de oracle duplicado, o un solo byte alterado rechazan el mint en simulación — sin contaminar ledger, sin gas gastado.",
+    mod3_title: "míralo en vivo en testnet",
+    mod3_sub:
+      "dos llamadas reales a Soroban contra CDLLO7QE…. la negativa muestra el floor de edad cumpliéndose on-chain vía el byte firmado account_age.",
+    mod3_pos: "mint positivo",
+    mod3_neg: "trampa del age floor",
+    mod3_cta: "prueba un mint tú mismo",
+    howto_title: "cómo funciona",
+    howto_sub: "cuatro pasos. sin fintech, sin KYC, sin email.",
+    howto_step1_title: "conecta tu wallet",
+    howto_step1_body:
+      "haz click en conectar wallet arriba. verás una modal con cada wallet Stellar — xBull, Albedo, Freighter, Rabet, WalletConnect, Lobstr, Hana, Hot, Klever, Ledger, Trezor. elige una. nada se firma todavía.",
+    howto_step2_title: "déjanos leer tu historial on-chain",
+    howto_step2_body:
+      "leemos tus últimos 180 días en Horizon. si tu cuenta acaba de crearse, Friendbot la activa silenciosamente. las contrapartes en nuestra whitelist de ecosistema cuentan al 100%; los flujos puramente peer-to-peer reciben 70% de descuento para hacer wash-trading no rentable.",
+    howto_step3_title: "5 oracles firman tu badge",
+    howto_step3_body:
+      "tu score se empaqueta en un mensaje canónico de 92 bytes junto con la expiración, la edad de tu wallet y un nonce anti-replay. tres de cinco llaves ed25519 independientes lo firman. un oracle malo aislado no puede otorgarte un badge — ni bloquearte.",
+    howto_step4_title: "mintea y descarga",
+    howto_step4_body:
+      "el contrato Soroban verifica las tres firmas on-chain y emite tu badge crediticio como token soulbound. recibes un hash de transacción, un link a stellar.expert, y un certificado PDF descargable. el badge es tu reputación en cualquier vault que integre Vigente.",
+    footerLine: "vigente protocol · stellar soroban · testnet",
+  },
+  pt: {
+    description:
+      "um oráculo de crédito threshold k-de-n na stellar soroban. sua reputação de crédito vive on-chain, assinada por um quórum independente, sem nenhuma fintech na cadeia de confiança.",
+    statSigsLabel: "assinaturas threshold ed25519",
+    statTestsLabel: "testes verdes em toda a matriz",
+    statBytesLabel: "mensagem canônica de mint",
+    cta_connect: "conectar wallet",
+    cta_connecting: "conectando…",
+    cta_open: "abrir app →",
+    cta_disconnect: "desconectar",
+    nav_protocol: "protocolo",
+    nav_architecture: "arquitetura",
+    nav_threatModel: "modelo de ameaças",
+    nav_github: "github",
+    mod1_title: "avalie qualquer endereço Stellar",
+    mod1_sub:
+      "leitura real do Horizon, janela de 180 dias, desconto de 70% no volume P2P. sem cadastro, sem credenciais fintech. cole qualquer G-address.",
+    mod1_btn: "avaliar",
+    mod1_evaluating: "avaliando…",
+    mod1_invalidFmt: "o formato deve ser G + 55 caracteres base32.",
+    mod1_empty: "execute uma avaliação para ver features ao vivo",
+    mod1_loading: "chamando Horizon + motor de scoring…",
+    mod2_title: "veja o threshold assinando",
+    mod2_sub:
+      "cada mint requer k de n assinaturas independentes sobre a mensagem canônica de 92 bytes. nenhuma parte isolada autoriza sozinha.",
+    mod2_canonical: "mensagem canônica assinada — 92 bytes",
+    mod2_note:
+      "cada oracle assina a mesma sequência com ed25519. o contrato chama env.crypto().ed25519_verify k vezes. menos de k assinaturas válidas, um índice de oracle duplicado, ou um único byte alterado rejeitam o mint na simulação — sem poluir o ledger, sem gas gasto.",
+    mod3_title: "veja ao vivo no testnet",
+    mod3_sub:
+      "duas chamadas reais Soroban contra CDLLO7QE…. a negativa mostra o age floor sendo cumprido on-chain através do byte assinado account_age.",
+    mod3_pos: "mint positivo",
+    mod3_neg: "armadilha do age floor",
+    mod3_cta: "experimente um mint você mesmo",
+    howto_title: "como funciona",
+    howto_sub: "quatro passos. sem fintech, sem KYC, sem email.",
+    howto_step1_title: "conecte sua wallet",
+    howto_step1_body:
+      "clique em conectar wallet acima. você verá uma modal com cada wallet Stellar — xBull, Albedo, Freighter, Rabet, WalletConnect, Lobstr, Hana, Hot, Klever, Ledger, Trezor. escolha uma. nada é assinado ainda.",
+    howto_step2_title: "deixe-nos ler seu histórico on-chain",
+    howto_step2_body:
+      "lemos seus últimos 180 dias no Horizon. se sua conta acabou de ser criada, o Friendbot a financia silenciosamente. contrapartes em nossa whitelist do ecossistema contam 100%; fluxos puramente peer-to-peer recebem desconto de 70% para tornar wash-trading inviável.",
+    howto_step3_title: "5 oracles assinam seu badge",
+    howto_step3_body:
+      "seu score é empacotado em uma mensagem canônica de 92 bytes junto com a expiração, a idade da sua wallet e um nonce anti-replay. três de cinco pares de chaves ed25519 independentes a assinam. um oracle malicioso isolado não pode lhe conceder um badge — nem te bloquear.",
+    howto_step4_title: "minte e baixe",
+    howto_step4_body:
+      "o contrato Soroban verifica as três assinaturas on-chain e emite seu badge de crédito como token soulbound. você recebe um hash de transação, um link no stellar.expert, e um certificado PDF para download. o badge é sua reputação em qualquer vault que integra Vigente.",
+    footerLine: "vigente protocol · stellar soroban · testnet",
+  },
+};
+
+const LANG_STORAGE_KEY = "vigente:lang";
+
+// ---------------------------------------------------------------------------
+// Tiny context just for this page so HeroNav / Modules / Footer all share the
+// active language and the t() lookup without prop-drilling.
+// ---------------------------------------------------------------------------
+interface LandingCtx {
+  lang: Lang;
+  setLang: (l: Lang) => void;
+  t: (key: string) => string;
+}
+const LandingContext = createContext<LandingCtx | null>(null);
+
+function useLanding(): LandingCtx {
+  const ctx = useContext(LandingContext);
+  if (!ctx) throw new Error("LandingContext missing");
+  return ctx;
+}
+
+function LandingProvider({ children }: { children: ReactNode }) {
+  const [lang, setLangState] = useState<Lang>("en");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem(LANG_STORAGE_KEY) as Lang | null;
+    if (saved && (saved === "en" || saved === "es" || saved === "pt")) {
+      setLangState(saved);
+    } else {
+      const nav = (navigator.language || "en").slice(0, 2).toLowerCase();
+      if (nav === "es" || nav === "pt") setLangState(nav as Lang);
+    }
+  }, []);
+
+  const setLang = useCallback((l: Lang) => {
+    setLangState(l);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(LANG_STORAGE_KEY, l);
+    }
+  }, []);
+
+  const t = useCallback(
+    (key: string) => STRINGS[lang][key] ?? STRINGS.en[key] ?? key,
+    [lang],
+  );
+
+  const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
+
+  return (
+    <LandingContext.Provider value={value}>{children}</LandingContext.Provider>
+  );
+}
+
+const NAV_LINKS = [
+  { label: "protocol", href: "#protocol" },
+  {
+    label: "architecture",
+    href: "https://github.com/zzzbedream/VIGENTE-PROJECT/blob/master/docs/ARCHITECTURE.md",
+    external: true,
+  },
+  {
+    label: "threat model",
+    href: "https://github.com/zzzbedream/VIGENTE-PROJECT/blob/master/docs/THREAT_MODEL.md",
+    external: true,
+  },
+  {
+    label: "github",
+    href: "https://github.com/zzzbedream/VIGENTE-PROJECT",
+    external: true,
+  },
+] as const;
+
+const PUBKEY_RE = /^G[A-Z2-7]{55}$/;
+
+interface ScoreResponse {
+  features: {
+    account_age_days: number;
+    ops_evaluated: number;
+    capped: boolean;
+    total_volume_usd_equiv: number;
+    contract_volume_usd_equiv: number;
+    p2p_volume_usd_equiv: number;
+    adjusted_volume_usd_equiv: number;
+    ecosystem_payment_ratio: number | null;
+    asset_diversity: number;
+  };
+  score: {
+    totalScore: number;
+    badgeType: "Gold" | "Silver" | "Bronze" | "None";
+    breakdown: {
+      volumePoints: number;
+      consistencyPoints: number;
+      frequencyPoints: number;
+    };
+  };
+  latency_ms: number;
+  cache_hit: boolean;
+}
+
+const TIER_PILL: Record<string, string> = {
+  Gold: "bg-amber-400 text-black",
+  Silver: "bg-zinc-300 text-black",
+  Bronze: "bg-orange-600 text-white",
+  None: "bg-zinc-700 text-white",
+};
+
+export default function LandingPage() {
+  return (
+    <LandingProvider>
+      <main
+        style={{ fontFamily: "var(--font-readex-pro), system-ui, sans-serif" }}
+        className="bg-[#050505] text-white antialiased"
+      >
+        <Hero />
+        <ModuleEvaluate />
+        <ModuleThresholdSign />
+        <ModuleLiveTestnet />
+        <HowItWorks />
+        <Footer />
+      </main>
+    </LandingProvider>
+  );
+}
+
+// ===========================================================================
+// HERO
+// ===========================================================================
+
+function Hero() {
+  const { lang, t } = useLanding();
+  const words = HERO_WORDS_BY_LANG[lang];
+  return (
+    <section className="relative h-screen w-full overflow-hidden bg-[#050505]">
+      <HeroBackground />
+      <HeroNav />
+
+      <div className="relative h-full w-full">
+        {words.map((word, idx) => (
+          <h1
+            key={`${lang}-${idx}-${word}`}
+            className={`hero-title absolute text-white font-medium text-[14vw] md:text-[13vw] ${HERO_POSITIONS[idx]}`}
+            style={{ letterSpacing: "-0.04em", lineHeight: 0.95 }}
+          >
+            {word}
+          </h1>
+        ))}
+
+        {/* Description */}
+        <p className="absolute left-6 md:left-10 top-[46%] max-w-[280px] text-[15px] leading-snug text-white/90">
+          {t("description")}
+        </p>
+
+        {/* Top-right stat */}
+        <div className="absolute right-6 md:right-24 top-[14%]">
+          <div className="flex items-center gap-3 justify-end">
+            <div
+              className="hidden md:block h-px w-24"
+              style={{ background: `${VIGENTE_GREEN}66`, transform: "rotate(20deg)" }}
+            />
+            <span className="text-4xl md:text-5xl font-medium tracking-tight">
+              3 of 5
+            </span>
+          </div>
+          <div className="text-xs md:text-sm text-white/70 mt-1 text-right">
+            {t("statSigsLabel")}
+          </div>
+        </div>
+
+        {/* Bottom-left stat */}
+        <div className="absolute left-6 md:left-20 bottom-20 md:bottom-24">
+          <div className="flex items-center gap-3">
+            <span className="text-4xl md:text-5xl font-medium tracking-tight">
+              104
+            </span>
+            <div
+              className="hidden md:block h-px w-24"
+              style={{ background: `${VIGENTE_GREEN}66`, transform: "rotate(-20deg)" }}
+            />
+          </div>
+          <div className="text-xs md:text-sm text-white/70 mt-1">
+            {t("statTestsLabel")}
+          </div>
+        </div>
+
+        {/* Bottom-right stat */}
+        <div className="absolute right-6 md:right-20 bottom-16 md:bottom-20">
+          <div className="flex items-center gap-3 justify-end">
+            <div
+              className="hidden md:block h-px w-24"
+              style={{ background: `${VIGENTE_GREEN}66`, transform: "rotate(-20deg)" }}
+            />
+            <span className="text-4xl md:text-5xl font-medium tracking-tight">
+              92 b
+            </span>
+          </div>
+          <div className="text-xs md:text-sm text-white/70 mt-1 text-right">
+            {t("statBytesLabel")}
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom gradient overlay */}
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-b from-transparent to-[#050505]" />
+    </section>
+  );
+}
+
+function HeroBackground() {
+  // Placeholder for the eventual looping mp4. Uses a radial gradient plus an
+  // animated grid pattern — same palette, much lighter to ship.
+  return (
+    <div className="absolute inset-0 overflow-hidden">
+      <div
+        className="absolute -top-1/4 left-1/4 h-[120vh] w-[80vw] rounded-full opacity-30 blur-[160px]"
+        style={{
+          background: `radial-gradient(circle, ${VIGENTE_NAVY} 0%, transparent 60%)`,
+        }}
+      />
+      <div
+        className="absolute bottom-0 right-0 h-[80vh] w-[60vw] rounded-full opacity-20 blur-[140px]"
+        style={{
+          background: `radial-gradient(circle, ${VIGENTE_GREEN} 0%, transparent 60%)`,
+        }}
+      />
+      <div
+        className="absolute inset-0 opacity-[0.08]"
+        style={{
+          backgroundImage:
+            "linear-gradient(to right, rgba(255,255,255,0.4) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.4) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+    </div>
+  );
+}
+
+function HeroNav() {
+  const { t } = useLanding();
+  const navLinks = [
+    { key: "nav_protocol", href: "#protocol" },
+    {
+      key: "nav_architecture",
+      href: "https://github.com/zzzbedream/VIGENTE-PROJECT/blob/master/docs/ARCHITECTURE.md",
+      external: true,
+    },
+    {
+      key: "nav_threatModel",
+      href: "https://github.com/zzzbedream/VIGENTE-PROJECT/blob/master/docs/THREAT_MODEL.md",
+      external: true,
+    },
+    {
+      key: "nav_github",
+      href: "https://github.com/zzzbedream/VIGENTE-PROJECT",
+      external: true,
+    },
+  ];
+  return (
+    <nav className="absolute z-20 top-0 left-0 right-0 px-6 md:px-10 pt-6 flex items-center justify-between gap-4">
+      {/* Left pill: logo + brand */}
+      <div className="flex items-center gap-2 bg-[#0d0f11]/90 backdrop-blur border border-white/5 rounded-full pl-4 pr-6 py-3">
+        <BrandMark />
+        <span className="text-white text-sm font-normal tracking-tight">
+          vigente
+        </span>
+      </div>
+
+      {/* Center pill: nav links */}
+      <div className="hidden md:flex items-center gap-1 bg-[#0d0f11]/90 backdrop-blur border border-white/5 rounded-full px-3 py-2">
+        {navLinks.map((l) =>
+          "external" in l ? (
+            <a
+              key={l.key}
+              href={l.href}
+              target="_blank"
+              rel="noreferrer"
+              className="text-neutral-300 hover:text-[#22c55e] transition-colors text-sm px-5 py-2 rounded-full"
+            >
+              {t(l.key)}
+            </a>
+          ) : (
+            <a
+              key={l.key}
+              href={l.href}
+              className="text-neutral-300 hover:text-[#22c55e] transition-colors text-sm px-5 py-2 rounded-full"
+            >
+              {t(l.key)}
+            </a>
+          ),
+        )}
+      </div>
+
+      {/* Right: language switcher + launch app — wallet-aware */}
+      <div className="flex items-center gap-3">
+        <LanguageSwitcher />
+        <LaunchAppButton />
+      </div>
+    </nav>
+  );
+}
+
+function LanguageSwitcher() {
+  const { lang, setLang } = useLanding();
+  return (
+    <div className="hidden sm:flex items-center bg-[#0d0f11]/90 backdrop-blur border border-white/5 rounded-full p-1">
+      {LANG_OPTIONS.map((opt) => (
+        <button
+          key={opt.code}
+          onClick={() => setLang(opt.code)}
+          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+            lang === opt.code
+              ? "bg-[#22c55e] text-[#050505]"
+              : "text-white/60 hover:text-white"
+          }`}
+          aria-label={`switch to ${opt.label}`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function LaunchAppButton() {
+  const { address, connect, connecting, disconnect } = useWalletKit();
+  const { t } = useLanding();
+  const router = useRouter();
+
+  if (address) {
+    const short = `${address.slice(0, 4)}…${address.slice(-4)}`;
+    return (
+      <div className="flex items-center gap-2">
+        <button
+          onClick={disconnect}
+          title={t("cta_disconnect")}
+          className="bg-[#0d0f11]/90 backdrop-blur border border-white/5 text-white/70 hover:text-white text-xs font-mono rounded-full px-3 py-2 transition-colors"
+        >
+          {short}
+        </button>
+        <button
+          onClick={() => router.push("/v3")}
+          className="bg-[#22c55e] text-[#050505] text-sm font-medium rounded-full px-6 py-3 hover:bg-[#4ade80] transition-colors"
+        >
+          {t("cta_open")}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={async () => {
+        const addr = await connect();
+        if (addr) router.push("/v3");
+      }}
+      disabled={connecting}
+      className="bg-[#22c55e] text-[#050505] text-sm font-medium rounded-full px-6 py-3 hover:bg-[#4ade80] disabled:opacity-60 transition-colors"
+    >
+      {connecting ? t("cta_connecting") : t("cta_connect")}
+    </button>
+  );
+}
+
+function BrandMark() {
+  // The check mark — extracted geometry from the real /logo-vigente.svg
+  // (navy nodes + green check), without the wordmark since the pill renders
+  // "vigente" as text next to it.
+  return (
+    <svg
+      viewBox="0 0 100 80"
+      className="h-5 w-5"
+      fill="none"
+      aria-label="Vigente logo"
+    >
+      <g stroke="#22c55e" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 45 38 63 90 10" />
+      </g>
+      <g fill={VIGENTE_NAVY}>
+        <circle cx="20" cy="45" r="4" />
+        <circle cx="29" cy="54" r="3" />
+        <circle cx="38" cy="63" r="4" />
+      </g>
+    </svg>
+  );
+}
+
+// ===========================================================================
+// MODULE 1 — evaluate any stellar address
+// ===========================================================================
+
+function ModuleEvaluate() {
+  const [pubkey, setPubkey] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<ScoreResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const valid = useMemo(() => PUBKEY_RE.test(pubkey.trim()), [pubkey]);
+
+  async function evaluate() {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    try {
+      const r = await fetch(
+        `/api/oracle/score-onchain?pubkey=${encodeURIComponent(pubkey.trim())}`,
+      );
+      const j = (await r.json()) as ScoreResponse | { error: string };
+      if (!r.ok || "error" in j) {
+        throw new Error("error" in j ? j.error : `HTTP ${r.status}`);
+      }
+      setData(j);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const { t } = useLanding();
+  return (
+    <section
+      id="protocol"
+      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
+    >
+      <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-12">
+        <div className="md:col-span-2">
+          <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+            {t("mod1_title")}
+          </h2>
+          <p className="text-white/70 max-w-xl mb-8 text-base md:text-lg">
+            {t("mod1_sub")}
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
+            <input
+              type="text"
+              value={pubkey}
+              onChange={(e) => setPubkey(e.target.value)}
+              placeholder="GBV676BN..."
+              className="flex-1 px-4 py-3 rounded-lg bg-[#0d0f11] border border-white/10 focus:border-[#22c55e] outline-none text-white placeholder-white/30 font-mono text-sm"
+            />
+            <button
+              onClick={evaluate}
+              disabled={!valid || loading}
+              className="px-6 py-3 rounded-lg bg-[#22c55e] hover:bg-[#4ade80] disabled:bg-white/10 disabled:text-white/40 text-[#050505] font-medium text-sm transition-colors"
+            >
+              {loading ? t("mod1_evaluating") : t("mod1_btn")}
+            </button>
+          </div>
+          {pubkey.length > 0 && !valid && (
+            <p className="text-rose-400 text-sm mt-2">{t("mod1_invalidFmt")}</p>
+          )}
+          {error && <p className="text-rose-400 text-sm mt-2">{error}</p>}
+        </div>
+
+        <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 min-h-[320px] flex flex-col gap-4">
+          {!data && !loading && (
+            <div className="text-white/40 text-sm flex-1 flex items-center justify-center">
+              {t("mod1_empty")}
+            </div>
+          )}
+          {loading && (
+            <div className="text-white/60 text-sm flex-1 flex items-center justify-center">
+              {t("mod1_loading")}
+            </div>
+          )}
+          {data && (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-xs uppercase tracking-wider">
+                  tier
+                </span>
+                <span
+                  className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    TIER_PILL[data.score.badgeType]
+                  }`}
+                >
+                  {data.score.badgeType}
+                </span>
+              </div>
+              <Row label="total score" value={`${data.score.totalScore} / 100`} />
+              <Row
+                label="account age"
+                value={`${data.features.account_age_days} d`}
+              />
+              <Row
+                label="ops evaluated"
+                value={`${data.features.ops_evaluated}${
+                  data.features.capped ? " (capped)" : ""
+                }`}
+              />
+              <Row
+                label="total volume"
+                value={`$${data.features.total_volume_usd_equiv.toFixed(2)}`}
+              />
+              <Row
+                label="ecosystem"
+                value={`$${data.features.contract_volume_usd_equiv.toFixed(2)}`}
+              />
+              <Row
+                label="p2p (penalized)"
+                value={`$${data.features.p2p_volume_usd_equiv.toFixed(2)}`}
+              />
+              <Row
+                label="adjusted volume"
+                value={`$${data.features.adjusted_volume_usd_equiv.toFixed(2)}`}
+              />
+              <div className="text-[10px] text-white/30 text-right pt-2">
+                {data.latency_ms} ms{data.cache_hit ? " · cache hit" : ""}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between text-sm">
+      <span className="text-white/60">{label}</span>
+      <span className="font-mono text-white">{value}</span>
+    </div>
+  );
+}
+
+// ===========================================================================
+// MODULE 2 — watch the threshold sign
+// ===========================================================================
+
+function ModuleThresholdSign() {
+  const { t } = useLanding();
+  const SIGNING_INDICES = [0, 1, 2];
+  const ORACLES = [0, 1, 2, 3, 4];
+
+  return (
+    <section className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12 bg-gradient-to-b from-transparent via-[#22c55e]/[0.02] to-transparent">
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+          {t("mod2_title")}
+        </h2>
+        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
+          {t("mod2_sub")}
+        </p>
+
+        {/* Five oracle circles */}
+        <div className="flex items-center justify-center gap-6 md:gap-12 mb-16 flex-wrap">
+          {ORACLES.map((i) => {
+            const signing = SIGNING_INDICES.includes(i);
+            return (
+              <div key={i} className="flex flex-col items-center gap-2">
+                <div
+                  className={`w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center border-2 transition-colors ${
+                    signing
+                      ? "border-[#22c55e] bg-[#22c55e]/10"
+                      : "border-white/10 bg-white/5"
+                  }`}
+                >
+                  {signing ? (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#22c55e"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="w-8 h-8"
+                    >
+                      <polyline points="4 13 10 19 20 6" />
+                    </svg>
+                  ) : (
+                    <span className="text-white/30 text-xs uppercase">
+                      idle
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-white/60 font-mono">
+                  oracle {i}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Canonical message bytes */}
+        <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 max-w-4xl mx-auto">
+          <div className="text-xs uppercase tracking-wider text-white/40 mb-3">
+            {t("mod2_canonical")}
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-mono">
+            <Chunk label="borrower xdr (44)" color="#1e3a5f" />
+            <Chunk label="score u32 (4)" color="#22c55e" />
+            <Chunk label="expiration u64 (8)" color="#22c55e" />
+            <Chunk label="age_days u32 (4)" color="#22c55e" />
+            <Chunk label="nonce (32)" color="#4ade80" />
+          </div>
+          <div className="mt-4 text-xs text-white/50 leading-relaxed">
+            {t("mod2_note")}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Chunk({ label, color }: { label: string; color: string }) {
+  return (
+    <span
+      className="px-3 py-1.5 rounded border"
+      style={{
+        borderColor: `${color}66`,
+        background: `${color}1a`,
+        color: "white",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+// ===========================================================================
+// MODULE 3 — pinned testnet evidence
+// ===========================================================================
+
+function ModuleLiveTestnet() {
+  const { t } = useLanding();
+  return (
+    <section className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12">
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+          {t("mod3_title")}
+        </h2>
+        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
+          {t("mod3_sub")}
+        </p>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          <TxCard
+            title={t("mod3_pos")}
+            color="#22c55e"
+            txHash="8b9fccfc9daaf594e457e19808ef9c0746e8e45f37aab8417b5fe8d59641bc85"
+            fields={[
+              ["score", "880"],
+              ["age days", "90"],
+              ["status", "SUCCESS"],
+              ["sigs", "3 of 5"],
+              ["get_score returned", "880"],
+            ]}
+          />
+          <TxCard
+            title={t("mod3_neg")}
+            color="#ef4444"
+            txHash={null}
+            fields={[
+              ["score", "700"],
+              ["age days", "10 (below 30 floor)"],
+              ["status", "Error(WasmVm, InvalidAction)"],
+              ["ledger affected", "no — rejected at simulation"],
+              ["gas spent", "0"],
+            ]}
+          />
+        </div>
+
+        <div className="mt-12 text-center">
+          <Link
+            href="/v3"
+            className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-[#22c55e] hover:bg-[#4ade80] text-[#050505] font-medium transition-colors"
+          >
+            {t("mod3_cta")}
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-4 h-4"
+            >
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TxCard({
+  title,
+  color,
+  txHash,
+  fields,
+}: {
+  title: string;
+  color: string;
+  txHash: string | null;
+  fields: Array<[string, string]>;
+}) {
+  return (
+    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-medium text-white">{title}</h3>
+        <span
+          className="px-2 py-1 rounded text-[10px] uppercase tracking-wider"
+          style={{ background: `${color}22`, color }}
+        >
+          {txHash ? "tx on ledger" : "rejected"}
+        </span>
+      </div>
+      <div className="space-y-2 mb-4">
+        {fields.map(([k, v]) => (
+          <div key={k} className="flex items-baseline justify-between text-sm">
+            <span className="text-white/60">{k}</span>
+            <span className="font-mono text-white text-right">{v}</span>
+          </div>
+        ))}
+      </div>
+      {txHash && (
+        <a
+          href={`https://stellar.expert/explorer/testnet/tx/${txHash}`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-[#22c55e] hover:text-[#4ade80] break-all font-mono block pt-3 border-t border-white/5"
+        >
+          {txHash}
+        </a>
+      )}
+    </div>
+  );
+}
+
+// ===========================================================================
+// HOW IT WORKS — 4 numbered steps, fully localised
+// ===========================================================================
+
+function HowItWorks() {
+  const { t } = useLanding();
+  const steps = [
+    { title: t("howto_step1_title"), body: t("howto_step1_body") },
+    { title: t("howto_step2_title"), body: t("howto_step2_body") },
+    { title: t("howto_step3_title"), body: t("howto_step3_body") },
+    { title: t("howto_step4_title"), body: t("howto_step4_body") },
+  ];
+  return (
+    <section
+      id="how-it-works"
+      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12 bg-gradient-to-b from-transparent via-[#1e3a5f]/[0.05] to-transparent"
+    >
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+          {t("howto_title")}
+        </h2>
+        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
+          {t("howto_sub")}
+        </p>
+        <ol className="grid md:grid-cols-2 gap-6">
+          {steps.map((s, idx) => (
+            <li
+              key={idx}
+              className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 flex gap-5"
+            >
+              <div className="flex-shrink-0 h-10 w-10 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/40 flex items-center justify-center text-[#22c55e] font-medium">
+                {idx + 1}
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-medium text-white mb-2">
+                  {s.title}
+                </h3>
+                <p className="text-sm text-white/70 leading-relaxed">
+                  {s.body}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+// ===========================================================================
+// FOOTER
+// ===========================================================================
+
+function Footer() {
+  const { t } = useLanding();
+  return (
+    <footer className="border-t border-white/5 py-12 px-6 md:px-12">
+      <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-6 items-center justify-between text-xs text-white/40">
+        <div className="flex items-center gap-2">
+          <BrandMark />
+          <span>{t("footerLine")}</span>
+        </div>
+        <div className="flex gap-6">
+          <a
+            href="https://github.com/zzzbedream/VIGENTE-PROJECT"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-white transition-colors"
+          >
+            github
+          </a>
+          <a
+            href="https://stellar.expert/explorer/testnet/contract/CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-white transition-colors"
+          >
+            contract
+          </a>
+          <Link href="/v3" className="hover:text-white transition-colors">
+            app
+          </Link>
+        </div>
+      </div>
+    </footer>
+  );
+}
