@@ -652,10 +652,10 @@ export default function V3Page() {
             age floor 30 d · ecosystem whitelist + P2P penalty
           </span>
           <a
-            href="mailto:hello@vigente.app"
+            href="mailto:zzzbedream@gmail.com"
             className="hover:text-[#22c55e] transition-colors"
           >
-            hello@vigente.app
+            zzzbedream@gmail.com
           </a>
         </footer>
       </div>
