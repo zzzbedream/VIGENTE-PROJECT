@@ -779,14 +779,14 @@ function PartnersSection() {
             who="anchors, money-market protocols, stablecoin issuers"
             why="vigente badges unlock undercollateralised credit — LPs want stable USDC yield while their capital is at work. partners that already serve LATAM stablecoin holders are first in line."
             cta="apply as yield partner"
-            email="partners@vigente.app"
+            email="zzzbedream@gmail.com"
           />
           <PartnerCard
             track="decentralised lending pools"
             who="blend, soroswap-lend, fixed-rate protocols on soroban"
             why="reference-vault is a working example, not the production lending market. mature soroban lending protocols can read get_score / is_defaulted from vigente-badge to gate their own pools, instantly underwriting micro-commerce credit risk."
             cta="integrate vigente as oracle"
-            email="integrations@vigente.app"
+            email="zzzbedream@gmail.com"
           />
         </div>
 
@@ -802,10 +802,10 @@ function PartnersSection() {
             </p>
           </div>
           <a
-            href="mailto:hello@vigente.app?subject=Integration%20inquiry"
+            href="mailto:zzzbedream@gmail.com?subject=Integration%20inquiry"
             className="bg-[#22c55e] hover:bg-[#4ade80] text-[#050505] font-medium text-sm rounded-full px-6 py-3 transition-colors whitespace-nowrap"
           >
-            hello@vigente.app
+            zzzbedream@gmail.com
           </a>
         </div>
       </div>
@@ -985,7 +985,7 @@ function Footer() {
         </div>
         <div className="flex gap-6">
           <a
-            href="mailto:hello@vigente.app"
+            href="mailto:zzzbedream@gmail.com"
             className="hover:text-white transition-colors"
           >
             contact
