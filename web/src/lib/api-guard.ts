@@ -124,6 +124,22 @@ function isSameOriginCaller(req: Request): boolean {
   // a public boundary.
   if (!origin && !referer) return true;
 
+  // True same-origin: compare against the host this request actually hit
+  // (via the proxy-aware headers Vercel sets). This works on the production
+  // domain, preview deployments, and localhost without any env var — and it
+  // survives a misconfigured NEXT_PUBLIC_SITE_URL, which 401'd legit users
+  // in production once already.
+  const fwdHost = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
+  const fwdProto = (req.headers.get("x-forwarded-proto") ?? "https").split(",")[0]!.trim();
+  if (fwdHost) {
+    const self = `${fwdProto}://${fwdHost}`;
+    if (origin === self || referer.startsWith(self + "/")) {
+      return true;
+    }
+  }
+
+  // Canonical site URL as an extra allowlist entry (covers e.g. a custom
+  // domain fronting the deployment under a different Host).
   if (SITE_ORIGIN && (origin === SITE_ORIGIN || referer.startsWith(SITE_ORIGIN + "/"))) {
     return true;
   }
