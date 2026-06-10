@@ -104,6 +104,30 @@ A minimal but complete Soroban lending contract that demonstrates credit-gated u
 
 ---
 
+## For Integrators — Credit Oracle Interface v1
+
+Any Soroban contract or off-chain client can read borrower credit state from
+the live testnet oracle. No permission, no registration, no token.
+
+```rust
+#[contractclient(name = "BadgeClient")]
+pub trait VigenteBadge {
+    fn is_defaulted(env: Env, borrower: Address) -> bool;
+    fn get_score(env: Env, borrower: Address) -> Option<u32>;
+}
+```
+
+| Resource | Where |
+|---|---|
+| Full interface spec (6 read functions, types, trust model, versioning) | [`contracts/vigente-badge/INTERFACE.md`](contracts/vigente-badge/INTERFACE.md) |
+| Machine-readable ABI (live contract spec, testnet) | [`docs/integration/abi-v3.json`](docs/integration/abi-v3.json) |
+| Compilable consumer example + cross-contract tests | [`examples/integration-snippet/`](examples/integration-snippet/) |
+| Production-grade consumer (score tiers, slash cascade) | [`contracts/reference-vault/`](contracts/reference-vault/) |
+
+Testnet contract: `CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD` · deployed WASM sha256: `60fe64dc480893e28a54d35d544bc0344666e5e9f7cda6851f38ec6cc6d66c80`
+
+---
+
 ## Tech Stack
 
 | Layer | Technology | Purpose |
