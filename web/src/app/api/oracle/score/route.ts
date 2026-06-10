@@ -7,12 +7,16 @@ import { guardApiRequest, genericErrorResponse } from "@/lib/api-guard";
 export const dynamic = "force-dynamic";
 
 /**
- * Startup guard — fail fast at module load if the HMAC secret is missing
- * or weak. Next.js evaluates route modules on first request, so this
- * throws before any handler runs and the route returns 500 with the
- * message logged server-side. See plan appendix G.1.
+ * Lazy fail-fast guard — fail at the first REQUEST if the HMAC secret is
+ * missing or weak. Originally a module-load throw (G.1), but Vercel's
+ * build collects page data by importing each route module, which broke
+ * the build when the env var wasn't set yet. Lazy keeps the same
+ * security posture (no request signed without a real secret) without
+ * blocking the build.
  */
-function requireHmacSecret(): string {
+let cachedHmacSecret: string | null = null;
+function getHmacSecret(): string {
+    if (cachedHmacSecret !== null) return cachedHmacSecret;
     const s = process.env.ORACLE_HMAC_SECRET;
     if (!s || s.length < 32) {
         throw new Error(
@@ -21,10 +25,9 @@ function requireHmacSecret(): string {
                 "Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
         );
     }
+    cachedHmacSecret = s;
     return s;
 }
-
-const ORACLE_HMAC_SECRET = requireHmacSecret();
 
 export async function GET(req: Request) {
     // G.2: read-only Payku-backed scoring — permissive limit (30/min) for
@@ -53,7 +56,7 @@ export async function GET(req: Request) {
 
         const payloadStart = `${rut}:${scoreResult.totalScore}:${scoreResult.tier}`;
         const signature = crypto
-            .createHmac("sha256", ORACLE_HMAC_SECRET)
+            .createHmac("sha256", getHmacSecret())
             .update(payloadStart)
             .digest("hex");
 
