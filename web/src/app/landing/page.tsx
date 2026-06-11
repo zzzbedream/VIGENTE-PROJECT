@@ -77,6 +77,7 @@ export default function LandingPage() {
       <ThreatModelSection />
       <PartnersSection />
       <ModuleLiveTestnet />
+      <RoadmapSection />
       <Footer />
     </main>
   );
@@ -967,6 +968,116 @@ function TxCard({
           {txHash}
         </a>
       )}
+    </div>
+  );
+}
+
+// ===========================================================================
+// ROADMAP — honest tranche-aligned path to mainnet. "shipped" claims are
+// verifiable on-chain; everything else is labeled by funding tranche.
+// ===========================================================================
+
+function RoadmapSection() {
+  return (
+    <section
+      id="roadmap"
+      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
+    >
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+          roadmap
+        </h2>
+        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
+          built in the open, funded in tranches. everything marked shipped is
+          verifiable on-chain today — the rest is scoped, costed, and labeled
+          by the tranche that pays for it.
+        </p>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <RoadmapCard
+            tag="shipped · live now"
+            tagClass="bg-[#22c55e]/15 text-[#22c55e]"
+            title="credit primitive"
+            items={[
+              "3-of-5 threshold oracle verified on-chain",
+              "soulbound credit badge + immutable defaults",
+              "credit-gated reference vault (TVL cap, timelock)",
+              "credit oracle interface v1 + ABI for integrators",
+              "180-day on-chain credit heat map",
+            ]}
+          />
+          <RoadmapCard
+            tag="tranche 1 · hardening"
+            tagClass="bg-white/10 text-white/70"
+            title="production posture"
+            items={[
+              "oracle ops + key rotation runbook",
+              "score cache to persistent storage",
+              "vigente.app domain + admin dashboard",
+              "SEP draft: credit attestation standard",
+            ]}
+          />
+          <RoadmapCard
+            tag="tranche 2 · yield layer"
+            tagClass="bg-white/10 text-white/70"
+            title="capital efficiency"
+            items={[
+              "LP yield accounting (claim without exit)",
+              "SEP-0056 tokenized vault + DeFindex listing",
+              "idle reserve earning in Blend pools",
+              "/earn — one-click USDC deposits for LPs",
+            ]}
+          />
+          <RoadmapCard
+            tag="tranche 3 · mainnet"
+            tagClass="bg-white/10 text-white/70"
+            title="open infrastructure"
+            items={[
+              "mainnet deploy behind multi-sig",
+              "typescript SDK on npm",
+              "tier-segmented pools + staking",
+              "micro-commerce pilot with fintech partners",
+            ]}
+          />
+        </div>
+
+        <p className="text-white/40 text-xs mt-8 max-w-2xl">
+          deliberately out of scope until mainnet: own token, multi-chain,
+          retail KYC, competing with existing lending markets. vigente is the
+          credit layer other protocols read — not another lending app.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function RoadmapCard({
+  tag,
+  tagClass,
+  title,
+  items,
+}: {
+  tag: string;
+  tagClass: string;
+  title: string;
+  items: string[];
+}) {
+  return (
+    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 flex flex-col gap-4">
+      <span
+        className={`self-start text-[10px] uppercase tracking-wider rounded-full px-2.5 py-1 ${tagClass}`}
+      >
+        {tag}
+      </span>
+      <h3 className="text-lg font-medium text-white">{title}</h3>
+      <ul className="space-y-2 text-sm text-white/70">
+        {items.map((item) => (
+          <li key={item} className="flex gap-2">
+            <span className="text-[#22c55e] shrink-0">·</span>
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
