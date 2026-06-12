@@ -88,8 +88,7 @@ pub trait VigenteBadge {
 4. **Mint** — the relayer collects 3-of-5 threshold signatures and submits;
    the tx hash lands in your wallet and on stellar.expert.
 
-<details>
-<summary>Legacy demo flow (Payku adapter, Chilean RUTs)</summary>
+
 
 The original fintech-adapter flow still works at `/legacy`. Test RUTs:
 `20.244.452-1` (Gold) · `12.345.678-2` (Silver) · `99.999.999-9` (fail
@@ -107,7 +106,7 @@ case). RUTs ending in `1`/`K` → Tier A; `2` → Tier B; `9` → fail.
 │ Horizon data  │   │ engine (180d window, │   │ 5 ed25519 keys, k = 3   │
 │ (public)      │   │ P2P penalty, heatmap)│   │ sign 92-byte canonical  │
 └──────────────┘   └──────────────────────┘   └───────────┬─────────────┘
-       optional enrichment: Payku / Fintoc adapters        │ signatures
+                                                          │ signatures
                                                            ▼
 ┌──────────────────┐  get_score() / is_defaulted()  ┌──────────────────┐
 │ reference-vault   │◄───────────────────────────── │ vigente-badge    │
