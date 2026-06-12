@@ -1,5 +1,10 @@
 # Resubmission Feedback — Vigente Protocol
 
+> **⚠️ Superseded for the upcoming submission by [`SCF_REBUTTAL.md`](SCF_REBUTTAL.md)** —
+> the evidence-backed Q&A that answers every rejection point with transactions,
+> commits, and live deployments. This file is kept as the historical
+> item-by-item map of changes made after SCF #41.
+
 > *This section addresses the feedback received on the prior SCF Build submission and documents the concrete changes made in response.*
 
 ---
