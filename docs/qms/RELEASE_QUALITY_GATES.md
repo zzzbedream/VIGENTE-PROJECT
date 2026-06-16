@@ -7,7 +7,7 @@ firmada por el responsable.
 ## Gate 1 — Pruebas y build (automatizable hoy)
 
 - [ ] `cargo test` verde en `contracts/vigente-badge` y `contracts/reference-vault`
-- [ ] `npm run test:web` verde (incluye `test:templar`)
+- [ ] `npm run test:web` verde (incluye `test:eligibility`)
 - [ ] `cd web && npm run build` sin errores
 - [ ] `cd web && npm run lint` sin errores nuevos
 
