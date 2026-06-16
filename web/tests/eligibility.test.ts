@@ -1,31 +1,31 @@
 /**
- * Vigente × Templar — off-chain eligibility adapter tests.
+ * Off-chain eligibility adapter tests.
  *
- * Offline-only. Drives the pure `evaluateTemplarEligibility` gate with badge
- * states and asserts the subcollateralized decision. Does NOT hit the network.
+ * Offline-only. Drives the pure `evaluateEligibility` gate with badge states
+ * and asserts the subcollateralized decision. Does NOT hit the network.
  *
  * The two headline cases mirror the on-chain reference-vault proofs:
  *   - an eligible borrower is approved (throttled on first loan), and
  *   - a defaulted borrower is hard-rejected (is_defaulted survives expiry).
  *
- * Run: cd web && npm run test:templar
+ * Run: cd web && npm run test:eligibility
  */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  evaluateTemplarEligibility,
+  evaluateEligibility,
   tierForScore,
   TIER_CEILING_USD,
   FIRST_LOAN_FRACTION,
   type BadgeState,
-} from "../src/lib/integrations/templar-adapter";
+} from "../src/lib/integrations/eligibility-adapter";
 
 const GOLD: BadgeState = { score: 880, isDefaulted: false };
 const DEFAULTED: BadgeState = { score: 880, isDefaulted: true };
 
 test("eligible Gold borrower is approved, throttled to 10% on first loan", () => {
-  const decision = evaluateTemplarEligibility(GOLD);
+  const decision = evaluateEligibility(GOLD);
 
   assert.equal(decision.eligible, true);
   assert.equal(decision.tier, "Gold");
@@ -36,7 +36,7 @@ test("eligible Gold borrower is approved, throttled to 10% on first loan", () =>
 });
 
 test("defaulted borrower is hard-rejected regardless of score", () => {
-  const decision = evaluateTemplarEligibility(DEFAULTED);
+  const decision = evaluateEligibility(DEFAULTED);
 
   assert.equal(decision.eligible, false);
   assert.equal(decision.approvedUsd, 0);
@@ -44,15 +44,15 @@ test("defaulted borrower is hard-rejected regardless of score", () => {
 });
 
 test("repayment ladder lifts first-loan throttle to the full ceiling", () => {
-  const first = evaluateTemplarEligibility(GOLD, { hasPriorRepayment: false });
-  const repeat = evaluateTemplarEligibility(GOLD, { hasPriorRepayment: true });
+  const first = evaluateEligibility(GOLD, { hasPriorRepayment: false });
+  const repeat = evaluateEligibility(GOLD, { hasPriorRepayment: true });
 
   assert.equal(first.approvedUsd, TIER_CEILING_USD.Gold * FIRST_LOAN_FRACTION);
   assert.equal(repeat.approvedUsd, TIER_CEILING_USD.Gold);
 });
 
 test("no badge signal (null score) yields no credit", () => {
-  const decision = evaluateTemplarEligibility({ score: null, isDefaulted: false });
+  const decision = evaluateEligibility({ score: null, isDefaulted: false });
 
   assert.equal(decision.eligible, false);
   assert.equal(decision.tier, "None");
@@ -60,14 +60,14 @@ test("no badge signal (null score) yields no credit", () => {
 });
 
 test("score below the Bronze floor is not yet creditworthy", () => {
-  const decision = evaluateTemplarEligibility({ score: 200, isDefaulted: false });
+  const decision = evaluateEligibility({ score: 200, isDefaulted: false });
 
   assert.equal(decision.eligible, false);
   assert.equal(decision.reason, "below_floor");
 });
 
 test("approval never exceeds the borrower's requested amount", () => {
-  const decision = evaluateTemplarEligibility(GOLD, {
+  const decision = evaluateEligibility(GOLD, {
     hasPriorRepayment: true,
     requestedUsd: 50,
   });

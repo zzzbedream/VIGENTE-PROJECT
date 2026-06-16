@@ -1,5 +1,5 @@
 /**
- * Vigente × Templar — eligibility-gate demo (the protocol pitch surface).
+ * Off-chain eligibility-gate demo (the protocol pitch surface).
  *
  * Prints the off-chain eligibility decision for a set of borrower states, so a
  * lending protocol can see exactly how Vigente would gate a reputation-tier
@@ -8,14 +8,14 @@
  * Offline by default (uses canonical badge states). Pass a real testnet pubkey
  * to read the live badge and evaluate it:
  *
- *   cd web && npm run demo:templar
- *   cd web && npm run demo:templar -- GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+ *   cd web && npm run demo:eligibility
+ *   cd web && npm run demo:eligibility -- GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
  */
 
 import {
-  evaluateTemplarEligibility,
+  evaluateEligibility,
   type BadgeState,
-} from "../src/lib/integrations/templar-adapter";
+} from "../src/lib/integrations/eligibility-adapter";
 
 interface Scenario {
   name: string;
@@ -35,7 +35,7 @@ const SCENARIOS: Scenario[] = [
 ];
 
 function row(name: string, state: BadgeState, hasPriorRepayment: boolean, requestedUsd: number): void {
-  const d = evaluateTemplarEligibility(state, { hasPriorRepayment, requestedUsd });
+  const d = evaluateEligibility(state, { hasPriorRepayment, requestedUsd });
   const verdict = d.eligible ? "APPROVE" : "REJECT";
   const amount = d.eligible ? `$${d.approvedUsd}` : "$0";
   console.log(
@@ -44,7 +44,7 @@ function row(name: string, state: BadgeState, hasPriorRepayment: boolean, reques
 }
 
 async function main(): Promise<void> {
-  console.log("\nVigente × Templar — off-chain eligibility gate\n");
+  console.log("\nVigente — off-chain eligibility gate\n");
   console.log("Canonical scenarios (offline):");
   for (const s of SCENARIOS) {
     row(s.name, s.state, s.hasPriorRepayment, s.requestedUsd);

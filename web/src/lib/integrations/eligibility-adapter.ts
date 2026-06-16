@@ -1,19 +1,16 @@
 /**
- * Vigente × Templar — off-chain eligibility adapter (Capa 1 MVP).
+ * Off-chain eligibility adapter (Layer-1 MVP).
  *
- * WHY THIS IS OFF-CHAIN. Templar is a *collateralized* lending protocol whose
- * on-chain oracle slot is a Pyth **price** feed (60s staleness, EMA), per the
- * market config. Like Blend (SEP-40), it has no on-chain hook to gate a
- * borrower by reputation. So Vigente cannot inject a credit score into
- * Templar's contract path. The honest, shippable integration is a *gate of
- * eligibility off-chain*: the Vigente backend reads the borrower's badge
- * (permissionless, via simulation) and decides who may enter a
- * reputation-tier pool and with what subcollateralized ceiling, while Templar
- * keeps using its normal price oracle. See docs/integration/TEMPLAR.md.
+ * WHY OFF-CHAIN. Most Soroban lending markets expose a price-only oracle slot
+ * (e.g. SEP-40), with no on-chain hook to gate a borrower by reputation. So a
+ * credit score cannot be injected into the protocol's contract path. The
+ * honest, shippable integration is an *off-chain eligibility gate*: the Vigente
+ * backend reads the borrower's badge (permissionless, via simulation) and
+ * decides who may enter a reputation-tier pool and with what subcollateralized
+ * ceiling, while the protocol keeps using its normal price oracle.
  *
- * This mirrors the J.3.2 Blend supply-side correction: the value frontier
- * (threshold oracle + scoring engine + badge SBT) is never delegated; Templar
- * is a distribution/consumer layer.
+ * The value frontier (threshold oracle + scoring engine + badge SBT) is never
+ * delegated; the lending protocol is a distribution/consumer layer.
  *
  * The credit policy below is the off-chain twin of the on-chain policy proven
  * in contracts/reference-vault/src/lib.rs (tier ceilings + first-loan
@@ -108,7 +105,7 @@ export function tierForScore(score: number): CreditTier {
 }
 
 /**
- * Decide whether a borrower may enter a Vigente-gated Templar pool and the
+ * Decide whether a borrower may enter a Vigente-gated reputation pool and the
  * subcollateralized amount the pool may extend.
  *
  * Pure function: same badge state in → same decision out. This is the
@@ -118,7 +115,7 @@ export function tierForScore(score: number): CreditTier {
  * Order of gates mirrors INTERFACE.md guidance: check `is_defaulted` FIRST
  * (survives badge expiry — defaults are immutable), then the score.
  */
-export function evaluateTemplarEligibility(
+export function evaluateEligibility(
   state: BadgeState,
   options: EligibilityOptions = {},
 ): EligibilityDecision {
