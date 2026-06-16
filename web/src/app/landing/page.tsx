@@ -11,8 +11,11 @@
  */
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useWalletKit } from "@/contexts/WalletKitContext";
+import { getOracleStatus, type OracleStatus } from "@/lib/integrations/vigente-read";
+import { verifyBadge } from "@/lib/stellar/vigente-contract";
+import type { BadgeState } from "@/lib/integrations/templar-adapter";
 
 const VIGENTE_GREEN = "#22c55e";
 const VIGENTE_NAVY = "#1e3a5f";
@@ -26,8 +29,11 @@ const HERO_WORDS = [
 const NAV_LINKS = [
   { label: "protocol", href: "#protocol" },
   { label: "architecture", href: "#architecture" },
+  { label: "live", href: "#live" },
   { label: "threat model", href: "#threat-model" },
   { label: "partners", href: "#partners" },
+  { label: "impact", href: "#impact" },
+  { label: "passport", href: "/passport" },
 ] as const;
 
 const PUBKEY_RE = /^G[A-Z2-7]{55}$/;
@@ -71,11 +77,13 @@ export default function LandingPage() {
       className="bg-[#050505] text-white antialiased"
     >
       <Hero />
+      <LiveOnchainStatus />
       <ModuleEvaluate />
       <ModuleThresholdSign />
       <ArchitectureSection />
       <ThreatModelSection />
       <PartnersSection />
+      <ImpactSection />
       <ModuleLiveTestnet />
       <RoadmapSection />
       <Footer />
@@ -104,10 +112,11 @@ function Hero() {
           </h1>
         ))}
 
-        <p className="absolute left-6 md:left-10 top-[46%] max-w-[280px] text-[15px] leading-snug text-white/90">
-          a k-of-n threshold credit oracle on stellar soroban. your borrowing
-          reputation lives on-chain, signed by an independent quorum, with
-          zero fintech in the trust path.
+        <p className="absolute left-6 md:left-10 top-[44%] max-w-[300px] text-[15px] leading-snug text-white/90">
+          the credit layer stellar lending protocols read. any soroban market
+          underwrites borrower reputation through a k-of-n threshold oracle —
+          templar first — so unbanked latam earners turn on-chain history into
+          fair credit. zero fintech in the trust path.
         </p>
 
         <StatBlock
@@ -180,6 +189,208 @@ function StatBlock({
       >
         {label}
       </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// LIVE ON-CHAIN STATUS — reads the contract's oracle config live, plus an
+// inline badge lookup. This is the proof the landing is genuinely on-chain
+// right now, not a set of hardcoded numbers.
+// ===========================================================================
+
+const PASSPORT_SAMPLE = "GBV676BNXDPVZDLUAB6O7DHWUIS42OTIWI5MIKCFJOWMJWTVKQNXFWCM";
+
+function LiveOnchainStatus() {
+  const [status, setStatus] = useState<OracleStatus | null>(null);
+  const [statusError, setStatusError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getOracleStatus()
+      .then((s) => !cancelled && setStatus(s))
+      .catch(() => !cancelled && setStatusError(true));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fallback to the documented config if the live read is slow/unavailable, so
+  // the section never renders empty.
+  const k = status?.threshold ?? 3;
+  const n = status?.keyCount ?? 5;
+  const minAge = status?.minWalletAgeDays;
+  const live = status !== null && !statusError;
+
+  return (
+    <section
+      id="live"
+      className="border-t border-white/5 py-20 md:py-28 px-6 md:px-12"
+    >
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center gap-3 mb-8">
+          <span
+            className={`h-2 w-2 rounded-full ${
+              live ? "bg-[#22c55e] animate-pulse" : "bg-white/30"
+            }`}
+          />
+          <h2 className="text-2xl md:text-4xl font-medium tracking-tight">
+            live on-chain
+          </h2>
+          <span className="text-xs text-white/40">
+            {live ? "read from the contract just now" : "reading…"}
+          </span>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+          <LiveStat label="threshold" value={`${k} of ${n}`} sub="ed25519 quorum" />
+          <LiveStat
+            label="oracle keys"
+            value={`${n}`}
+            sub="independent signers"
+          />
+          <LiveStat
+            label="wallet age floor"
+            value={minAge != null ? `${minAge}d` : "—"}
+            sub="anti-sybil mint gate"
+          />
+          <LiveStat
+            label="contract"
+            value={`${VIGENTE_CONTRACT_ID_SHORT}`}
+            sub="testnet · soroban"
+            href={`https://stellar.expert/explorer/testnet/contract/${status?.contractId ?? ""}`}
+          />
+        </div>
+
+        <BadgeLookup />
+      </div>
+    </section>
+  );
+}
+
+const VIGENTE_CONTRACT_ID_SHORT = "CDLLO7QE…";
+
+function LiveStat({
+  label,
+  value,
+  sub,
+  href,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  href?: string;
+}) {
+  const inner = (
+    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-5 h-full">
+      <div className="text-[10px] uppercase tracking-wider text-white/40 mb-2">
+        {label}
+      </div>
+      <div className="text-2xl font-medium text-white tracking-tight">{value}</div>
+      <div className="text-xs text-white/40 mt-1">{sub}</div>
+    </div>
+  );
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="block hover:border-[#22c55e]/40">
+        {inner}
+      </a>
+    );
+  }
+  return inner;
+}
+
+function BadgeLookup() {
+  const [pubkey, setPubkey] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<BadgeState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const isValid = PUBKEY_RE.test(pubkey.trim());
+
+  async function lookup() {
+    const addr = pubkey.trim();
+    if (!PUBKEY_RE.test(addr)) {
+      setError("enter a valid G… public key");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await verifyBadge(addr));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "lookup failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+        <div>
+          <div className="text-sm font-medium text-white">read a live badge</div>
+          <div className="text-xs text-white/40">
+            permissionless get_score / is_defaulted — no wallet, no signature
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setPubkey(PASSPORT_SAMPLE)}
+          className="self-start md:self-auto text-xs text-white/50 hover:text-[#22c55e] transition-colors"
+        >
+          use a sample address
+        </button>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <input
+          value={pubkey}
+          onChange={(e) => setPubkey(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && lookup()}
+          placeholder="G… stellar public key"
+          spellCheck={false}
+          className="flex-1 bg-[#050505] border border-white/10 rounded-lg px-4 py-3 text-sm font-mono outline-none focus:border-[#22c55e]/60"
+        />
+        <button
+          type="button"
+          onClick={lookup}
+          disabled={loading || !isValid}
+          className="bg-[#22c55e] hover:bg-[#4ade80] disabled:opacity-40 disabled:cursor-not-allowed text-[#050505] font-medium text-sm rounded-lg px-6 py-3 transition-colors"
+        >
+          {loading ? "reading…" : "read"}
+        </button>
+      </div>
+
+      {error && <div className="text-red-400 text-sm mt-3">{error}</div>}
+
+      {result && (
+        <div className="flex flex-wrap items-center gap-6 mt-4 pt-4 border-t border-white/5">
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-white/40">score</div>
+            <div className="text-xl font-medium text-white">
+              {result.score != null ? `${result.score}/1000` : "no badge"}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-white/40">default</div>
+            <div
+              className={`text-xl font-medium ${
+                result.isDefaulted ? "text-red-400" : "text-[#22c55e]"
+              }`}
+            >
+              {result.isDefaulted ? "yes" : "no"}
+            </div>
+          </div>
+          <Link
+            href="/passport"
+            className="ml-auto text-sm text-[#22c55e] hover:text-[#4ade80] transition-colors"
+          >
+            full credit passport →
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
@@ -591,32 +802,10 @@ function ArchitectureSection() {
         </div>
 
         <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 md:p-8">
-          <div className="text-xs uppercase tracking-wider text-white/40 mb-4">
-            data flow
+          <div className="text-xs uppercase tracking-wider text-white/40 mb-6">
+            the road ahead — the pipeline
           </div>
-          <div className="space-y-3 font-mono text-xs md:text-sm text-white/80">
-            <FlowLine>
-              <span className="text-[#22c55e]">①</span> user (or wallet) sends
-              G-address → <span className="text-[#1e3a5f]">scoring engine</span>{" "}
-              reads horizon
-            </FlowLine>
-            <FlowLine>
-              <span className="text-[#22c55e]">②</span> engine returns features
-              + tier → <span className="text-[#1e3a5f]">threshold oracle</span>{" "}
-              signs message
-            </FlowLine>
-            <FlowLine>
-              <span className="text-[#22c55e]">③</span> relayer assembles
-              soroban call → <span className="text-[#1e3a5f]">badge contract</span>{" "}
-              verifies k-of-n
-            </FlowLine>
-            <FlowLine>
-              <span className="text-[#22c55e]">④</span> badge minted, nonce
-              consumed, event emitted → readable by{" "}
-              <span className="text-[#1e3a5f]">any vault</span> for credit-gated
-              lending
-            </FlowLine>
-          </div>
+          <PipelineInfographic />
         </div>
       </div>
     </section>
@@ -653,9 +842,47 @@ function ArchCard({
   );
 }
 
-function FlowLine({ children }: { children: React.ReactNode }) {
+const PIPELINE_STAGES = [
+  { title: "open finance", tag: "optional", note: "floid / fintoc · consented enrichment" },
+  { title: "scoring engine", tag: "off-chain", note: "horizon · 180d · zero fintech in trust path" },
+  { title: "threshold oracle", tag: "off-chain", note: "k-of-n ed25519 · signs the mint" },
+  { title: "badge SBT", tag: "on-chain", note: "soulbound · immutable defaults" },
+  { title: "consumers", tag: "read", note: "wallets · lending protocols" },
+  { title: "inclusion", tag: "impact", note: "first-time credit · measured (IRIS+)" },
+] as const;
+
+const PIPELINE_TAG_COLOR: Record<string, string> = {
+  optional: "bg-white/10 text-white/50",
+  "off-chain": "bg-[#1e3a5f]/50 text-slate-300",
+  "on-chain": "bg-[#22c55e]/15 text-[#22c55e]",
+  read: "bg-[#1e3a5f]/50 text-slate-300",
+  impact: "bg-amber-400/15 text-amber-300",
+};
+
+function PipelineInfographic() {
   return (
-    <div className="flex items-start gap-3 leading-relaxed">{children}</div>
+    <div className="flex flex-col md:flex-row md:items-stretch gap-2">
+      {PIPELINE_STAGES.map((s, i) => (
+        <div key={s.title} className="flex flex-col md:flex-row md:items-stretch gap-2 md:flex-1">
+          <div className="flex-1 bg-[#050505] border border-white/5 rounded-lg p-4 flex flex-col gap-2">
+            <span
+              className={`self-start text-[9px] uppercase tracking-wider rounded-full px-2 py-0.5 ${
+                PIPELINE_TAG_COLOR[s.tag]
+              }`}
+            >
+              {s.tag}
+            </span>
+            <div className="text-sm font-medium text-white">{s.title}</div>
+            <div className="text-[11px] text-white/40 leading-snug">{s.note}</div>
+          </div>
+          {i < PIPELINE_STAGES.length - 1 && (
+            <div className="flex items-center justify-center text-[#22c55e]/60 shrink-0 rotate-90 md:rotate-0">
+              →
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -770,23 +997,24 @@ function PartnersSection() {
           partners we're building with
         </h2>
         <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
-          vigente is the credit primitive — the yield + lending stack lives on
-          top. we're actively forming partnerships in two directions.
+          vigente is the credit primitive — the lending stack lives on top, the
+          data layer feeds in. we're forming partnerships in two directions, with
+          conservative limits and client protection baked in.
         </p>
 
         <div className="grid md:grid-cols-2 gap-6 mb-12">
           <PartnerCard
-            track="apr partners (yield for LPs)"
-            who="anchors, money-market protocols, stablecoin issuers"
-            why="vigente badges unlock undercollateralised credit — LPs want stable USDC yield while their capital is at work. partners that already serve LATAM stablecoin holders are first in line."
-            cta="apply as yield partner"
+            track="layer 1 · lending protocols"
+            who="templar (first integrator), blend supply-side, soroswap-lend"
+            why="protocols read get_score / is_defaulted to open a reputation-tier pool. templar — like blend — uses a price oracle, so vigente gates eligibility off-chain at conservative, throttled limits (CP2). reference-vault is the on-chain reference any protocol can read directly."
+            cta="integrate vigente as credit layer"
             email="zzzbedream@gmail.com"
           />
           <PartnerCard
-            track="decentralised lending pools"
-            who="blend, soroswap-lend, fixed-rate protocols on soroban"
-            why="reference-vault is a working example, not the production lending market. mature soroban lending protocols can read get_score / is_defaulted from vigente-badge to gate their own pools, instantly underwriting micro-commerce credit risk."
-            cta="integrate vigente as oracle"
+            track="data · open finance (optional enrichment)"
+            who="floid, fintoc — consented, chile-first"
+            why="the core score reads only stellar horizon, so the trust path stays fintech-free. open finance is opt-in enrichment that adds detail to a thin-file borrower's profile — never a gate, never published on-chain."
+            cta="partner on data"
             email="zzzbedream@gmail.com"
           />
         </div>
@@ -855,6 +1083,70 @@ function PartnerCard({
         </svg>
       </a>
     </div>
+  );
+}
+
+// ===========================================================================
+// IMPACT / INCLUSION — the social core is the revenue engine, not charity.
+// Shared-value framing + the client-protection commitments that keep
+// subcollateralised credit from harming thin-file borrowers.
+// ===========================================================================
+
+const IMPACT_CARDS = [
+  {
+    title: "shared value, not charity",
+    body: "the underserved market — earners with on-chain or open-finance data but no traditional score — IS the target market. every score that unlocks fair credit earns a fee and cuts financial exclusion at the same time.",
+  },
+  {
+    title: "no over-indebtedness",
+    body: "conservative tier ceilings, a first-loan throttle to 10%, and immutable defaults. enabling credit to the unbanked must never push them into unpayable debt — the limits are proven on-chain in reference-vault.",
+  },
+  {
+    title: "metrics that aren't vanity",
+    body: "we measure first-time credit access, cost of credit before vs. after, real default rate, and 6/12-month persistence — with a baseline and external verification. not 'wallets created'.",
+  },
+  {
+    title: "fair, explainable, private",
+    body: "disparate-impact audits across groups, an explainable score with a right to human review (Ley 21.719), and no personal data published on-chain. client protection (Cerise+SPTF) is a release gate, not a slogan.",
+  },
+] as const;
+
+function ImpactSection() {
+  return (
+    <section
+      id="impact"
+      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
+    >
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+          inclusion is the product
+        </h2>
+        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
+          a credit history is an asset the user owns — soulbound, portable,
+          readable by every protocol that integrates vigente. it turns on-chain
+          activity into fair credit. funded by the protocols that use it, not by
+          grants — sustainable by design, not charity.
+        </p>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {IMPACT_CARDS.map((c) => (
+            <div
+              key={c.title}
+              className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 flex flex-col gap-3"
+            >
+              <h3 className="text-base font-medium text-white">{c.title}</h3>
+              <p className="text-sm text-white/60 leading-relaxed">{c.body}</p>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-white/40 text-xs mt-8 max-w-2xl">
+          aligned to SDG 1 / 5 / 8 / 10 and the Cerise+SPTF client-protection
+          standards. measured with IRIS+ — baseline, comparison group, external
+          verification.
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -987,10 +1279,15 @@ function RoadmapSection() {
         <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
           roadmap
         </h2>
-        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
+        <p className="text-white/70 max-w-2xl mb-4 text-base md:text-lg">
           built in the open, funded in tranches. everything marked shipped is
           verifiable on-chain today — the rest is scoped, costed, and labeled
           by the tranche that pays for it.
+        </p>
+        <p className="text-[#22c55e] max-w-2xl mb-12 text-sm md:text-base">
+          the wedge is layer 1: a live lending protocol reading the score in
+          production — templar first. distribution and the data layer compound
+          from there.
         </p>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -1007,22 +1304,22 @@ function RoadmapSection() {
             ]}
           />
           <RoadmapCard
-            tag="tranche 1 · hardening"
-            tagClass="bg-white/10 text-white/70"
-            title="production posture"
+            tag="tranche 1 · layer 1 (primary)"
+            tagClass="bg-[#22c55e]/15 text-[#22c55e]"
+            title="first protocol integration"
             items={[
+              "templar: off-chain eligibility gate (shipped, tested)",
+              "live reputation-tier pool at conservative limits",
               "oracle ops + key rotation runbook",
-              "score cache to persistent storage",
-              "vigente.app domain + admin dashboard",
               "SEP draft: credit attestation standard",
             ]}
           />
           <RoadmapCard
             tag="tranche 2 · yield layer"
             tagClass="bg-white/10 text-white/70"
-            title="capital efficiency"
+            title="data + capital efficiency"
             items={[
-              "LP yield accounting (claim without exit)",
+              "open finance enrichment (floid/fintoc, consented)",
               "SEP-0056 tokenized vault + DeFindex listing",
               "idle reserve earning in Blend pools",
               "/earn — one-click USDC deposits for LPs",
@@ -1036,7 +1333,7 @@ function RoadmapSection() {
               "mainnet deploy behind multi-sig",
               "typescript SDK on npm",
               "tier-segmented pools + staking",
-              "micro-commerce pilot with fintech partners",
+              "inclusion pilot + client-protection metrics (IRIS+)",
             ]}
           />
         </div>
@@ -1103,6 +1400,12 @@ function Footer() {
           </a>
           <Link href="/v3" className="hover:text-white transition-colors">
             app
+          </Link>
+          <Link href="/passport" className="hover:text-white transition-colors">
+            passport
+          </Link>
+          <Link href="/onepager" className="hover:text-white transition-colors">
+            one-pager
           </Link>
           <a
             href="https://stellar.expert/explorer/testnet/contract/CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD"

@@ -1,0 +1,114 @@
+{
+  "generated_at": "2026-06-16T16:32:09.832Z",
+  "note": "Baseline snapshot. Impact KPIs are null until the pilot produces real, consented data — recorded honestly, never fabricated.",
+  "kpis": [
+    {
+      "key": "loi_signed",
+      "label": "Letters of intent signed",
+      "category": "gtm",
+      "baseline": 0,
+      "unit": "count",
+      "source": "outreach tracking (private)",
+      "target": ">= 1"
+    },
+    {
+      "key": "calls_booked",
+      "label": "Partner calls booked",
+      "category": "gtm",
+      "baseline": 0,
+      "unit": "count",
+      "source": "outreach tracking (private)",
+      "target": ">= 2"
+    },
+    {
+      "key": "read_latency_p50_ms",
+      "label": "get_score read latency (p50)",
+      "category": "integrability",
+      "baseline": null,
+      "unit": "ms",
+      "source": "simulation timing",
+      "target": "< 1500"
+    },
+    {
+      "key": "score_endpoint_uptime",
+      "label": "Score endpoint uptime",
+      "category": "integrability",
+      "baseline": null,
+      "unit": "ratio",
+      "source": "uptime monitor",
+      "target": ">= 0.99"
+    },
+    {
+      "key": "first_time_access_pct",
+      "label": "Users w/o prior credit history that obtain credit",
+      "category": "impact",
+      "baseline": null,
+      "unit": "percent",
+      "source": "partner KYC + score",
+      "target": "establish baseline"
+    },
+    {
+      "key": "cost_of_credit_delta",
+      "label": "Cost of credit before vs after (APR)",
+      "category": "impact",
+      "baseline": null,
+      "unit": "pp",
+      "source": "survey + pool data",
+      "target": "reduction"
+    },
+    {
+      "key": "real_default_rate",
+      "label": "Real default rate",
+      "category": "impact",
+      "baseline": 0,
+      "unit": "percent",
+      "source": "on-chain slash events",
+      "target": "track"
+    },
+    {
+      "key": "persistence_6m",
+      "label": "6-month usage persistence",
+      "category": "impact",
+      "baseline": null,
+      "unit": "percent",
+      "source": "on-chain cohorts",
+      "target": "establish baseline"
+    },
+    {
+      "key": "women_rural_pct",
+      "label": "Women / rural population included",
+      "category": "impact",
+      "baseline": null,
+      "unit": "percent",
+      "source": "consented demographics",
+      "target": "track (ODS 5/10)"
+    },
+    {
+      "key": "tests_green",
+      "label": "Test suites green",
+      "category": "quality",
+      "baseline": 1,
+      "unit": "bool",
+      "source": "CI (web + contracts)",
+      "target": "1"
+    },
+    {
+      "key": "dpia_done",
+      "label": "DPIA completed before real data",
+      "category": "quality",
+      "baseline": 0,
+      "unit": "bool",
+      "source": "docs/qms/DPIA_TEMPLATE.md",
+      "target": "1 before pilot"
+    },
+    {
+      "key": "cp7_channel_live",
+      "label": "Complaints channel (CP7) operational",
+      "category": "quality",
+      "baseline": 0,
+      "unit": "bool",
+      "source": "docs/qms/COMPLAINTS_CHANNEL.md",
+      "target": "1 before pilot"
+    }
+  ]
+}
