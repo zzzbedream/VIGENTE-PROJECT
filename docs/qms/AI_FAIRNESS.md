@@ -31,7 +31,7 @@ Ley 21.719 frente a decisiones automatizadas).
 El riesgo más grave (ver CP2).
 - **Mitigación:** topes de tier conservadores, first-loan throttle 10%, evaluación de
   capacidad de pago, default inmutable. Probado en `reference-vault` y reflejado en
-  `templar-adapter.ts`.
+  `eligibility-adapter.ts`.
 
 ### R5 — Uso de datos sensibles
 - **Mitigación:** DPIA obligatoria (Ley 21.719); minimización de datos; consentimiento

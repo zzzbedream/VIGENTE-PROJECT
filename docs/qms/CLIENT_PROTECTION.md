@@ -5,7 +5,7 @@ finanzas inclusivas responsables. A continuación, cada uno con **cómo se cumpl
 en Vigente hoy** y **qué falta**. Estado: 🟢 implementado · 🟡 parcial · 🔴 pendiente.
 
 > Vigente no presta directamente. Es la capa de score/atestación + una referencia
-> de política de crédito (reference-vault) que terceros (Templar, wallets) consumen.
+> de política de crédito (reference-vault) que terceros (protocolos de préstamo, wallets) consumen.
 > Por eso varios estándares se cumplen "por diseño de la primitiva" y otros se
 > trasladan como **requisitos contractuales** a los integradores.
 
@@ -23,7 +23,7 @@ Es el riesgo ético más grave: habilitar crédito subcolateralizado a no-bancar
 puede empujarlos a deuda impagable (patrón de las crisis de microfinanzas).
 
 - **Topes de tier conservadores**: Gold $2000 / Silver $500 / Bronze $100, probados
-  on-chain en `reference-vault` y replicados off-chain en `templar-adapter.ts`.
+  on-chain en `reference-vault` y replicados off-chain en `eligibility-adapter.ts`.
 - **First-loan throttle 10%**: un prestatario nuevo recibe como máximo el 10% del
   tope hasta su primer repago a tiempo (`test_first_loan_throttled_to_10pct_of_ceiling`).
 - **Default inmutable**: `is_defaulted` se chequea **primero** y sobrevive a la
