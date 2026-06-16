@@ -19,7 +19,7 @@ import {
   type HeatmapDay,
 } from "@/components/CreditHistoryHeatmap";
 import { verifyBadge } from "@/lib/stellar/vigente-contract";
-import type { BadgeState } from "@/lib/integrations/templar-adapter";
+import type { BadgeState } from "@/lib/integrations/eligibility-adapter";
 
 const PUBKEY_RE = /^G[A-Z2-7]{55}$/;
 

@@ -15,15 +15,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useWalletKit } from "@/contexts/WalletKitContext";
 import { getOracleStatus, type OracleStatus } from "@/lib/integrations/vigente-read";
 import { verifyBadge } from "@/lib/stellar/vigente-contract";
-import type { BadgeState } from "@/lib/integrations/templar-adapter";
+import type { BadgeState } from "@/lib/integrations/eligibility-adapter";
 
 const VIGENTE_GREEN = "#22c55e";
 const VIGENTE_NAVY = "#1e3a5f";
 
 const HERO_WORDS = [
   { text: "credit", style: "left-4 md:left-10 top-[18%]" },
-  { text: "without", style: "right-4 md:right-10 top-[38%]" },
-  { text: "permission", style: "left-[18%] md:left-[28%] top-[58%]" },
+  { text: "you", style: "right-4 md:right-10 top-[38%]" },
+  { text: "own", style: "left-[18%] md:left-[28%] top-[58%]" },
 ] as const;
 
 const NAV_LINKS = [
@@ -113,10 +113,10 @@ function Hero() {
         ))}
 
         <p className="absolute left-6 md:left-10 top-[44%] max-w-[300px] text-[15px] leading-snug text-white/90">
-          the credit layer stellar lending protocols read. any soroban market
-          underwrites borrower reputation through a k-of-n threshold oracle —
-          templar first — so unbanked latam earners turn on-chain history into
-          fair credit. zero fintech in the trust path.
+          a credit reputation you carry, not one a bank keeps. a k-of-n
+          threshold oracle on stellar soroban turns your on-chain history into
+          fair credit — portable, yours, signed by an independent quorum. zero
+          fintech in the trust path.
         </p>
 
         <StatBlock
@@ -843,7 +843,7 @@ function ArchCard({
 }
 
 const PIPELINE_STAGES = [
-  { title: "open finance", tag: "optional", note: "floid / fintoc · consented enrichment" },
+  { title: "open finance", tag: "optional", note: "consented bank-data enrichment" },
   { title: "scoring engine", tag: "off-chain", note: "horizon · 180d · zero fintech in trust path" },
   { title: "threshold oracle", tag: "off-chain", note: "k-of-n ed25519 · signs the mint" },
   { title: "badge SBT", tag: "on-chain", note: "soulbound · immutable defaults" },
@@ -1005,14 +1005,14 @@ function PartnersSection() {
         <div className="grid md:grid-cols-2 gap-6 mb-12">
           <PartnerCard
             track="layer 1 · lending protocols"
-            who="templar (first integrator), blend supply-side, soroswap-lend"
-            why="protocols read get_score / is_defaulted to open a reputation-tier pool. templar — like blend — uses a price oracle, so vigente gates eligibility off-chain at conservative, throttled limits (CP2). reference-vault is the on-chain reference any protocol can read directly."
+            who="soroban lending markets"
+            why="a protocol reads get_score / is_defaulted to open a reputation-tier pool. for price-oracle markets, vigente gates eligibility off-chain at conservative, throttled limits (CP2). reference-vault is the on-chain reference any protocol can read directly."
             cta="integrate vigente as credit layer"
             email="zzzbedream@gmail.com"
           />
           <PartnerCard
             track="data · open finance (optional enrichment)"
-            who="floid, fintoc — consented, chile-first"
+            who="open finance aggregators · chile-first"
             why="the core score reads only stellar horizon, so the trust path stays fintech-free. open finance is opt-in enrichment that adds detail to a thin-file borrower's profile — never a gate, never published on-chain."
             cta="partner on data"
             email="zzzbedream@gmail.com"
@@ -1286,8 +1286,7 @@ function RoadmapSection() {
         </p>
         <p className="text-[#22c55e] max-w-2xl mb-12 text-sm md:text-base">
           the wedge is layer 1: a live lending protocol reading the score in
-          production — templar first. distribution and the data layer compound
-          from there.
+          production. distribution and the data layer compound from there.
         </p>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -1308,7 +1307,7 @@ function RoadmapSection() {
             tagClass="bg-[#22c55e]/15 text-[#22c55e]"
             title="first protocol integration"
             items={[
-              "templar: off-chain eligibility gate (shipped, tested)",
+              "first lending-protocol integration (off-chain gate, tested)",
               "live reputation-tier pool at conservative limits",
               "oracle ops + key rotation runbook",
               "SEP draft: credit attestation standard",
@@ -1319,9 +1318,9 @@ function RoadmapSection() {
             tagClass="bg-white/10 text-white/70"
             title="data + capital efficiency"
             items={[
-              "open finance enrichment (floid/fintoc, consented)",
-              "SEP-0056 tokenized vault + DeFindex listing",
-              "idle reserve earning in Blend pools",
+              "open finance enrichment (consented bank data)",
+              "SEP-0056 tokenized vault + tokenized-vault listing",
+              "idle reserve earning yield in soroban pools",
               "/earn — one-click USDC deposits for LPs",
             ]}
           />

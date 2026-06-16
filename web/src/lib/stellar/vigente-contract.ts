@@ -11,7 +11,7 @@
  */
 
 import { getBadgeState } from "@/lib/integrations/vigente-read";
-import type { BadgeState } from "@/lib/integrations/templar-adapter";
+import type { BadgeState } from "@/lib/integrations/eligibility-adapter";
 
 export async function connectWallet(): Promise<string> {
   throw new Error("Client-side minting is disabled. Mint via /api/mint-v3.");

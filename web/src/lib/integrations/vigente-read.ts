@@ -10,10 +10,10 @@
  * This is the canonical reader used across the app (UI, /passport demo) and is
  * the off-chain twin of the cross-contract pattern in
  * `contracts/vigente-badge/INTERFACE.md` §3. It implements the `BadgeReader`
- * shape from `templar-adapter.ts`, so the eligibility gate composes directly:
+ * shape from `eligibility-adapter.ts`, so the eligibility gate composes directly:
  *
  *   const state = await readBadgeState(vigenteReader, borrower);
- *   const decision = evaluateTemplarEligibility(state, { requestedUsd });
+ *   const decision = evaluateEligibility(state, { requestedUsd });
  *
  * Network defaults to testnet + the live contract `CDLLO7QE…`; override via env
  * (`NEXT_PUBLIC_CONTRACT_ID_V3`, `NEXT_PUBLIC_RPC_URL`, `NEXT_PUBLIC_NETWORK_PASSPHRASE`).
@@ -31,7 +31,7 @@ import {
   scValToNative,
   xdr,
 } from "@stellar/stellar-sdk";
-import type { BadgeReader, BadgeState } from "./templar-adapter";
+import type { BadgeReader, BadgeState } from "./eligibility-adapter";
 
 export const VIGENTE_CONTRACT_ID =
   process.env.NEXT_PUBLIC_CONTRACT_ID_V3 ||
@@ -171,7 +171,7 @@ export async function getBadgeState(borrower: string): Promise<BadgeState> {
   return { score, isDefaulted: defaulted };
 }
 
-/** A `BadgeReader` (see templar-adapter) backed by the live contract. */
+/** A `BadgeReader` (see eligibility-adapter) backed by the live contract. */
 export const vigenteReader: BadgeReader = {
   getScore,
   isDefaulted,

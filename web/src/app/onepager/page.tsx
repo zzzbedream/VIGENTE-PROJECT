@@ -69,7 +69,7 @@ export default function OnePagerPage() {
               and see a real, portable credit history.
             </li>
             <li>
-              <b>Lending protocols</b> (Templar, Blend): gate a reputation-tier
+              <b>Lending protocols</b> (any Soroban market): gate a reputation-tier
               pool. For price-oracle protocols the eligibility gate runs off-chain
               at conservative, throttled limits.
             </li>
