@@ -8,8 +8,8 @@ metrics" (p. ej. "número de wallets creadas" sin uso).
 
 | Eslabón | Contenido |
 |---|---|
-| **Insumos** | Datos públicos de Horizon; Open Finance opcional consentido (Floid/Fintoc); modelo de scoring; contratos Soroban (badge + reference-vault); grant SCF; entidad legal chilena (PSBI o vía agregador habilitado). |
-| **Actividades** | Cálculo de score off-chain → atestación k-of-n on-chain (mint badge) → integración con protocolos (Templar) y wallets (Meru/LOBSTR). |
+| **Insumos** | Datos públicos de Horizon; Open Finance opcional consentido (agregador); modelo de scoring; contratos Soroban (badge + reference-vault); grant SCF; entidad legal chilena (PSBI o vía agregador habilitado). |
+| **Actividades** | Cálculo de score off-chain → atestación k-of-n on-chain (mint badge) → integración con protocolos de préstamo y wallets LATAM. |
 | **Productos (outputs)** | # scores generados · # atestaciones publicadas · # wallets/protocolos integrados. |
 | **Resultados (outcomes)** | # personas no-bancarizadas que acceden a crédito por **primera** vez · reducción de tasa pagada vs. alternativa informal · tasa de repago sostenida. |
 | **Impacto** | Inclusión financiera medible y sostenida; construcción de historial crediticio formal. |
@@ -56,10 +56,10 @@ El SCF advierte: "el grant es plataforma de lanzamiento, no plan de largo plazo"
 Modelos de monetización por viabilidad:
 
 1. **B2B SaaS / fee por consulta de score** (el más viable) — wallets, fintechs,
-   cooperativas pagan por consulta o suscripción. Mercado: wallets Stellar con Blend
-   integrado (Meru ~145K usuarios anuales, LOBSTR ~120K MAU) + fintechs LATAM.
+   cooperativas pagan por consulta o suscripción. Mercado: wallets Stellar con lending
+   integrado (cientos de miles de usuarios activos) + fintechs LATAM reguladas.
 2. **Revenue share con protocolos** — % del interés de créditos originados gracias
-   al score (p. ej. con Templar).
+   al score (p. ej. con un protocolo de préstamo).
 3. **Micro-fee on-chain por invocación** (modelo oráculo, tipo Reflector).
 
 Error a evitar: depender de emisiones de un token propio o de grants recurrentes.

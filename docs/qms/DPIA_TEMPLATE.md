@@ -9,7 +9,7 @@
 
 | Campo | Valor |
 |---|---|
-| Flujo de datos evaluado | _(p. ej. enriquecimiento Floid para piloto Templar)_ |
+| Flujo de datos evaluado | _(p. ej. enriquecimiento open finance para el piloto con un protocolo)_ |
 | Responsable del tratamiento | _(entidad legal chilena / PSBI)_ |
 | Encargado(s) | _(agregador Open Finance, hosting)_ |
 | Fecha / versión | _____ |

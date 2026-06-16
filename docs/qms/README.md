@@ -3,7 +3,7 @@
 Marco de calidad total para una startup de inclusión financiera responsable. No
 es marketing de impacto: son estándares verificables, controles operativos y
 gates por release. Construido para que un financiador (SCF, CAF, SDF) o un socio
-(Templar, Floid) pueda auditar que el proyecto protege al usuario final.
+(un protocolo de préstamo, un agregador de datos) pueda auditar que el proyecto protege al usuario final.
 
 ## Estructura
 
