@@ -3,8 +3,8 @@
 /**
  * Vigente — Credit Passport demo.
  *
- * The wallet-integration pitch surface (Meru / LOBSTR): "this is how a user's
- * Vigente credit reputation looks embedded in your wallet." It reuses the live
+ * The wallet-integration pitch surface: "this is how a user's Vigente credit
+ * reputation looks embedded in your wallet." It reuses the live
  * synthetic score API (/api/oracle/score-onchain) for the computed profile +
  * 180-day heat map, and the permissionless on-chain badge read
  * (verifyBadge → Interface v1) for the minted badge state.
@@ -13,11 +13,13 @@
  * would make to render a credit passport for their own users.
  */
 
+import Link from "next/link";
 import { useState } from "react";
 import {
   CreditHistoryHeatmap,
   type HeatmapDay,
 } from "@/components/CreditHistoryHeatmap";
+import { VigenteWordmark } from "@/components/VigenteLogo";
 import { verifyBadge } from "@/lib/stellar/vigente-contract";
 import type { BadgeState } from "@/lib/integrations/eligibility-adapter";
 
@@ -94,6 +96,9 @@ export default function PassportPage() {
       className="min-h-screen bg-[#050505] text-white antialiased px-6 md:px-12 py-16"
     >
       <div className="max-w-3xl mx-auto">
+        <Link href="/" className="inline-flex mb-8" aria-label="Vigente Protocol — inicio">
+          <VigenteWordmark />
+        </Link>
         <h1 className="text-3xl md:text-4xl font-medium tracking-tight mb-2">
           credit passport
         </h1>
