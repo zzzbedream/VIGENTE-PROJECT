@@ -1,78 +1,94 @@
 "use client";
 
 /**
- * Vigente Protocol — institutional landing (B2B, remittance reputation layer).
+ * Vigente Protocol — Landing page (Phase D refresh, wallet-kit aware).
  *
- * Direction: sober, high-trust, Stripe/Plaid-grade restraint on a premium dark
- * surface (slate-950) with an indigo/violet + gold accent drawn from the logo.
- * No neon, no generic 3D. Honest claims only: zkTLS is labeled as roadmap, and
- * there is no "award" claim — Vigente is an SCF applicant. The "live on-chain"
- * block reads the deployed contract in real time as the trust proof.
+ * Sections live in-page (not on GitHub): hero, evaluate, threshold sign,
+ * architecture, threat model, partnerships, live testnet evidence, footer.
+ * Top-right corner reads "vigente protocol" and a Stellar Wallets Kit
+ * connect pill — supports xBull, Albedo, Freighter, Rabet, WalletConnect,
+ * Lobstr, Hana, Hot Wallet, Klever via one modal.
  */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { VigenteLogo, VigenteWordmark } from "@/components/VigenteLogo";
+import { useEffect, useMemo, useState } from "react";
+import { useWalletKit } from "@/contexts/WalletKitContext";
 import { getOracleStatus, type OracleStatus } from "@/lib/integrations/vigente-read";
 import { verifyBadge } from "@/lib/stellar/vigente-contract";
 import type { BadgeState } from "@/lib/integrations/eligibility-adapter";
+import { VigenteLogo } from "@/components/VigenteLogo";
+
+const VIGENTE_GREEN = "#818cf8";
+const VIGENTE_NAVY = "#1e3a5f";
+
+const HERO_WORDS = [
+  { text: "credit", style: "left-4 md:left-10 top-[18%]" },
+  { text: "you", style: "right-4 md:right-10 top-[38%]" },
+  { text: "own", style: "left-[18%] md:left-[28%] top-[58%]" },
+] as const;
+
+const NAV_LINKS = [
+  { label: "protocol", href: "#protocol" },
+  { label: "architecture", href: "#architecture" },
+  { label: "live", href: "#live" },
+  { label: "threat model", href: "#threat-model" },
+  { label: "partners", href: "#partners" },
+  { label: "impact", href: "#impact" },
+  { label: "passport", href: "/passport" },
+] as const;
 
 const PUBKEY_RE = /^G[A-Z2-7]{55}$/;
-const GITHUB_URL = "https://github.com/zzzbedream/VIGENTE-PROJECT";
-const CONTRACT_ID = "CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD";
-const CONTACT_EMAIL = "zzzbedream@gmail.com";
+
+interface ScoreResponse {
+  features: {
+    account_age_days: number;
+    ops_evaluated: number;
+    capped: boolean;
+    total_volume_usd_equiv: number;
+    contract_volume_usd_equiv: number;
+    p2p_volume_usd_equiv: number;
+    adjusted_volume_usd_equiv: number;
+    ecosystem_payment_ratio: number | null;
+    asset_diversity: number;
+  };
+  score: {
+    totalScore: number;
+    badgeType: "Gold" | "Silver" | "Bronze" | "None";
+    breakdown: {
+      volumePoints: number;
+      consistencyPoints: number;
+      frequencyPoints: number;
+    };
+  };
+  latency_ms: number;
+  cache_hit: boolean;
+}
+
+const TIER_PILL: Record<string, string> = {
+  Gold: "bg-amber-400 text-black",
+  Silver: "bg-zinc-300 text-black",
+  Bronze: "bg-orange-600 text-white",
+  None: "bg-zinc-700 text-white",
+};
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-indigo-500/30">
-      <Nav />
+    <main
+      style={{ fontFamily: "var(--font-readex-pro), system-ui, sans-serif" }}
+      className="bg-[#050505] text-white antialiased"
+    >
       <Hero />
-      <TrustBar />
-      <ProblemSolution />
-      <UseCases />
-      <LiveOnChain />
+      <LiveOnchainStatus />
+      <ModuleEvaluate />
+      <ModuleThresholdSign />
+      <ArchitectureSection />
+      <ThreatModelSection />
+      <PartnersSection />
+      <ImpactSection />
+      <ModuleLiveTestnet />
+      <RoadmapSection />
       <Footer />
     </main>
-  );
-}
-
-// ===========================================================================
-// NAV
-// ===========================================================================
-
-const NAV_LINKS = [
-  { label: "Solución", href: "#solution" },
-  { label: "Casos de uso", href: "#use-cases" },
-  { label: "En vivo", href: "#live" },
-  { label: "Docs", href: GITHUB_URL },
-] as const;
-
-function Nav() {
-  return (
-    <header className="sticky top-0 z-50 border-b border-slate-900/80 bg-slate-950/80 backdrop-blur">
-      <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 md:px-8">
-        <Link href="/" aria-label="Vigente Protocol — inicio">
-          <VigenteWordmark />
-        </Link>
-        <div className="hidden items-center gap-8 md:flex">
-          {NAV_LINKS.map((l) => (
-            <a
-              key={l.label}
-              href={l.href}
-              className="text-sm text-slate-400 transition-colors hover:text-slate-100"
-            >
-              {l.label}
-            </a>
-          ))}
-        </div>
-        <a
-          href={`mailto:${CONTACT_EMAIL}?subject=Solicitud%20de%20Acceso%20API%20-%20Vigente%20Protocol`}
-          className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-400"
-        >
-          Solicitar Acceso API
-        </a>
-      </nav>
-    </header>
   );
 }
 
@@ -82,312 +98,169 @@ function Nav() {
 
 function Hero() {
   return (
-    <section className="relative overflow-hidden border-b border-slate-900">
-      <HeroBackdrop />
-      <div className="relative mx-auto max-w-6xl px-6 py-24 md:px-8 md:py-32">
-        <span className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 text-xs font-medium text-slate-300">
-          <VigenteLogo className="h-4 w-4" />
-          Reputation Layer for Remittances
-        </span>
+    <section className="relative h-screen w-full overflow-hidden bg-[#050505]">
+      <HeroBackground />
+      <HeroNav />
 
-        <h1 className="mt-6 max-w-3xl text-balance text-4xl font-semibold leading-[1.1] tracking-tight text-white md:text-6xl">
-          Transformando flujos de remesas en{" "}
-          <span className="bg-gradient-to-r from-indigo-300 to-violet-300 bg-clip-text text-transparent">
-            reputación crediticia on-chain
-          </span>
-        </h1>
+      <div className="relative h-full w-full">
+        {HERO_WORDS.map((w) => (
+          <h1
+            key={w.text}
+            className={`hero-title absolute text-white font-medium text-[14vw] md:text-[13vw] ${w.style}`}
+            style={{ letterSpacing: "-0.04em", lineHeight: 0.95 }}
+          >
+            {w.text}
+          </h1>
+        ))}
 
-        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-slate-400">
-          Vigente Protocol es la capa de infraestructura de atestación que permite
-          a las plataformas de microcrédito evaluar el riesgo de poblaciones no
-          bancarizadas de forma segura, sin fricciones y sin recolectar PII.
+        <p className="absolute left-6 md:left-10 top-[44%] max-w-[300px] text-[15px] leading-snug text-white/90">
+          a credit reputation you carry, not one a bank keeps. a k-of-n
+          threshold oracle on stellar soroban turns your on-chain history into
+          fair credit — portable, yours, signed by an independent quorum. zero
+          fintech in the trust path.
         </p>
 
-        <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-          <a
-            href={`mailto:${CONTACT_EMAIL}?subject=Solicitud%20de%20Acceso%20API%20-%20Vigente%20Protocol`}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition-colors hover:bg-indigo-400"
-          >
-            Solicitar Acceso API
-            <IconArrowRight className="h-4 w-4" />
-          </a>
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-6 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-900"
-          >
-            <IconFileText className="h-4 w-4" />
-            Leer Documentación Técnica
-          </a>
-        </div>
+        <StatBlock
+          position="absolute right-6 md:right-24 top-[14%]"
+          number="3 of 5"
+          label="ed25519 threshold sigs"
+          dividerRotation={20}
+          align="right"
+        />
+        <StatBlock
+          position="absolute left-6 md:left-20 bottom-20 md:bottom-24"
+          number="104"
+          label="tests green across the matrix"
+          dividerRotation={-20}
+          align="left"
+        />
+        <StatBlock
+          position="absolute right-6 md:right-20 bottom-16 md:bottom-20"
+          number="92 b"
+          label="canonical mint message"
+          dividerRotation={-20}
+          align="right"
+        />
       </div>
+
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-b from-transparent to-[#050505]" />
     </section>
   );
 }
 
-function HeroBackdrop() {
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      <div
-        className="absolute -top-40 left-1/2 h-[70vh] w-[60vw] -translate-x-1/2 rounded-full opacity-25 blur-[140px]"
-        style={{ background: "radial-gradient(circle, #4f46e5 0%, transparent 65%)" }}
-      />
-      <div
-        className="absolute inset-0 opacity-[0.04]"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px)",
-          backgroundSize: "64px 64px",
-          maskImage: "radial-gradient(ellipse at center, black 30%, transparent 75%)",
-        }}
-      />
-    </div>
-  );
-}
-
-// ===========================================================================
-// TRUST BAR — honest infrastructure claims (no award; zk labeled roadmap)
-// ===========================================================================
-
-const TRUST_ITEMS = [
-  { label: "Construido en Stellar", Icon: IconGlobe },
-  { label: "Impulsado por Soroban", Icon: IconCpu },
-  { label: "Atestación threshold k-of-n", Icon: IconShield },
-  { label: "zkTLS · en el roadmap", Icon: IconLock },
-] as const;
-
-function TrustBar() {
-  return (
-    <section className="border-b border-slate-900 bg-slate-950">
-      <div className="mx-auto max-w-6xl px-6 py-8 md:px-8">
-        <p className="mb-6 text-center text-xs uppercase tracking-widest text-slate-600">
-          Infraestructura que nos respalda
-        </p>
-        <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
-          {TRUST_ITEMS.map(({ label, Icon }) => (
-            <div
-              key={label}
-              className="flex items-center justify-center gap-2.5 text-slate-500"
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              <span className="text-sm font-medium">{label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ===========================================================================
-// PROBLEM / SOLUTION
-// ===========================================================================
-
-const BROKEN = [
-  "Remesas globales que mueven miles de millones, pero no dejan historial crediticio a quien las recibe.",
-  "Poblaciones no bancarizadas evaluadas con datos que no existen — o excluidas por defecto.",
-  "Tarifas altas y crédito informal porque no hay forma de probar capacidad de pago.",
-];
-
-const STANDARD = [
-  "Exportación criptográfica de recibos desde Web2 hacia Web3, sin mover los datos personales a la cadena.",
-  "Validación sin confianza: un quórum independiente k-of-n firma la atestación; nadie puede fabricarla.",
-  "Límite de crédito dinámico habilitado en segundos, legible por cualquier protocolo sin permiso.",
-];
-
-function ProblemSolution() {
-  return (
-    <section id="solution" className="border-b border-slate-900">
-      <div className="mx-auto max-w-6xl px-6 py-20 md:px-8 md:py-28">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
-            Del historial inexistente al nuevo estándar
-          </h2>
-          <p className="mt-4 text-slate-400">
-            La reputación financiera debe ser propiedad de la persona, portable y
-            verificable — no quedar encerrada en una institución.
-          </p>
-        </div>
-
-        <div className="mt-14 grid gap-6 md:grid-cols-2">
-          <Panel
-            tone="muted"
-            eyebrow="El sistema roto"
-            EyebrowIcon={IconAlert}
-            items={BROKEN}
-          />
-          <Panel
-            tone="accent"
-            eyebrow="El nuevo estándar"
-            EyebrowIcon={IconShield}
-            items={STANDARD}
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Panel({
-  tone,
-  eyebrow,
-  EyebrowIcon,
-  items,
+function StatBlock({
+  position,
+  number,
+  label,
+  dividerRotation,
+  align,
 }: {
-  tone: "muted" | "accent";
-  eyebrow: string;
-  EyebrowIcon: (p: { className?: string }) => React.ReactElement;
-  items: readonly string[];
+  position: string;
+  number: string;
+  label: string;
+  dividerRotation: number;
+  align: "left" | "right";
 }) {
-  const accent = tone === "accent";
-  return (
+  const divider = (
     <div
-      className={`rounded-2xl border p-7 ${
-        accent
-          ? "border-indigo-500/30 bg-indigo-500/[0.04]"
-          : "border-slate-800 bg-slate-900/40"
-      }`}
-    >
+      className="hidden md:block h-px w-24"
+      style={{
+        background: `${VIGENTE_GREEN}66`,
+        transform: `rotate(${dividerRotation}deg)`,
+      }}
+    />
+  );
+  return (
+    <div className={position}>
       <div
-        className={`mb-5 inline-flex items-center gap-2 text-sm font-semibold ${
-          accent ? "text-indigo-300" : "text-slate-400"
+        className={`flex items-center gap-3 ${
+          align === "right" ? "justify-end" : ""
         }`}
       >
-        <EyebrowIcon className="h-4 w-4" />
-        {eyebrow}
+        {align === "right" && divider}
+        <span className="text-4xl md:text-5xl font-medium tracking-tight">
+          {number}
+        </span>
+        {align === "left" && divider}
       </div>
-      <ul className="space-y-4">
-        {items.map((it) => (
-          <li key={it} className="flex gap-3 text-[15px] leading-relaxed text-slate-300">
-            <span className={accent ? "text-amber-400" : "text-slate-600"}>
-              {accent ? <IconCheck className="mt-0.5 h-4 w-4" /> : <IconDot className="mt-0.5 h-4 w-4" />}
-            </span>
-            <span>{it}</span>
-          </li>
-        ))}
-      </ul>
+      <div
+        className={`text-xs md:text-sm text-white/70 mt-1 ${
+          align === "right" ? "text-right" : ""
+        }`}
+      >
+        {label}
+      </div>
     </div>
   );
 }
 
 // ===========================================================================
-// USE CASES
+// LIVE ON-CHAIN STATUS — reads the contract's oracle config live, plus an
+// inline badge lookup. This is the proof the landing is genuinely on-chain
+// right now, not a set of hardcoded numbers.
 // ===========================================================================
 
-const USE_CASES = [
-  {
-    Icon: IconLayers,
-    title: "Plataformas de microcrédito",
-    body: "Expansión del mercado hacia el sector sub-bancarizado con mitigación algorítmica de riesgo. Lee un score verificable on-chain y abre crédito a quien antes era invisible — con límites conservadores y protección al cliente incorporada.",
-    points: ["Underwriting sin construir un bureau", "Límites y throttle anti-sobreendeudamiento", "Sin recolectar PII del solicitante"],
-  },
-  {
-    Icon: IconZap,
-    title: "Protocolos de liquidez DeFi",
-    body: "Delegación de crédito y suscripción de riesgo basada en RWA formales. Un pool de reputación gateado por Vigente amplía el mercado direccionable más allá del colateral, manteniendo el control del riesgo.",
-    points: ["Lectura permissionless: get_score / is_defaulted", "Defaults inmutables on-chain", "Integración sin token, sin cambiar el stack"],
-  },
-] as const;
+const PASSPORT_SAMPLE = "GBV676BNXDPVZDLUAB6O7DHWUIS42OTIWI5MIKCFJOWMJWTVKQNXFWCM";
 
-function UseCases() {
-  return (
-    <section id="use-cases" className="border-b border-slate-900">
-      <div className="mx-auto max-w-6xl px-6 py-20 md:px-8 md:py-28">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
-            Construido para integradores institucionales
-          </h2>
-          <p className="mt-4 text-slate-400">
-            Vigente es la capa de crédito que otros protocolos leen — no otra app
-            de préstamo.
-          </p>
-        </div>
-
-        <div className="mt-14 grid gap-6 md:grid-cols-2">
-          {USE_CASES.map((uc) => (
-            <div
-              key={uc.title}
-              className="group rounded-2xl border border-slate-800 bg-slate-900/40 p-8 transition-colors hover:border-slate-700"
-            >
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-300">
-                <uc.Icon className="h-5 w-5" />
-              </div>
-              <h3 className="mt-5 text-xl font-semibold text-white">{uc.title}</h3>
-              <p className="mt-3 text-[15px] leading-relaxed text-slate-400">{uc.body}</p>
-              <ul className="mt-5 space-y-2.5">
-                {uc.points.map((p) => (
-                  <li key={p} className="flex items-center gap-2.5 text-sm text-slate-300">
-                    <IconCheck className="h-4 w-4 shrink-0 text-amber-400" />
-                    {p}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ===========================================================================
-// LIVE ON-CHAIN — the trust proof (reads the deployed contract in real time)
-// ===========================================================================
-
-function LiveOnChain() {
+function LiveOnchainStatus() {
   const [status, setStatus] = useState<OracleStatus | null>(null);
+  const [statusError, setStatusError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     getOracleStatus()
       .then((s) => !cancelled && setStatus(s))
-      .catch(() => {});
+      .catch(() => !cancelled && setStatusError(true));
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const live = status !== null;
+  // Fallback to the documented config if the live read is slow/unavailable, so
+  // the section never renders empty.
   const k = status?.threshold ?? 3;
   const n = status?.keyCount ?? 5;
+  const minAge = status?.minWalletAgeDays;
+  const live = status !== null && !statusError;
 
   return (
-    <section id="live" className="border-b border-slate-900">
-      <div className="mx-auto max-w-6xl px-6 py-20 md:px-8 md:py-28">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <span
-                className={`h-2 w-2 rounded-full ${live ? "animate-pulse bg-emerald-400" : "bg-slate-600"}`}
-              />
-              <span className="text-xs uppercase tracking-widest text-slate-500">
-                {live ? "Leído del contrato ahora" : "Conectando…"}
-              </span>
-            </div>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white md:text-4xl">
-              Verificable on-chain, hoy
-            </h2>
-          </div>
-          <a
-            href={`https://stellar.expert/explorer/testnet/contract/${CONTRACT_ID}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-indigo-300 transition-colors hover:text-indigo-200"
-          >
-            Ver el contrato en stellar.expert →
-          </a>
+    <section
+      id="live"
+      className="border-t border-white/5 py-20 md:py-28 px-6 md:px-12"
+    >
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center gap-3 mb-8">
+          <span
+            className={`h-2 w-2 rounded-full ${
+              live ? "bg-[#818cf8] animate-pulse" : "bg-white/30"
+            }`}
+          />
+          <h2 className="text-2xl md:text-4xl font-medium tracking-tight">
+            live on-chain
+          </h2>
+          <span className="text-xs text-white/40">
+            {live ? "read from the contract just now" : "reading…"}
+          </span>
         </div>
 
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <LiveStat label="Umbral de firmas" value={`${k} de ${n}`} sub="quórum ed25519" />
-          <LiveStat label="Claves del oráculo" value={`${n}`} sub="firmantes independientes" />
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+          <LiveStat label="threshold" value={`${k} of ${n}`} sub="ed25519 quorum" />
           <LiveStat
-            label="Edad mínima de cuenta"
-            value={status ? `${status.minWalletAgeDays}d` : "—"}
-            sub="control anti-Sybil"
+            label="oracle keys"
+            value={`${n}`}
+            sub="independent signers"
           />
-          <LiveStat label="Red" value="Testnet" sub="mainnet en el roadmap" />
+          <LiveStat
+            label="wallet age floor"
+            value={minAge != null ? `${minAge}d` : "—"}
+            sub="anti-sybil mint gate"
+          />
+          <LiveStat
+            label="contract"
+            value={`${VIGENTE_CONTRACT_ID_SHORT}`}
+            sub="testnet · soroban"
+            href={`https://stellar.expert/explorer/testnet/contract/${status?.contractId ?? ""}`}
+          />
         </div>
 
         <BadgeLookup />
@@ -396,14 +269,36 @@ function LiveOnChain() {
   );
 }
 
-function LiveStat({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
-      <div className="text-xs uppercase tracking-wider text-slate-500">{label}</div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight text-white">{value}</div>
-      <div className="mt-1 text-xs text-slate-500">{sub}</div>
+const VIGENTE_CONTRACT_ID_SHORT = "CDLLO7QE…";
+
+function LiveStat({
+  label,
+  value,
+  sub,
+  href,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  href?: string;
+}) {
+  const inner = (
+    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-5 h-full">
+      <div className="text-[10px] uppercase tracking-wider text-white/40 mb-2">
+        {label}
+      </div>
+      <div className="text-2xl font-medium text-white tracking-tight">{value}</div>
+      <div className="text-xs text-white/40 mt-1">{sub}</div>
     </div>
   );
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="block hover:border-[#818cf8]/40">
+        {inner}
+      </a>
+    );
+  }
+  return inner;
 }
 
 function BadgeLookup() {
@@ -411,12 +306,13 @@ function BadgeLookup() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BadgeState | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const isValid = PUBKEY_RE.test(pubkey.trim());
 
   async function lookup() {
     const addr = pubkey.trim();
     if (!PUBKEY_RE.test(addr)) {
-      setError("Ingresa una clave pública válida (G…)");
+      setError("enter a valid G… public key");
       return;
     }
     setLoading(true);
@@ -425,52 +321,74 @@ function BadgeLookup() {
     try {
       setResult(await verifyBadge(addr));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Lectura fallida");
+      setError(e instanceof Error ? e.message : "lookup failed");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
-      <div className="mb-4">
-        <div className="text-sm font-semibold text-white">Lee una atestación en vivo</div>
-        <div className="text-xs text-slate-500">
-          get_score / is_defaulted — permissionless, sin wallet ni firma
+    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+        <div>
+          <div className="text-sm font-medium text-white">read a live badge</div>
+          <div className="text-xs text-white/40">
+            permissionless get_score / is_defaulted — no wallet, no signature
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setPubkey(PASSPORT_SAMPLE)}
+          className="self-start md:self-auto text-xs text-white/50 hover:text-[#818cf8] transition-colors"
+        >
+          use a sample address
+        </button>
       </div>
-      <div className="flex flex-col gap-3 sm:flex-row">
+
+      <div className="flex flex-col sm:flex-row gap-3">
         <input
           value={pubkey}
           onChange={(e) => setPubkey(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && lookup()}
-          placeholder="G… clave pública de Stellar"
+          placeholder="G… stellar public key"
           spellCheck={false}
-          className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-indigo-500/60"
+          className="flex-1 bg-[#050505] border border-white/10 rounded-lg px-4 py-3 text-sm font-mono outline-none focus:border-[#818cf8]/60"
         />
         <button
           type="button"
           onClick={lookup}
           disabled={loading || !isValid}
-          className="rounded-lg bg-indigo-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
+          className="bg-[#818cf8] hover:bg-[#a5b4fc] disabled:opacity-40 disabled:cursor-not-allowed text-[#050505] font-medium text-sm rounded-lg px-6 py-3 transition-colors"
         >
-          {loading ? "Leyendo…" : "Leer"}
+          {loading ? "reading…" : "read"}
         </button>
       </div>
-      {error && <div className="mt-3 text-sm text-rose-400">{error}</div>}
+
+      {error && <div className="text-red-400 text-sm mt-3">{error}</div>}
+
       {result && (
-        <div className="mt-5 flex flex-wrap items-center gap-8 border-t border-slate-800 pt-5">
-          <Readout label="Score" value={result.score != null ? `${result.score}/1000` : "sin badge"} />
-          <Readout
-            label="Default"
-            value={result.isDefaulted ? "sí" : "no"}
-            tone={result.isDefaulted ? "bad" : "good"}
-          />
+        <div className="flex flex-wrap items-center gap-6 mt-4 pt-4 border-t border-white/5">
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-white/40">score</div>
+            <div className="text-xl font-medium text-white">
+              {result.score != null ? `${result.score}/1000` : "no badge"}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-white/40">default</div>
+            <div
+              className={`text-xl font-medium ${
+                result.isDefaulted ? "text-red-400" : "text-[#818cf8]"
+              }`}
+            >
+              {result.isDefaulted ? "yes" : "no"}
+            </div>
+          </div>
           <Link
             href="/passport"
-            className="ml-auto text-sm text-indigo-300 transition-colors hover:text-indigo-200"
+            className="ml-auto text-sm text-[#818cf8] hover:text-[#a5b4fc] transition-colors"
           >
-            Pasaporte crediticio completo →
+            full credit passport →
           </Link>
         </div>
       )}
@@ -478,244 +396,1011 @@ function BadgeLookup() {
   );
 }
 
-function Readout({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
-  const color = tone === "bad" ? "text-rose-400" : tone === "good" ? "text-emerald-400" : "text-white";
+function HeroBackground() {
   return (
-    <div>
-      <div className="text-xs uppercase tracking-wider text-slate-500">{label}</div>
-      <div className={`text-xl font-semibold ${color}`}>{value}</div>
+    <div className="absolute inset-0 overflow-hidden">
+      <div
+        className="absolute -top-1/4 left-1/4 h-[120vh] w-[80vw] rounded-full opacity-30 blur-[160px]"
+        style={{
+          background: `radial-gradient(circle, ${VIGENTE_NAVY} 0%, transparent 60%)`,
+        }}
+      />
+      <div
+        className="absolute bottom-0 right-0 h-[80vh] w-[60vw] rounded-full opacity-20 blur-[140px]"
+        style={{
+          background: `radial-gradient(circle, ${VIGENTE_GREEN} 0%, transparent 60%)`,
+        }}
+      />
+      <div
+        className="absolute inset-0 opacity-[0.08]"
+        style={{
+          backgroundImage:
+            "linear-gradient(to right, rgba(255,255,255,0.4) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.4) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+    </div>
+  );
+}
+
+function HeroNav() {
+  return (
+    <nav className="absolute z-20 top-0 left-0 right-0 px-6 md:px-10 pt-6 flex items-center justify-between gap-4">
+      {/* Left pill: brand mark */}
+      <div className="flex items-center gap-2 bg-[#0d0f11]/90 backdrop-blur border border-white/5 rounded-full pl-4 pr-6 py-3">
+        <BrandMark />
+        <span className="text-white text-sm font-normal tracking-tight">
+          vigente
+        </span>
+      </div>
+
+      {/* Center pill: internal anchors */}
+      <div className="hidden md:flex items-center gap-1 bg-[#0d0f11]/90 backdrop-blur border border-white/5 rounded-full px-3 py-2">
+        {NAV_LINKS.map((l) => (
+          <a
+            key={l.label}
+            href={l.href}
+            className="text-neutral-300 hover:text-[#818cf8] transition-colors text-sm px-5 py-2 rounded-full"
+          >
+            {l.label}
+          </a>
+        ))}
+      </div>
+
+      {/* Right: brand tag + wallet pill */}
+      <div className="flex items-center gap-3">
+        <span className="hidden md:inline text-white/80 text-sm font-medium tracking-tight">
+          vigente protocol
+        </span>
+        <ConnectWalletPill />
+      </div>
+    </nav>
+  );
+}
+
+function ConnectWalletPill() {
+  const { address, connect, disconnect, connecting } = useWalletKit();
+  const short = address
+    ? `${address.slice(0, 4)}…${address.slice(-4)}`
+    : null;
+
+  if (address) {
+    return (
+      <div className="flex items-center gap-2 bg-[#0d0f11]/90 backdrop-blur border border-[#818cf8]/40 rounded-full pl-3 pr-2 py-2">
+        <span className="w-2 h-2 rounded-full bg-[#818cf8]" />
+        <span className="text-[#818cf8] text-xs font-mono">{short}</span>
+        <button
+          onClick={() => disconnect()}
+          className="ml-1 text-white/60 hover:text-white text-xs px-2 py-1 rounded-full hover:bg-white/5 transition-colors"
+        >
+          disconnect
+        </button>
+      </div>
+    );
+  }
+  return (
+    <button
+      onClick={() => connect()}
+      disabled={connecting}
+      className="bg-[#818cf8] text-[#050505] text-sm font-medium rounded-full px-6 py-3 hover:bg-[#a5b4fc] transition-colors disabled:opacity-60"
+    >
+      {connecting ? "connecting…" : "connect wallet"}
+    </button>
+  );
+}
+
+function BrandMark() {
+  return <VigenteLogo className="h-5 w-5" />;
+}
+
+// ===========================================================================
+// MODULE 1 — evaluate any stellar address (wallet-aware)
+// ===========================================================================
+
+function ModuleEvaluate() {
+  const { address: connectedAddress } = useWalletKit();
+  const [pubkey, setPubkey] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<ScoreResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const effective = pubkey.trim() || connectedAddress || "";
+  const valid = useMemo(() => PUBKEY_RE.test(effective), [effective]);
+
+  async function evaluate() {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    try {
+      const r = await fetch(
+        `/api/oracle/score-onchain?pubkey=${encodeURIComponent(effective)}`,
+      );
+      const j = (await r.json()) as ScoreResponse | { error: string };
+      if (!r.ok || "error" in j) {
+        throw new Error("error" in j ? j.error : `HTTP ${r.status}`);
+      }
+      setData(j);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section
+      id="protocol"
+      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
+    >
+      <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-12">
+        <div className="md:col-span-2">
+          <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+            evaluate any stellar address
+          </h2>
+          <p className="text-white/70 max-w-xl mb-8 text-base md:text-lg">
+            real horizon read, 180-day window, p2p churn discounted 70%. no
+            signup, no fintech credentials. paste any G-address or connect a
+            wallet up top to auto-fill.
+          </p>
+
+          {connectedAddress && (
+            <div className="mb-4 text-xs text-white/60">
+              wallet connected ·{" "}
+              <span className="font-mono text-[#818cf8]">
+                {connectedAddress.slice(0, 8)}…{connectedAddress.slice(-6)}
+              </span>{" "}
+              (auto-filled below)
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
+            <input
+              type="text"
+              value={pubkey || connectedAddress || ""}
+              onChange={(e) => setPubkey(e.target.value)}
+              placeholder="GBV676BN..."
+              className="flex-1 px-4 py-3 rounded-lg bg-[#0d0f11] border border-white/10 focus:border-[#818cf8] outline-none text-white placeholder-white/30 font-mono text-sm"
+            />
+            <button
+              onClick={evaluate}
+              disabled={!valid || loading}
+              className="px-6 py-3 rounded-lg bg-[#818cf8] hover:bg-[#a5b4fc] disabled:bg-white/10 disabled:text-white/40 text-[#050505] font-medium text-sm transition-colors"
+            >
+              {loading ? "evaluating…" : "evaluate"}
+            </button>
+          </div>
+          {effective.length > 0 && !valid && (
+            <p className="text-rose-400 text-sm mt-2">
+              format must be G + 55 base32 characters.
+            </p>
+          )}
+          {error && <p className="text-rose-400 text-sm mt-2">{error}</p>}
+        </div>
+
+        <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 min-h-[320px] flex flex-col gap-4">
+          {!data && !loading && (
+            <div className="text-white/40 text-sm flex-1 flex items-center justify-center">
+              run an evaluation to see live features
+            </div>
+          )}
+          {loading && (
+            <div className="text-white/60 text-sm flex-1 flex items-center justify-center">
+              calling horizon + scoring engine…
+            </div>
+          )}
+          {data && (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-xs uppercase tracking-wider">
+                  tier
+                </span>
+                <span
+                  className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    TIER_PILL[data.score.badgeType]
+                  }`}
+                >
+                  {data.score.badgeType}
+                </span>
+              </div>
+              <Row label="total score" value={`${data.score.totalScore} / 100`} />
+              <Row
+                label="account age"
+                value={`${data.features.account_age_days} d`}
+              />
+              <Row
+                label="ops evaluated"
+                value={`${data.features.ops_evaluated}${
+                  data.features.capped ? " (capped)" : ""
+                }`}
+              />
+              <Row
+                label="total volume"
+                value={`$${data.features.total_volume_usd_equiv.toFixed(2)}`}
+              />
+              <Row
+                label="ecosystem"
+                value={`$${data.features.contract_volume_usd_equiv.toFixed(2)}`}
+              />
+              <Row
+                label="p2p (penalized)"
+                value={`$${data.features.p2p_volume_usd_equiv.toFixed(2)}`}
+              />
+              <Row
+                label="adjusted volume"
+                value={`$${data.features.adjusted_volume_usd_equiv.toFixed(2)}`}
+              />
+              <div className="text-[10px] text-white/30 text-right pt-2">
+                {data.latency_ms} ms{data.cache_hit ? " · cache hit" : ""}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between text-sm">
+      <span className="text-white/60">{label}</span>
+      <span className="font-mono text-white">{value}</span>
     </div>
   );
 }
 
 // ===========================================================================
-// FOOTER
+// MODULE 2 — watch the threshold sign
 // ===========================================================================
 
-const FOOTER_COLS = [
+function ModuleThresholdSign() {
+  const SIGNING_INDICES = [0, 1, 2];
+  const ORACLES = [0, 1, 2, 3, 4];
+
+  return (
+    <section className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12 bg-gradient-to-b from-transparent via-[#818cf8]/[0.02] to-transparent">
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+          watch the threshold sign
+        </h2>
+        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
+          every mint requires k of n independent oracle signatures over the
+          canonical 92-byte message. no single party can authorise alone.
+        </p>
+
+        <div className="flex items-center justify-center gap-6 md:gap-12 mb-16 flex-wrap">
+          {ORACLES.map((i) => {
+            const signing = SIGNING_INDICES.includes(i);
+            return (
+              <div key={i} className="flex flex-col items-center gap-2">
+                <div
+                  className={`w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center border-2 transition-colors ${
+                    signing
+                      ? "border-[#818cf8] bg-[#818cf8]/10"
+                      : "border-white/10 bg-white/5"
+                  }`}
+                >
+                  {signing ? (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#818cf8"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="w-8 h-8"
+                    >
+                      <polyline points="4 13 10 19 20 6" />
+                    </svg>
+                  ) : (
+                    <span className="text-white/30 text-xs uppercase">
+                      idle
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-white/60 font-mono">
+                  oracle&nbsp;{i}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 max-w-4xl mx-auto">
+          <div className="text-xs uppercase tracking-wider text-white/40 mb-3">
+            canonical signed message — 92 bytes
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-mono">
+            <Chunk label="borrower xdr (44)" color="#1e3a5f" />
+            <Chunk label="score u32 (4)" color="#818cf8" />
+            <Chunk label="expiration u64 (8)" color="#818cf8" />
+            <Chunk label="age_days u32 (4)" color="#818cf8" />
+            <Chunk label="nonce (32)" color="#a5b4fc" />
+          </div>
+          <div className="mt-4 text-xs text-white/50 leading-relaxed">
+            each oracle signs the same byte sequence with ed25519. the contract
+            calls{" "}
+            <code className="text-[#818cf8]">env.crypto().ed25519_verify</code>{" "}
+            k times. fewer than k valid signatures, a duplicated oracle index,
+            or any single tampered byte rejects the mint at simulation — no
+            ledger pollution, no gas spent.
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Chunk({ label, color }: { label: string; color: string }) {
+  return (
+    <span
+      className="px-3 py-1.5 rounded border"
+      style={{
+        borderColor: `${color}66`,
+        background: `${color}1a`,
+        color: "white",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+// ===========================================================================
+// ARCHITECTURE SECTION (lives on the page, not on GitHub)
+// ===========================================================================
+
+function ArchitectureSection() {
+  return (
+    <section
+      id="architecture"
+      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
+    >
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+          architecture
+        </h2>
+        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
+          three components, each independently verifiable. nothing in the trust
+          path is owned by a single party.
+        </p>
+
+        <div className="grid md:grid-cols-3 gap-6 mb-12">
+          <ArchCard
+            step="1"
+            title="synthetic scoring engine"
+            body="off-chain reader of stellar horizon. 180-day window, 200-op cap. p2p churn discounted 70% against an ecosystem whitelist. zero fintech dependency."
+            tag="off-chain"
+          />
+          <ArchCard
+            step="2"
+            title="threshold oracle quorum"
+            body="five independent ed25519 keypairs. three signatures required. each signs the canonical 92-byte mint message. tampering one byte breaks all signatures."
+            tag="off-chain"
+          />
+          <ArchCard
+            step="3"
+            title="soroban contracts"
+            body="vigente-badge (soulbound credit token, threshold-verified mint, immutable slash) + reference-vault (credit-gated lending with TVL cap, util limit, withdrawal timelock)."
+            tag="on-chain"
+          />
+        </div>
+
+        <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 md:p-8">
+          <div className="text-xs uppercase tracking-wider text-white/40 mb-6">
+            the road ahead — the pipeline
+          </div>
+          <PipelineInfographic />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ArchCard({
+  step,
+  title,
+  body,
+  tag,
+}: {
+  step: string;
+  title: string;
+  body: string;
+  tag: string;
+}) {
+  return (
+    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span className="text-3xl font-medium text-white/30 tracking-tight">
+          {step}
+        </span>
+        <span
+          className="text-[10px] uppercase tracking-wider px-2 py-1 rounded"
+          style={{ background: `${VIGENTE_NAVY}55`, color: "#cbd5e1" }}
+        >
+          {tag}
+        </span>
+      </div>
+      <h3 className="text-lg font-medium text-white">{title}</h3>
+      <p className="text-sm text-white/60 leading-relaxed">{body}</p>
+    </div>
+  );
+}
+
+const PIPELINE_STAGES = [
+  { title: "open finance", tag: "optional", note: "consented bank-data enrichment" },
+  { title: "scoring engine", tag: "off-chain", note: "horizon · 180d · zero fintech in trust path" },
+  { title: "threshold oracle", tag: "off-chain", note: "k-of-n ed25519 · signs the mint" },
+  { title: "badge SBT", tag: "on-chain", note: "soulbound · immutable defaults" },
+  { title: "consumers", tag: "read", note: "wallets · lending protocols" },
+  { title: "inclusion", tag: "impact", note: "first-time credit · measured (IRIS+)" },
+] as const;
+
+const PIPELINE_TAG_COLOR: Record<string, string> = {
+  optional: "bg-white/10 text-white/50",
+  "off-chain": "bg-[#1e3a5f]/50 text-slate-300",
+  "on-chain": "bg-[#818cf8]/15 text-[#818cf8]",
+  read: "bg-[#1e3a5f]/50 text-slate-300",
+  impact: "bg-amber-400/15 text-amber-300",
+};
+
+function PipelineInfographic() {
+  return (
+    <div className="flex flex-col md:flex-row md:items-stretch gap-2">
+      {PIPELINE_STAGES.map((s, i) => (
+        <div key={s.title} className="flex flex-col md:flex-row md:items-stretch gap-2 md:flex-1">
+          <div className="flex-1 bg-[#050505] border border-white/5 rounded-lg p-4 flex flex-col gap-2">
+            <span
+              className={`self-start text-[9px] uppercase tracking-wider rounded-full px-2 py-0.5 ${
+                PIPELINE_TAG_COLOR[s.tag]
+              }`}
+            >
+              {s.tag}
+            </span>
+            <div className="text-sm font-medium text-white">{s.title}</div>
+            <div className="text-[11px] text-white/40 leading-snug">{s.note}</div>
+          </div>
+          {i < PIPELINE_STAGES.length - 1 && (
+            <div className="flex items-center justify-center text-[#818cf8]/60 shrink-0 rotate-90 md:rotate-0">
+              →
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ===========================================================================
+// THREAT MODEL SECTION (lives on the page, not on GitHub)
+// ===========================================================================
+
+const THREATS = [
   {
-    title: "Producto",
-    links: [
-      { label: "Solución", href: "#solution" },
-      { label: "Casos de uso", href: "#use-cases" },
-      { label: "Pasaporte crediticio", href: "/passport" },
-      { label: "App", href: "/v3" },
-    ],
+    vector: "carousel / wash trading",
+    mitigation:
+      "ecosystem whitelist + 70% penalty on p2p volume, monthly bins and effective tx count",
+    status: "shipped",
   },
   {
-    title: "Desarrolladores",
-    links: [
-      { label: "Documentación", href: GITHUB_URL },
-      { label: "GitHub", href: GITHUB_URL },
-      { label: "Contrato (testnet)", href: `https://stellar.expert/explorer/testnet/contract/${CONTRACT_ID}` },
-    ],
+    vector: "sybil bot farms",
+    mitigation:
+      "30-day wallet age floor folded into the signed mint message; tampered age breaks all sigs",
+    status: "shipped",
+  },
+  {
+    vector: "long-con default",
+    mitigation:
+      "credit ladder: first loan = 10% of tier ceiling; full cap unlocked only after first successful repay",
+    status: "shipped",
+  },
+  {
+    vector: "vault drainage / unbounded exposure",
+    mitigation:
+      "admin circuit breaker + TVL cap + 85% utilization rail (15% always liquid for LPs)",
+    status: "shipped",
+  },
+  {
+    vector: "centralized oracle compromise",
+    mitigation:
+      "k-of-n ed25519 verification on-chain; anti-replay nonce stored per-mint",
+    status: "shipped",
+  },
+  {
+    vector: "LP bank run",
+    mitigation:
+      "14-day withdrawal timelock + utilization floor — no single LP can drain on rumor alone",
+    status: "shipped",
   },
 ] as const;
 
-function Footer() {
+function ThreatModelSection() {
   return (
-    <footer className="bg-slate-950">
-      <div className="mx-auto max-w-6xl px-6 py-16 md:px-8">
-        <div className="grid gap-10 md:grid-cols-4">
-          <div className="md:col-span-2">
-            <VigenteWordmark />
-            <p className="mt-4 max-w-xs text-sm leading-relaxed text-slate-500">
-              La capa de reputación crediticia para remesas. Construida en Stellar
-              Soroban, verificable on-chain.
-            </p>
-            <div className="mt-5 flex items-center gap-3">
-              <SocialLink href={GITHUB_URL} label="GitHub"><IconGithub className="h-4 w-4" /></SocialLink>
-              <SocialLink href="https://x.com" label="X"><IconX className="h-4 w-4" /></SocialLink>
-              <SocialLink href="https://linkedin.com" label="LinkedIn"><IconLinkedin className="h-4 w-4" /></SocialLink>
-            </div>
+    <section
+      id="threat-model"
+      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
+    >
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+          threat model
+        </h2>
+        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
+          six adversarial scenarios. each one has a code-level mitigation that
+          ships in the current testnet contracts.
+        </p>
+
+        <div className="bg-[#0d0f11] border border-white/5 rounded-xl overflow-hidden">
+          <div className="grid grid-cols-12 px-4 md:px-6 py-3 text-[10px] md:text-xs uppercase tracking-wider text-white/40 border-b border-white/5">
+            <div className="col-span-4 md:col-span-3">vector</div>
+            <div className="col-span-6 md:col-span-7">mitigation</div>
+            <div className="col-span-2 text-right">status</div>
           </div>
-          {FOOTER_COLS.map((col) => (
-            <div key={col.title}>
-              <div className="text-sm font-semibold text-slate-300">{col.title}</div>
-              <ul className="mt-4 space-y-3">
-                {col.links.map((l) => (
-                  <li key={l.label}>
-                    <a
-                      href={l.href}
-                      className="text-sm text-slate-500 transition-colors hover:text-slate-200"
-                    >
-                      {l.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
+          {THREATS.map((t, i) => (
+            <div
+              key={t.vector}
+              className={`grid grid-cols-12 px-4 md:px-6 py-4 text-sm ${
+                i % 2 === 1 ? "bg-white/[0.015]" : ""
+              }`}
+            >
+              <div className="col-span-4 md:col-span-3 text-white font-medium">
+                {t.vector}
+              </div>
+              <div className="col-span-6 md:col-span-7 text-white/70 leading-relaxed">
+                {t.mitigation}
+              </div>
+              <div className="col-span-2 text-right">
+                <span className="inline-block text-[10px] uppercase tracking-wider px-2 py-1 rounded bg-[#818cf8]/15 text-[#818cf8]">
+                  {t.status}
+                </span>
+              </div>
             </div>
           ))}
         </div>
 
-        <div className="mt-14 border-t border-slate-900 pt-8">
-          <p className="text-xs leading-relaxed text-slate-600">
-            Vigente Protocol es infraestructura experimental desplegada en la red de
-            pruebas (testnet) de Stellar. La información de este sitio es para fines
-            informativos y no constituye asesoría financiera, legal ni de inversión, ni
-            una oferta de crédito. Las funciones de conocimiento cero (zkTLS) y el
-            despliegue en mainnet forman parte del roadmap y aún no están en producción.
-            Vigente no recolecta información de identificación personal (PII) ni opera
-            rampas fiduciarias.
-          </p>
-          <p className="mt-4 text-xs text-slate-700">
-            © {new Date().getFullYear()} Vigente Protocol · Stellar Soroban
-          </p>
+        <p className="text-xs text-white/40 mt-6 max-w-2xl">
+          out-of-scope items (validator collapse, compromised user wallet, sdk
+          bugs) are deliberately listed as such so the boundary of the
+          protocol's responsibility is explicit.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// ===========================================================================
+// PARTNERS SECTION — APR + lending pool partnerships
+// ===========================================================================
+
+function PartnersSection() {
+  return (
+    <section
+      id="partners"
+      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
+    >
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+          partners we're building with
+        </h2>
+        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
+          vigente is the credit primitive — the lending stack lives on top, the
+          data layer feeds in. we're forming partnerships in two directions, with
+          conservative limits and client protection baked in.
+        </p>
+
+        <div className="grid md:grid-cols-2 gap-6 mb-12">
+          <PartnerCard
+            track="layer 1 · lending protocols"
+            who="soroban lending markets"
+            why="a protocol reads get_score / is_defaulted to open a reputation-tier pool. for price-oracle markets, vigente gates eligibility off-chain at conservative, throttled limits (CP2). reference-vault is the on-chain reference any protocol can read directly."
+            cta="integrate vigente as credit layer"
+            email="zzzbedream@gmail.com"
+          />
+          <PartnerCard
+            track="data · open finance (optional enrichment)"
+            who="open finance aggregators · chile-first"
+            why="the core score reads only stellar horizon, so the trust path stays fintech-free. open finance is opt-in enrichment that adds detail to a thin-file borrower's profile — never a gate, never published on-chain."
+            cta="partner on data"
+            email="zzzbedream@gmail.com"
+          />
+        </div>
+
+        <div className="bg-[#0d0f11] border border-[#818cf8]/20 rounded-xl p-6 md:p-8 flex flex-col md:flex-row gap-6 md:items-center">
+          <div className="flex-1">
+            <div className="text-xs uppercase tracking-wider text-[#818cf8] mb-2">
+              for protocol founders
+            </div>
+            <p className="text-white text-base md:text-lg leading-relaxed">
+              if you run a soroban lending market and want to plug vigente's
+              credit primitive in front of your pool — same week integration,
+              zero token swap.
+            </p>
+          </div>
+          <a
+            href="mailto:zzzbedream@gmail.com?subject=Integration%20inquiry"
+            className="bg-[#818cf8] hover:bg-[#a5b4fc] text-[#050505] font-medium text-sm rounded-full px-6 py-3 transition-colors whitespace-nowrap"
+          >
+            zzzbedream@gmail.com
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PartnerCard({
+  track,
+  who,
+  why,
+  cta,
+  email,
+}: {
+  track: string;
+  who: string;
+  why: string;
+  cta: string;
+  email: string;
+}) {
+  return (
+    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 flex flex-col gap-4">
+      <div>
+        <div className="text-xs uppercase tracking-wider text-[#818cf8] mb-2">
+          {track}
+        </div>
+        <div className="text-base font-medium text-white">{who}</div>
+      </div>
+      <p className="text-sm text-white/60 leading-relaxed flex-1">{why}</p>
+      <a
+        href={`mailto:${email}`}
+        className="inline-flex items-center gap-2 text-sm text-[#818cf8] hover:text-[#a5b4fc] transition-colors"
+      >
+        {cta}
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="w-3 h-3"
+        >
+          <line x1="5" y1="12" x2="19" y2="12" />
+          <polyline points="12 5 19 12 12 19" />
+        </svg>
+      </a>
+    </div>
+  );
+}
+
+// ===========================================================================
+// IMPACT / INCLUSION — the social core is the revenue engine, not charity.
+// Shared-value framing + the client-protection commitments that keep
+// subcollateralised credit from harming thin-file borrowers.
+// ===========================================================================
+
+const IMPACT_CARDS = [
+  {
+    title: "shared value, not charity",
+    body: "the underserved market — earners with on-chain or open-finance data but no traditional score — IS the target market. every score that unlocks fair credit earns a fee and cuts financial exclusion at the same time.",
+  },
+  {
+    title: "no over-indebtedness",
+    body: "conservative tier ceilings, a first-loan throttle to 10%, and immutable defaults. enabling credit to the unbanked must never push them into unpayable debt — the limits are proven on-chain in reference-vault.",
+  },
+  {
+    title: "metrics that aren't vanity",
+    body: "we measure first-time credit access, cost of credit before vs. after, real default rate, and 6/12-month persistence — with a baseline and external verification. not 'wallets created'.",
+  },
+  {
+    title: "fair, explainable, private",
+    body: "disparate-impact audits across groups, an explainable score with a right to human review (Ley 21.719), and no personal data published on-chain. client protection (Cerise+SPTF) is a release gate, not a slogan.",
+  },
+] as const;
+
+function ImpactSection() {
+  return (
+    <section
+      id="impact"
+      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
+    >
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+          inclusion is the product
+        </h2>
+        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
+          a credit history is an asset the user owns — soulbound, portable,
+          readable by every protocol that integrates vigente. it turns on-chain
+          activity into fair credit. funded by the protocols that use it, not by
+          grants — sustainable by design, not charity.
+        </p>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {IMPACT_CARDS.map((c) => (
+            <div
+              key={c.title}
+              className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 flex flex-col gap-3"
+            >
+              <h3 className="text-base font-medium text-white">{c.title}</h3>
+              <p className="text-sm text-white/60 leading-relaxed">{c.body}</p>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-white/40 text-xs mt-8 max-w-2xl">
+          aligned to SDG 1 / 5 / 8 / 10 and the Cerise+SPTF client-protection
+          standards. measured with IRIS+ — baseline, comparison group, external
+          verification.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// ===========================================================================
+// MODULE 3 — pinned testnet evidence
+// ===========================================================================
+
+function ModuleLiveTestnet() {
+  return (
+    <section className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12">
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+          see it live on testnet
+        </h2>
+        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
+          two real soroban calls against{" "}
+          <code className="text-[#818cf8]">CDLLO7QE…</code>. the negative one
+          shows the age floor enforcing on-chain through the signed account_age
+          bytes.
+        </p>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          <TxCard
+            title="positive mint"
+            color="#818cf8"
+            txHash="8b9fccfc9daaf594e457e19808ef9c0746e8e45f37aab8417b5fe8d59641bc85"
+            fields={[
+              ["score", "880"],
+              ["age days", "90"],
+              ["status", "SUCCESS"],
+              ["sigs", "3 of 5"],
+              ["get_score returned", "880"],
+            ]}
+          />
+          <TxCard
+            title="age-floor trap"
+            color="#ef4444"
+            txHash={null}
+            fields={[
+              ["score", "700"],
+              ["age days", "10 (below 30 floor)"],
+              ["status", "Error(WasmVm, InvalidAction)"],
+              ["ledger affected", "no — rejected at simulation"],
+              ["gas spent", "0"],
+            ]}
+          />
+        </div>
+
+        <div className="mt-12 text-center">
+          <Link
+            href="/v3"
+            className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-[#818cf8] hover:bg-[#a5b4fc] text-[#050505] font-medium transition-colors"
+          >
+            try a mint yourself
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-4 h-4"
+            >
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TxCard({
+  title,
+  color,
+  txHash,
+  fields,
+}: {
+  title: string;
+  color: string;
+  txHash: string | null;
+  fields: Array<[string, string]>;
+}) {
+  return (
+    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-medium text-white">{title}</h3>
+        <span
+          className="px-2 py-1 rounded text-[10px] uppercase tracking-wider"
+          style={{ background: `${color}22`, color }}
+        >
+          {txHash ? "tx on ledger" : "rejected"}
+        </span>
+      </div>
+      <div className="space-y-2 mb-4">
+        {fields.map(([k, v]) => (
+          <div key={k} className="flex items-baseline justify-between text-sm">
+            <span className="text-white/60">{k}</span>
+            <span className="font-mono text-white text-right">{v}</span>
+          </div>
+        ))}
+      </div>
+      {txHash && (
+        <a
+          href={`https://stellar.expert/explorer/testnet/tx/${txHash}`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-[#818cf8] hover:text-[#a5b4fc] break-all font-mono block pt-3 border-t border-white/5"
+        >
+          {txHash}
+        </a>
+      )}
+    </div>
+  );
+}
+
+// ===========================================================================
+// ROADMAP — honest tranche-aligned path to mainnet. "shipped" claims are
+// verifiable on-chain; everything else is labeled by funding tranche.
+// ===========================================================================
+
+function RoadmapSection() {
+  return (
+    <section
+      id="roadmap"
+      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
+    >
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
+          roadmap
+        </h2>
+        <p className="text-white/70 max-w-2xl mb-4 text-base md:text-lg">
+          built in the open, funded in tranches. everything marked shipped is
+          verifiable on-chain today — the rest is scoped, costed, and labeled
+          by the tranche that pays for it.
+        </p>
+        <p className="text-[#818cf8] max-w-2xl mb-12 text-sm md:text-base">
+          the wedge is layer 1: a live lending protocol reading the score in
+          production. distribution and the data layer compound from there.
+        </p>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <RoadmapCard
+            tag="shipped · live now"
+            tagClass="bg-[#818cf8]/15 text-[#818cf8]"
+            title="credit primitive"
+            items={[
+              "3-of-5 threshold oracle verified on-chain",
+              "soulbound credit badge + immutable defaults",
+              "credit-gated reference vault (TVL cap, timelock)",
+              "credit oracle interface v1 + ABI for integrators",
+              "180-day on-chain credit heat map",
+            ]}
+          />
+          <RoadmapCard
+            tag="tranche 1 · layer 1 (primary)"
+            tagClass="bg-[#818cf8]/15 text-[#818cf8]"
+            title="first protocol integration"
+            items={[
+              "first lending-protocol integration (off-chain gate, tested)",
+              "live reputation-tier pool at conservative limits",
+              "oracle ops + key rotation runbook",
+              "SEP draft: credit attestation standard",
+            ]}
+          />
+          <RoadmapCard
+            tag="tranche 2 · yield layer"
+            tagClass="bg-white/10 text-white/70"
+            title="data + capital efficiency"
+            items={[
+              "open finance enrichment (consented bank data)",
+              "SEP-0056 tokenized vault + tokenized-vault listing",
+              "idle reserve earning yield in soroban pools",
+              "/earn — one-click USDC deposits for LPs",
+            ]}
+          />
+          <RoadmapCard
+            tag="tranche 3 · mainnet"
+            tagClass="bg-white/10 text-white/70"
+            title="open infrastructure"
+            items={[
+              "mainnet deploy behind multi-sig",
+              "typescript SDK on npm",
+              "tier-segmented pools + staking",
+              "inclusion pilot + client-protection metrics (IRIS+)",
+            ]}
+          />
+        </div>
+
+        <p className="text-white/40 text-xs mt-8 max-w-2xl">
+          deliberately out of scope until mainnet: own token, multi-chain,
+          retail KYC, competing with existing lending markets. vigente is the
+          credit layer other protocols read — not another lending app.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function RoadmapCard({
+  tag,
+  tagClass,
+  title,
+  items,
+}: {
+  tag: string;
+  tagClass: string;
+  title: string;
+  items: string[];
+}) {
+  return (
+    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 flex flex-col gap-4">
+      <span
+        className={`self-start text-[10px] uppercase tracking-wider rounded-full px-2.5 py-1 ${tagClass}`}
+      >
+        {tag}
+      </span>
+      <h3 className="text-lg font-medium text-white">{title}</h3>
+      <ul className="space-y-2 text-sm text-white/70">
+        {items.map((item) => (
+          <li key={item} className="flex gap-2">
+            <span className="text-[#818cf8] shrink-0">·</span>
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ===========================================================================
+// FOOTER (github link stays here, but not in top nav)
+// ===========================================================================
+
+function Footer() {
+  return (
+    <footer className="border-t border-white/5 py-12 px-6 md:px-12">
+      <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-6 items-center justify-between text-xs text-white/40">
+        <div className="flex items-center gap-2">
+          <BrandMark />
+          <span>vigente protocol · stellar soroban · testnet</span>
+        </div>
+        <div className="flex gap-6">
+          <a
+            href="mailto:zzzbedream@gmail.com"
+            className="hover:text-white transition-colors"
+          >
+            contact
+          </a>
+          <Link href="/v3" className="hover:text-white transition-colors">
+            app
+          </Link>
+          <Link href="/passport" className="hover:text-white transition-colors">
+            passport
+          </Link>
+          <Link href="/onepager" className="hover:text-white transition-colors">
+            one-pager
+          </Link>
+          <a
+            href="https://stellar.expert/explorer/testnet/contract/CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-white transition-colors"
+          >
+            on-chain
+          </a>
         </div>
       </div>
     </footer>
-  );
-}
-
-function SocialLink({
-  href,
-  label,
-  children,
-}: {
-  href: string;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={label}
-      className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-800 text-slate-400 transition-colors hover:border-slate-700 hover:text-slate-100"
-    >
-      {children}
-    </a>
-  );
-}
-
-// ===========================================================================
-// INLINE ICONS (lucide-style; no external dependency)
-// ===========================================================================
-
-type IconProps = { className?: string };
-const S = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 2,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-};
-
-function IconArrowRight({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} {...S}>
-      <line x1="5" y1="12" x2="19" y2="12" />
-      <polyline points="12 5 19 12 12 19" />
-    </svg>
-  );
-}
-function IconFileText({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} {...S}>
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="8" y1="13" x2="16" y2="13" />
-      <line x1="8" y1="17" x2="16" y2="17" />
-    </svg>
-  );
-}
-function IconGlobe({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} {...S}>
-      <circle cx="12" cy="12" r="10" />
-      <line x1="2" y1="12" x2="22" y2="12" />
-      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-    </svg>
-  );
-}
-function IconCpu({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} {...S}>
-      <rect x="4" y="4" width="16" height="16" rx="2" />
-      <rect x="9" y="9" width="6" height="6" />
-      <line x1="9" y1="1" x2="9" y2="4" /><line x1="15" y1="1" x2="15" y2="4" />
-      <line x1="9" y1="20" x2="9" y2="23" /><line x1="15" y1="20" x2="15" y2="23" />
-      <line x1="20" y1="9" x2="23" y2="9" /><line x1="20" y1="14" x2="23" y2="14" />
-      <line x1="1" y1="9" x2="4" y2="9" /><line x1="1" y1="14" x2="4" y2="14" />
-    </svg>
-  );
-}
-function IconShield({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} {...S}>
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      <polyline points="9 12 11 14 15 10" />
-    </svg>
-  );
-}
-function IconLock({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} {...S}>
-      <rect x="3" y="11" width="18" height="11" rx="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  );
-}
-function IconLayers({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} {...S}>
-      <polygon points="12 2 2 7 12 12 22 7 12 2" />
-      <polyline points="2 17 12 22 22 17" />
-      <polyline points="2 12 12 17 22 12" />
-    </svg>
-  );
-}
-function IconZap({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} {...S}>
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-    </svg>
-  );
-}
-function IconCheck({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} {...S}>
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-function IconDot({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} fill="currentColor" stroke="none">
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-function IconAlert({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} {...S}>
-      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-      <line x1="12" y1="9" x2="12" y2="13" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  );
-}
-function IconGithub({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} {...S}>
-      <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
-    </svg>
-  );
-}
-function IconX({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} fill="currentColor" stroke="none">
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-    </svg>
-  );
-}
-function IconLinkedin({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} {...S}>
-      <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z" />
-      <rect x="2" y="9" width="4" height="12" />
-      <circle cx="4" cy="4" r="2" />
-    </svg>
   );
 }
