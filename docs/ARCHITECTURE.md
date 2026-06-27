@@ -6,7 +6,7 @@
 
 ## 1. System Overview
 
-Vigente Protocol is a privacy-preserving credit reputation layer on Stellar Soroban. It transforms off-chain merchant transaction data (initially via Payku in Chile, extending to open banking via Fintoc and Prometeo) into verifiable, non-transferable on-chain credit badges. These badges gate undercollateralized lending in DeFi protocols.
+Vigente Protocol is a privacy-preserving credit reputation layer on Stellar Soroban. It transforms off-chain merchant transaction data (initially via Payku in Chile, extending to open banking via Fintoc and Prometeo) into verifiable, non-transferable on-chain credit badges. These badges enable credit-gated lending via the `reference-vault` and any contract that opts in to read the oracle off-chain or cross-contract.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -322,6 +322,7 @@ To prevent scope creep and clarify the boundary:
 - **Vigente does not implement KYC.** We rely on Payku's existing KYC for merchant verification.
 - **Vigente is not a wallet.** Freighter is the user's chosen wallet.
 - **Vigente is not a chain or L2.** It's a set of Soroban contracts on Stellar Mainnet.
+- **Vigente does not depend on any immutable price-oracle lending market reading its score on-chain.** Such markets consume only SEP-40 *price* oracles and cannot gate on reputation. Vigente's on-chain consumers are the `reference-vault` and any protocol that explicitly opts in to read `get_score` / `is_defaulted`; originators that already do KYC consume the score off-chain via the attestation API.
 
 ---
 
