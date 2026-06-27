@@ -70,8 +70,16 @@ core es trustless on-chain; Open Finance es enriquecimiento opcional consentido.
 | Gate | Gates 1–5 |
 
 ## Fuera de alcance hasta mainnet (deliberado)
-Token propio, multi-chain, KYC retail, competir con mercados de préstamo existentes.
-Vigente es la capa de crédito que otros protocolos leen — no otra app de préstamo.
+Dependencia de un mercado de préstamo con oráculo de precio inmutable que lea nuestro
+score on-chain (esos mercados consumen solo oráculos de **precio** SEP-40, así que no
+pueden gatear por reputación) · token propio · multi-chain · KYC retail · competir con
+mercados de préstamo existentes. Vigente es la capa de crédito que otros protocolos y
+originadores leen — no otra app de préstamo.
+
+> **Post-mainnet (moat):** interceptación de repago — enrutar parte del flujo futuro de
+> remesas al repago **antes** de que llegue a la wallet del prestatario (modelo Huma/Arf),
+> para bajar el default esperado del originador que asume el riesgo de crédito. Diseño:
+> [design/REPAYMENT_INTERCEPTION.md](design/REPAYMENT_INTERCEPTION.md). Roadmap, no shipped.
 
 ## Riesgos de gestión
 - **El protocolo objetivo puede ser precio-only** (confirmado en A.0): el MVP de Capa 1

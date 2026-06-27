@@ -132,7 +132,7 @@ equally true.
 | 3-of-5 threshold mint, verified on-chain ([tx proof](https://stellar.expert/explorer/testnet/tx/5bf78e2590cdd83553183aaee17e09c23b032eda224dc6b8b69514ccc3859657)) | Mainnet deployment — testnet only, by design until audit |
 | Hardened lending vault (TVL/util caps, ladder, timelock, slash cascade) with 104+ tests | External users — every mint so far is from team wallets or labeled synthetics |
 | Credit Oracle Interface v1: spec + live ABI + compilable consumer example | Signed commercial LOIs — one *non-binding* exploratory LOI (Payku); partner conversations in progress, dated in the pipeline table |
-| Production app with 9-wallet onboarding + 180-day credit heat map | Blend integration in code — architecture verified against their docs, router contract not yet built |
+| Production app with 9-wallet onboarding + 180-day credit heat map | First off-chain originator integration — score API consumed by a remittance/PayFi partner for a real cohort (Vita = target, LOI in progress) |
 | SEP draft for a Credit Attestation standard | Security audit (SCF provides audit credits at T3) |
 | Threat model: 6 STRIDE vectors mapped to code + named tests | Independent oracle node separation — the 5 keypairs are cryptographically independent but co-located for the sprint |
 | | Real-world data ZK pipeline — committed hashes only today; proofs are T2+ |
@@ -154,43 +154,41 @@ Oracle Interface v1 + ABI · credit heat map · 9-wallet onboarding ·
 production app · SEP draft.
 **Validation:** tx hashes above · `cargo test` · [live app](https://vigente-project.vercel.app).
 
-### Tranche 1 — $12K · production posture + Blend feasibility in code
+### Tranche 1 — $12K · first off-chain originator integration
+The viable consumption path: an originator that **already** does KYC and
+originates credit reads the score **off-chain** and applies its own policy.
+Vigente never touches the loan.
+- **Score attestation API hardened** — the existing HMAC-signed
+  `get_score` / `is_defaulted` endpoint productized as a SEP-12-style
+  attestation surface (keys, rate limits, signed payloads).
+- **Originator integration guide** — how a remittance wallet / PayFi
+  originator consumes the attestation. First target: **Vita Wallet**
+  (LATAM remittances) — *target partner, LOI in progress, not signed*.
 - Oracle ops: process separation for the 5 nodes + key-rotation runbook.
 - Persistent score cache · `vigente.app` domain · admin dashboard.
 - SEP draft submitted upstream (PR to `stellar/stellar-protocol`).
-- **Blend Credit Router — design + PoC**: an intermediary Soroban contract
-  ("wrapper/router") that consumes our own Interface v1 — gates on
-  `is_defaulted() == false`, reads `get_score()` — and only then executes
-  `submit` / `submit_with_allowance` against a Blend testnet pool via the
-  Blend SDK. First tx hash of the gated supply published in
-  `docs/integration/BLEND.md`.
-- **Validation:** `npm run validate-t1` → JSON (exists today) + router tx hash.
+- **Validation:** a remittance/PayFi originator (Vita = target) reads
+  `get_score` / `is_defaulted` via the API for a real cohort; coverage,
+  latency and signal-utility metrics published. `npm run validate-t1` → JSON.
 
-### Tranche 2 — $18K · yield layer + calibrated credit-to-DeFi bridge
-- **Score → collateral-factor translation, mathematically specified**: how
-  a Credit Badge tier maps to reduced collateral requirements at the
-  router level, while the router maintains Blend's health factor on its
-  own pooled position (under-collateralization lives between router and
-  borrower — never inside Blend's accounting, so nothing is instantly
-  liquidatable).
-- **Own pool via Blend `pool_factory`** with risk parameters calibrated
-  for real-world credit: collateral factor, liquidation factor, interest
-  rate curves that make commercial sense for a small merchant. Honest
-  constraint stated up front: activating a pool requires meeting Blend's
-  backstop threshold — capital we raise, not hand-wave.
-- **Liquidation & backstop validation on testnet**: when Vigente marks a
-  borrower defaulted, verify the auction mechanics and backstop module
-  absorb bad debt without breaking — nothing may block auction creation.
-- LP yield accounting (claim without exit) · SEP-0056 vault + DeFindex
-  listing · `/earn` UI · liquidation keeper incentives.
+### Tranche 2 — $18K · open-finance enrichment (consented) + yield
+- **Consented open-finance enrichment**: opt-in open-banking data
+  (Fintoc / Prometeo) enriches the score — enrichment only, never a trust
+  path; the core score stays trustless on-chain.
+- **Yield layer on the `reference-vault`**: LP yield accounting (claim
+  without exit) · SEP-0056 tokenized vault · `/earn` UI · liquidation
+  keeper incentives. The vault remains **the** on-chain demonstration of
+  credit-gated lending end-to-end (TVL cap, utilization rail, timelock,
+  slash-on-default) — no third-party lending protocol is in the loop.
 - **First ramp demo (testnet)**: loan disbursement → cash-out through a
   wallet with [SEP-24] anchor integration (Lobstr / Beans App flow).
-- **Validation:** `npm run validate-t2` → deposit→borrow→yield→claim tx
-  chain + pool_factory deploy tx + auction simulation log.
+- **Validation:** `npm run validate-t2` → `deposit→borrow→yield→claim` tx
+  chain on the reference-vault + an enrichment-improved score measured on a
+  cohort + ≥2 integrated consumers.
 
 ### Tranche 3 — $24K · mainnet + real money rails
-- Mainnet deploy of badge + vault behind multi-sig · audit prep (SCF audit
-  credits applied here).
+- Mainnet deploy of badge + vault **behind multi-sig** · audit prep (SCF
+  audit credits applied here).
 - TypeScript SDK on npm · tier-segmented pools.
 - **Stellar ramps, production**: end users cash loans in/out through
   existing SEP-24 anchors via partner wallets — zero licensing on our
@@ -204,23 +202,31 @@ production app · SEP draft.
 The scale chapter. Explicitly NOT part of the $60K ask:
 - **Ramp corridors at scale**: SEP-24 + [SEP-31] cross-border flows across
   2-3 LATAM countries (Chile → regional), anchor partnerships.
+- **Repayment interception (the moat)**: route a share of future remittance
+  inflow to repayment **before** it reaches the borrower's wallet
+  (Huma / Arf model) — lowers expected default for the originator that
+  bears the credit risk. Design:
+  [`docs/design/REPAYMENT_INTERCEPTION.md`](docs/design/REPAYMENT_INTERCEPTION.md). *Roadmap, not shipped.*
 - **ZK attestation pipeline**: real zero-knowledge proofs over real-world
   data (invoices, bank statements) replacing today's hash commitments.
 - **100+ merchant pilot** with default-rate data published openly —
   the dataset that prices LATAM micro-credit risk on-chain.
 - Independent oracle operators (third parties running nodes) · full
-  security audit · risk analytics for Blend backstop depositors.
+  security audit.
 
-**Deliberately out of scope at every stage:** own token, multi-chain,
-retail KYC in-house, competing with existing lending markets. Vigente is
-the credit layer other protocols read — not another lending app.
+**Deliberately out of scope at every stage:** any dependency on an
+immutable price-oracle lending market reading our score on-chain — those
+markets consume only SEP-40 *price* oracles, so they cannot gate on
+reputation · own token · early multi-chain · retail KYC in-house ·
+competing with existing lending markets. Vigente is the credit layer other
+protocols and originators read — not another lending app.
 
 ---
 
 ## SCF Resubmission
 
 Our first submission (SCF #41) was rejected on six points: solo-developer
-execution risk, budget structure, Blend feasibility, default handling,
+execution risk, budget structure, third-party-oracle feasibility, default handling,
 centralized oracle, and missing traction/validation. **Each point is now
 answered with a verifiable artifact** — transactions, commits, live
 deployments — in [`docs/SCF_REBUTTAL.md`](docs/SCF_REBUTTAL.md). The

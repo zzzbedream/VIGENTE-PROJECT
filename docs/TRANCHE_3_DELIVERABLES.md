@@ -236,7 +236,7 @@ Tranche 3 closes the SCF Build Award commitment. Post-grant, Vigente continues w
 - Audit funded via SCF Audit Bank or alternative provider
 - Prometeo integration for Latam expansion (Argentina, Colombia, Mexico, Peru)
 - Multi-notary TLSNotary architecture (the "ultimate decentralization" path documented in `docs/ARCHITECTURE.md`)
-- Production protocol integrations (Blend, Lulo, others) when they support external oracles
+- Opt-in lending-protocol integrations when they choose to read an external credit oracle on-chain (immutable price-oracle markets consume the score off-chain via the attestation API)
 - Revenue model: 1% origination fee + LP yield share, retained for protocol sustainability
 
 These are explicitly **not** Tranche 3 deliverables. They are the bridge from "grant-funded MVP" to "self-sustaining protocol".

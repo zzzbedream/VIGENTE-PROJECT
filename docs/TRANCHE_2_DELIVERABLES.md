@@ -14,7 +14,7 @@
 
 Tranche 2 demonstrates the core thesis of Vigente: that on-chain credit reputation can gate undercollateralized lending end-to-end on Stellar. This phase ships a **reference lending vault** (Soroban contract) that performs cross-contract calls into `vigente-badge` to query credit eligibility and to enforce defaults via `slash()`.
 
-The reference vault is intentionally minimal — not a production lending protocol. Its purpose is to prove the integration pattern works and to provide a working code example that production protocols (Blend, Lulo, others) can adopt when they choose to support external credit oracles.
+The reference vault is intentionally minimal — not a production lending protocol. Its purpose is to prove the integration pattern works and to provide a working code example that production lending protocols can adopt when they choose to read an external credit oracle on-chain. Immutable price-oracle markets consume only SEP-40 *price* oracles and cannot read it on-chain — their consumption path is off-chain (the attestation API).
 
 ---
 
@@ -202,7 +202,7 @@ npm run validate-t2
 
 ## 7. Composability Statement
 
-The `reference-vault` is **not** a production lending protocol and is **not** intended to compete with Blend, Lulo, or other Stellar lending platforms. It exists to:
+The `reference-vault` is **not** a production lending protocol and is **not** intended to compete with existing Stellar lending platforms. It exists to:
 
 1. Prove the integration pattern works on Stellar today.
 2. Provide a working, auditable code example.
