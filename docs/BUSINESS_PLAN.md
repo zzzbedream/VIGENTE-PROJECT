@@ -104,11 +104,11 @@ Profile:
 ### 4.2 Secondary Customer Segment (Tranche 3+)
 
 **DeFi lending protocols on Stellar** that want to expand into LatAm credit markets:
-- Blend Protocol (if/when they support external oracles)
+- Opt-in lending protocols that choose to read an external reputation oracle on-chain (note: immutable price-oracle markets consume only SEP-40 *price* oracles and cannot)
 - Lulo Finance
 - Any future Stellar lending product seeking emerging market expansion
 
-These are not paying customers — they are integration partners. Vigente's revenue comes from origination fees on the loans they extend.
+These are not paying customers — they are integration partners. Vigente's revenue comes from origination fees on the loans they extend. **Vigente carries no default on its balance sheet** — the originating partner bears the credit risk; Vigente lowers their expected default through better borrower selection and (roadmap) repayment interception. We are a data/attestation layer, not a lender.
 
 ### 4.3 LP Segment (Tranche 3+)
 

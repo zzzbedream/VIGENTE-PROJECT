@@ -908,7 +908,7 @@ function PipelineInfographic() {
     { key: "off-chain", title: tr(lang, "scoring engine", "motor de scoring"), note: tr(lang, "horizon · 180d · zero fintech in trust path", "horizon · 180d · cero fintech en el path") },
     { key: "off-chain", title: tr(lang, "threshold oracle", "oráculo de umbral"), note: tr(lang, "k-of-n ed25519 · signs the mint", "k-de-n ed25519 · firma el minteo") },
     { key: "on-chain", title: tr(lang, "badge SBT", "badge SBT"), note: tr(lang, "soulbound · immutable defaults", "soulbound · defaults inmutables") },
-    { key: "read", title: tr(lang, "consumers", "consumidores"), note: tr(lang, "wallets · lending protocols", "wallets · protocolos de préstamo") },
+    { key: "read", title: tr(lang, "consumers", "consumidores"), note: tr(lang, "wallets · originators · opt-in protocols", "wallets · originadores · protocolos opt-in") },
     { key: "impact", title: tr(lang, "inclusion", "inclusión"), note: tr(lang, "first-time credit · measured (IRIS+)", "primer crédito · medido (IRIS+)") },
   ];
 
@@ -1393,12 +1393,12 @@ function RoadmapSection() {
       ],
     },
     {
-      tag: tr(lang, "tranche 1 · layer 1 (primary)", "tramo 1 · capa 1 (primario)"),
+      tag: tr(lang, "tranche 1 · off-chain gate (primary)", "tramo 1 · gate off-chain (primario)"),
       tagClass: "bg-[#818cf8]/15 text-[#818cf8]",
-      title: tr(lang, "first protocol integration", "primera integración de protocolo"),
+      title: tr(lang, "first originator integration", "primera integración de originador"),
       items: [
-        tr(lang, "first lending-protocol integration (off-chain gate, tested)", "primera integración con protocolo de préstamo (gate off-chain, probado)"),
-        tr(lang, "live reputation-tier pool at conservative limits", "pool por tier de reputación en vivo con límites conservadores"),
+        tr(lang, "remittance / payfi originator reads the score via api (off-chain, tested)", "originador de remesas / payfi lee el score vía api (off-chain, probado)"),
+        tr(lang, "attestation api hardened: keys, rate limits, signed payloads", "api de atestación endurecida: claves, rate limits, payloads firmados"),
         tr(lang, "oracle ops + key rotation runbook", "ops del oráculo + runbook de rotación de claves"),
         tr(lang, "SEP draft: credit attestation standard", "borrador SEP: estándar de atestación de crédito"),
       ],
@@ -1446,8 +1446,8 @@ function RoadmapSection() {
         <p className="text-[#818cf8] max-w-2xl mb-12 text-sm md:text-base">
           {tr(
             lang,
-            "the wedge is layer 1: a live lending protocol reading the score in production. distribution and the data layer compound from there.",
-            "la cuña es la capa 1: un protocolo de préstamo en vivo leyendo el score en producción. la distribución y la capa de datos se acumulan desde ahí.",
+            "the wedge is an off-chain originator: a remittance / payfi wallet reading the score via api in production. the reference-vault is the on-chain credit-gating demo. distribution and the data layer compound from there.",
+            "la cuña es un originador off-chain: una wallet de remesas / payfi leyendo el score vía api en producción. el reference-vault es la demo on-chain del gateo por crédito. la distribución y la capa de datos se acumulan desde ahí.",
           )}
         </p>
 
@@ -1460,8 +1460,8 @@ function RoadmapSection() {
         <p className="text-white/40 text-xs mt-8 max-w-2xl">
           {tr(
             lang,
-            "deliberately out of scope until mainnet: own token, multi-chain, retail KYC, competing with existing lending markets. vigente is the credit layer other protocols read — not another lending app.",
-            "deliberadamente fuera de alcance hasta mainnet: token propio, multi-chain, KYC retail, competir con mercados de préstamo existentes. vigente es la capa de crédito que otros protocolos leen — no otra app de préstamo.",
+            "deliberately out of scope until mainnet: any dependency on an immutable price-oracle market reading our score on-chain (those markets consume only SEP-40 price oracles, so they can't gate on reputation), own token, multi-chain, retail KYC, competing with existing lending markets. vigente is the credit layer other protocols and originators read — not another lending app.",
+            "deliberadamente fuera de alcance hasta mainnet: cualquier dependencia de un mercado con oráculo de precio inmutable que lea nuestro score on-chain (esos mercados consumen solo oráculos de precio SEP-40, así que no pueden gatear por reputación), token propio, multi-chain, KYC retail, competir con mercados de préstamo existentes. vigente es la capa de crédito que otros protocolos y originadores leen — no otra app de préstamo.",
           )}
         </p>
       </div>
