@@ -29,36 +29,37 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Vigente Protocol — credit without permission",
+    default: "Vigente Protocol — reputation-powered credit on Stellar",
     template: "%s · Vigente Protocol",
   },
   description:
-    "k-of-n threshold credit oracle on Stellar Soroban. Verifiable borrower reputation signed by an independent quorum, with zero fintech in the trust path.",
+    "Borrow stablecoins against your assets on Stellar Soroban. On-time repayments — and consented income data — build a verifiable reputation that raises your limit and lowers your rate.",
   keywords: [
     "Stellar",
     "Soroban",
-    "credit scoring",
+    "collateralized lending",
+    "credit reputation",
     "threshold oracle",
-    "ed25519",
+    "stablecoin credit",
     "Vigente",
     "on-chain reputation",
-    "soulbound token",
+    "RWA collateral",
   ],
   authors: [{ name: "Vigente Protocol" }],
   openGraph: {
     type: "website",
     siteName: "Vigente Protocol",
-    title: "Vigente Protocol — credit without permission",
+    title: "Vigente Protocol — reputation-powered credit on Stellar",
     description:
-      "Threshold-signed credit badges on Stellar Soroban. 3-of-5 ed25519 quorum, no fintech dependency. 104 tests green, live on testnet.",
+      "Borrow against your assets without selling them. Reputation — on-chain and consented off-chain — raises your LTV and lowers your rate. Credit primitive live on testnet.",
     url: SITE_URL,
-    locale: "en_US",
+    locale: "es_419",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Vigente Protocol — credit without permission",
+    title: "Vigente Protocol — reputation-powered credit on Stellar",
     description:
-      "k-of-n threshold credit oracle on Stellar Soroban. No fintech in the trust path.",
+      "Borrow against your assets without selling them. Reputation raises your LTV and lowers your rate. Live on Stellar testnet.",
   },
 };
 
