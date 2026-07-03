@@ -1,351 +1,682 @@
 "use client";
 
 /**
- * Vigente Protocol — Landing page (Phase D refresh, wallet-kit aware).
+ * Vigente Protocol — Landing (pivot 2026-07: reputation-powered collateralized
+ * credit on Stellar).
  *
- * Bilingual (EN/ES) via a lightweight Lang context + `tr()` helper. Section
- * components read the language; leaf card components receive already-translated
- * strings. Technical tokens (get_score, byte layout, tx fields, ids) stay
- * universal. Brand palette: Vigente indigo/violet (#818cf8) + navy, amber for
- * the Gold tier.
+ * Narrative: borrow against your assets today; reputation — on-chain repayments
+ * plus consented off-chain income/remittance data — raises LTV and lowers rate,
+ * with sub-collateralization as the glide-path vision (not a day-1 promise).
+ *
+ * Live on-chain pieces are real reads against the testnet contract:
+ *  - TrustSection shows oracle status via `getOracleStatus()`.
+ *  - PassportSection's wallet verification calls `verifyBadge()` (permissionless
+ *    get_score / is_defaulted simulation) — no fake timers.
+ *
+ * Copy lives in ./copy.ts (ES canonical, EN mirror). Hero alternates are
+ * selectable via `?hero=a|b|c` for partner/AB tests; default is variant A.
  */
 
 import Link from "next/link";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { useWalletKit } from "@/contexts/WalletKitContext";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { getOracleStatus, type OracleStatus } from "@/lib/integrations/vigente-read";
 import { verifyBadge } from "@/lib/stellar/vigente-contract";
 import type { BadgeState } from "@/lib/integrations/eligibility-adapter";
 import { VigenteLogo } from "@/components/VigenteLogo";
+import { COPY, type Lang, type LandingCopy } from "./copy";
+import { NetworkCanvas } from "./network-canvas";
 
-const VIGENTE_GREEN = "#818cf8";
-const VIGENTE_NAVY = "#1e3a5f";
+const grotesk = Space_Grotesk({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
+const monoFont = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500", "600"] });
+const mono = monoFont.className;
 
-// --- i18n -----------------------------------------------------------------
-
-type Lang = "en" | "es";
-const LangCtx = createContext<{ lang: Lang; toggle: () => void }>({
-  lang: "en",
-  toggle: () => {},
-});
-const useLang = () => useContext(LangCtx);
-function tr(lang: Lang, en: string, es: string): string {
-  return lang === "es" ? es : en;
-}
-
-const NAV_LINKS = [
-  { en: "protocol", es: "protocolo", href: "#protocol" },
-  { en: "architecture", es: "arquitectura", href: "#architecture" },
-  { en: "live", es: "en vivo", href: "#live" },
-  { en: "threat model", es: "amenazas", href: "#threat-model" },
-  { en: "partners", es: "socios", href: "#partners" },
-  { en: "impact", es: "impacto", href: "#impact" },
-  { en: "passport", es: "pasaporte", href: "/passport" },
-] as const;
-
+const CONTRACT_ID = "CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD";
+const CONTRACT_URL = `https://stellar.expert/explorer/testnet/contract/${CONTRACT_ID}`;
+const CONTACT_EMAIL = "zzzbedream@gmail.com";
 const PUBKEY_RE = /^G[A-Z2-7]{55}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-interface ScoreResponse {
-  features: {
-    account_age_days: number;
-    ops_evaluated: number;
-    capped: boolean;
-    total_volume_usd_equiv: number;
-    contract_volume_usd_equiv: number;
-    p2p_volume_usd_equiv: number;
-    adjusted_volume_usd_equiv: number;
-    ecosystem_payment_ratio: number | null;
-    asset_diversity: number;
-  };
-  score: {
-    totalScore: number;
-    badgeType: "Gold" | "Silver" | "Bronze" | "None";
-    breakdown: {
-      volumePoints: number;
-      consistencyPoints: number;
-      frequencyPoints: number;
-    };
-  };
-  latency_ms: number;
-  cache_hit: boolean;
+// --- i18n -------------------------------------------------------------------
+
+const LangCtx = createContext<{ lang: Lang; setLang: (l: Lang) => void }>({
+  lang: "es",
+  setLang: () => {},
+});
+
+function useCopy(): { lang: Lang; setLang: (l: Lang) => void; t: LandingCopy } {
+  const { lang, setLang } = useContext(LangCtx);
+  return { lang, setLang, t: COPY[lang] };
 }
 
-const TIER_PILL: Record<string, string> = {
-  Gold: "bg-amber-400 text-black",
-  Silver: "bg-zinc-300 text-black",
-  Bronze: "bg-orange-600 text-white",
-  None: "bg-zinc-700 text-white",
-};
+// --- page -------------------------------------------------------------------
 
 export default function LandingPage() {
-  const [lang, setLang] = useState<Lang>("en");
-  const toggle = () => setLang((l) => (l === "en" ? "es" : "en"));
+  const [lang, setLang] = useState<Lang>("es");
 
   return (
-    <LangCtx.Provider value={{ lang, toggle }}>
-      <main
-        style={{ fontFamily: "var(--font-readex-pro), system-ui, sans-serif" }}
-        className="bg-[#050505] text-white antialiased"
-      >
+    <LangCtx.Provider value={{ lang, setLang }}>
+      <main className={`${grotesk.className} min-h-screen bg-[#0B0D0F] text-[#E8ECEA] antialiased`}>
+        <Nav />
         <Hero />
-        <LiveOnchainStatus />
-        <ModuleEvaluate />
-        <ModuleThresholdSign />
-        <ArchitectureSection />
-        <ThreatModelSection />
-        <PartnersSection />
-        <ImpactSection />
-        <ModuleLiveTestnet />
+        <TrustStrip />
+        <HowItWorks />
+        <Differentiator />
+        <WhoItsFor />
+        <PassportSection />
+        <TrustSection />
+        <WaitlistSection />
+        <VisionSection />
+        <FlowSection />
+        <NetworkSection />
         <RoadmapSection />
+        <FaqSection />
         <Footer />
       </main>
     </LangCtx.Provider>
   );
 }
 
-// ===========================================================================
-// HERO
-// ===========================================================================
+// --- nav --------------------------------------------------------------------
 
-function Hero() {
-  const { lang } = useLang();
-  const words = [
-    { text: tr(lang, "credit", "tu"), style: "left-4 md:left-10 top-[18%]" },
-    { text: tr(lang, "you", "crédito"), style: "right-4 md:right-10 top-[38%]" },
-    { text: tr(lang, "own", "propio"), style: "left-[18%] md:left-[28%] top-[58%]" },
+function Nav() {
+  const { lang, setLang, t } = useCopy();
+  const links = [
+    { label: t.navHow, href: "#how" },
+    { label: t.navWho, href: "#who" },
+    { label: t.navTrust, href: "#trust" },
+    { label: t.navFaq, href: "#faq" },
   ];
 
   return (
-    <section className="relative h-screen w-full overflow-hidden bg-[#050505]">
-      <HeroBackground />
-      <HeroNav />
-
-      <div className="relative h-full w-full">
-        {words.map((w) => (
-          <h1
-            key={w.text}
-            className={`hero-title absolute text-white font-medium text-[14vw] md:text-[13vw] ${w.style}`}
-            style={{ letterSpacing: "-0.04em", lineHeight: 0.95 }}
-          >
-            {w.text}
-          </h1>
-        ))}
-
-        <p className="absolute left-6 md:left-10 top-[44%] max-w-[300px] text-[15px] leading-snug text-white/90">
-          {tr(
-            lang,
-            "a credit reputation you carry, not one a bank keeps. a k-of-n threshold oracle on stellar soroban turns your on-chain history into fair credit — portable, yours, signed by an independent quorum. zero fintech in the trust path.",
-            "una reputación crediticia que llevas contigo, no una que guarda un banco. un oráculo de umbral k-de-n sobre stellar soroban convierte tu historial on-chain en crédito justo — portable, tuyo, firmado por un quórum independiente. cero fintech en el camino de confianza.",
-          )}
-        </p>
-
-        <StatBlock
-          position="absolute right-6 md:right-24 top-[14%]"
-          number="3 of 5"
-          label={tr(lang, "ed25519 threshold sigs", "firmas de umbral ed25519")}
-          dividerRotation={20}
-          align="right"
-        />
-        <StatBlock
-          position="absolute left-6 md:left-20 bottom-20 md:bottom-24"
-          number="104"
-          label={tr(lang, "tests green across the matrix", "tests verdes en toda la matriz")}
-          dividerRotation={-20}
-          align="left"
-        />
-        <StatBlock
-          position="absolute right-6 md:right-20 bottom-16 md:bottom-20"
-          number="92 b"
-          label={tr(lang, "canonical mint message", "mensaje canónico de minteo")}
-          dividerRotation={-20}
-          align="right"
-        />
-      </div>
-
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-b from-transparent to-[#050505]" />
-    </section>
-  );
-}
-
-function StatBlock({
-  position,
-  number,
-  label,
-  dividerRotation,
-  align,
-}: {
-  position: string;
-  number: string;
-  label: string;
-  dividerRotation: number;
-  align: "left" | "right";
-}) {
-  const divider = (
-    <div
-      className="hidden md:block h-px w-24"
-      style={{
-        background: `${VIGENTE_GREEN}66`,
-        transform: `rotate(${dividerRotation}deg)`,
-      }}
-    />
-  );
-  return (
-    <div className={position}>
-      <div
-        className={`flex items-center gap-3 ${
-          align === "right" ? "justify-end" : ""
-        }`}
-      >
-        {align === "right" && divider}
-        <span className="text-4xl md:text-5xl font-medium tracking-tight">
-          {number}
-        </span>
-        {align === "left" && divider}
-      </div>
-      <div
-        className={`text-xs md:text-sm text-white/70 mt-1 ${
-          align === "right" ? "text-right" : ""
-        }`}
-      >
-        {label}
-      </div>
-    </div>
-  );
-}
-
-function HeroBackground() {
-  return (
-    <div className="absolute inset-0 overflow-hidden">
-      <div
-        className="absolute -top-1/4 left-1/4 h-[120vh] w-[80vw] rounded-full opacity-30 blur-[160px]"
-        style={{
-          background: `radial-gradient(circle, ${VIGENTE_NAVY} 0%, transparent 60%)`,
-        }}
-      />
-      <div
-        className="absolute bottom-0 right-0 h-[80vh] w-[60vw] rounded-full opacity-20 blur-[140px]"
-        style={{
-          background: `radial-gradient(circle, ${VIGENTE_GREEN} 0%, transparent 60%)`,
-        }}
-      />
-      <div
-        className="absolute inset-0 opacity-[0.08]"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, rgba(255,255,255,0.4) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.4) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-        }}
-      />
-    </div>
-  );
-}
-
-function HeroNav() {
-  const { lang } = useLang();
-  return (
-    <nav className="absolute z-20 top-0 left-0 right-0 px-6 md:px-10 pt-6 flex items-center justify-between gap-4">
-      {/* Left pill: brand mark */}
-      <div className="flex items-center gap-2 bg-[#0d0f11]/90 backdrop-blur border border-white/5 rounded-full pl-4 pr-6 py-3">
-        <BrandMark />
-        <span className="text-white text-sm font-normal tracking-tight">
-          vigente
-        </span>
-      </div>
-
-      {/* Center pill: internal anchors */}
-      <div className="hidden md:flex items-center gap-1 bg-[#0d0f11]/90 backdrop-blur border border-white/5 rounded-full px-3 py-2">
-        {NAV_LINKS.map((l) => (
+    <nav className="sticky top-0 z-50 border-b border-[#1C2126] bg-[#0B0D0F]/85 backdrop-blur-md">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3.5">
+        <div className="flex items-baseline gap-2.5">
+          <VigenteLogo className="h-5 w-5 self-center" />
+          <span className="text-lg font-bold tracking-tight">vigente protocol</span>
+          <span className={`${mono} rounded border border-[#8BE9B0]/30 px-1.5 py-0.5 text-[11px] text-[#8BE9B0]`}>
+            testnet
+          </span>
+        </div>
+        <div className="flex items-center gap-5 text-sm">
+          <div className="hidden items-center gap-5 md:flex">
+            {links.map((l) => (
+              <a key={l.href} href={l.href} className="whitespace-nowrap text-[#9AA3A0] transition-colors hover:text-[#E8ECEA]">
+                {l.label}
+              </a>
+            ))}
+          </div>
+          <div className={`${mono} flex overflow-hidden rounded-full border border-[#2A2F35] text-[11px]`}>
+            {(["es", "en"] as Lang[]).map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => setLang(l)}
+                className={`px-2.5 py-1.5 uppercase transition-colors ${
+                  lang === l ? "bg-[#8BE9B0] text-[#0B0D0F]" : "text-[#9AA3A0] hover:text-[#E8ECEA]"
+                }`}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
           <a
-            key={l.href}
-            href={l.href}
-            className="text-neutral-300 hover:text-[#818cf8] transition-colors text-sm px-5 py-2 rounded-full"
+            href="#waitlist"
+            className="shrink-0 whitespace-nowrap rounded-lg bg-[#8BE9B0] px-4 py-2 text-[13px] font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2]"
           >
-            {tr(lang, l.en, l.es)}
+            {t.navCta}
           </a>
-        ))}
-      </div>
-
-      {/* Right: language toggle + wallet pill */}
-      <div className="flex items-center gap-3">
-        <LangToggle />
-        <ConnectWalletPill />
+        </div>
       </div>
     </nav>
   );
 }
 
-function LangToggle() {
-  const { lang, toggle } = useLang();
-  return (
-    <button
-      onClick={toggle}
-      aria-label={tr(lang, "Switch to Spanish", "Cambiar a inglés")}
-      className="flex items-center gap-1 bg-[#0d0f11]/90 backdrop-blur border border-white/5 rounded-full px-1 py-1 text-xs font-medium"
-    >
-      <span
-        className={`px-2.5 py-1 rounded-full transition-colors ${
-          lang === "en" ? "bg-[#818cf8] text-[#050505]" : "text-white/60"
-        }`}
-      >
-        EN
-      </span>
-      <span
-        className={`px-2.5 py-1 rounded-full transition-colors ${
-          lang === "es" ? "bg-[#818cf8] text-[#050505]" : "text-white/60"
-        }`}
-      >
-        ES
-      </span>
-    </button>
+// --- hero -------------------------------------------------------------------
+
+const HERO_PARAM_TO_INDEX: Record<string, number> = { a: 0, b: 1, c: 2 };
+
+const noopSubscribe = () => () => {};
+
+/**
+ * Alternate heroes for partner/AB tests: /landing?hero=b. The URL is external
+ * state, so useSyncExternalStore keeps the prerendered snapshot (variant 0)
+ * hydration-safe while the client snapshot picks up the query param.
+ */
+function useHeroVariant(): number {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => {
+      const param = new URLSearchParams(window.location.search).get("hero");
+      return param && param in HERO_PARAM_TO_INDEX ? HERO_PARAM_TO_INDEX[param] : 0;
+    },
+    () => 0,
   );
 }
 
-function ConnectWalletPill() {
-  const { lang } = useLang();
-  const { address, connect, disconnect, connecting } = useWalletKit();
-  const short = address
-    ? `${address.slice(0, 4)}…${address.slice(-4)}`
-    : null;
+function Hero() {
+  const { t } = useCopy();
+  const hero = t.heroVariants[useHeroVariant()];
 
-  if (address) {
-    return (
-      <div className="flex items-center gap-2 bg-[#0d0f11]/90 backdrop-blur border border-[#818cf8]/40 rounded-full pl-3 pr-2 py-2">
-        <span className="w-2 h-2 rounded-full bg-[#818cf8]" />
-        <span className="text-[#818cf8] text-xs font-mono">{short}</span>
-        <button
-          onClick={() => disconnect()}
-          className="ml-1 text-white/60 hover:text-white text-xs px-2 py-1 rounded-full hover:bg-white/5 transition-colors"
-        >
-          {tr(lang, "disconnect", "desconectar")}
-        </button>
+  return (
+    <header className="relative overflow-hidden">
+      <NetworkCanvas count={34} alpha={0.55} dist={150} className="pointer-events-none absolute inset-0 h-full w-full opacity-40" />
+      <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-6 pb-14 pt-16 md:grid-cols-[1.15fr_0.85fr] md:pt-20">
+        <div>
+          <h1 className="mb-5 text-4xl font-bold leading-[1.06] tracking-tight md:text-[52px]">{hero.title}</h1>
+          <p className="mb-8 max-w-[520px] text-lg leading-relaxed text-[#B4BCB9]">{hero.sub}</p>
+          <div className="flex flex-wrap items-center gap-3.5">
+            <a
+              href="#waitlist"
+              className="rounded-[10px] bg-[#8BE9B0] px-6 py-3.5 text-base font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2]"
+            >
+              {t.heroCta}
+            </a>
+            <a
+              href="#passport"
+              className="rounded-[10px] border border-[#2A2F35] px-5 py-3.5 text-[15px] text-[#E8ECEA] transition-colors hover:border-[#8BE9B0]"
+            >
+              {t.heroCta3}
+            </a>
+            <a
+              href={CONTRACT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2 py-3.5 text-sm text-[#9AA3A0] transition-colors hover:text-[#8BE9B0]"
+            >
+              {t.heroCta2} →
+            </a>
+          </div>
+          <p className={`${mono} mt-6 text-xs text-[#6B7370]`}>{t.heroFinePrint}</p>
+        </div>
+        <TierSimulator />
       </div>
-    );
-  }
-  return (
-    <button
-      onClick={() => connect()}
-      disabled={connecting}
-      className="bg-[#818cf8] text-[#050505] text-sm font-medium rounded-full px-6 py-3 hover:bg-[#a5b4fc] transition-colors disabled:opacity-60"
-    >
-      {connecting
-        ? tr(lang, "connecting…", "conectando…")
-        : tr(lang, "connect wallet", "conectar wallet")}
-    </button>
+    </header>
   );
 }
 
-function BrandMark() {
-  return <VigenteLogo className="h-5 w-5" />;
+function TierSimulator() {
+  const { t } = useCopy();
+  const [tierIdx, setTierIdx] = useState(1);
+  const tier = t.tiers[tierIdx];
+  const ltvPct = Math.round(tier.ltv * 100);
+
+  return (
+    <div className="rounded-[14px] border border-[#23282E] bg-[#12151A] p-6">
+      <div className={`${mono} mb-4 text-xs text-[#9AA3A0]`}>{t.demoTitle}</div>
+      <div className="mb-5 flex gap-2">
+        {t.tiers.map((tr, i) => (
+          <button
+            key={tr.label}
+            type="button"
+            onClick={() => setTierIdx(i)}
+            className={`${mono} flex-1 rounded-lg border px-1 py-2 text-xs transition-colors ${
+              i === tierIdx
+                ? "border-[#8BE9B0]/40 bg-[#8BE9B0]/10 text-[#8BE9B0]"
+                : "border-[#2A2F35] text-[#9AA3A0] hover:text-[#E8ECEA]"
+            }`}
+          >
+            {tr.label}
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-3">
+        <SimRow label={t.demoCollateral} value="$1,000 USDC" />
+        <SimRow label="LTV" value={`${ltvPct}%`} big accent />
+        <SimRow label={t.demoBorrow} value={`$${Math.round(tier.ltv * 1000)}`} big />
+        <SimRow label={t.demoRate} value={tier.rate} accent last />
+      </div>
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[#1C2126]">
+        <div
+          className="h-full rounded-full bg-[#8BE9B0] transition-all duration-300"
+          style={{ width: `${ltvPct}%` }}
+        />
+      </div>
+      <p className="mt-3.5 text-xs leading-relaxed text-[#6B7370]">{t.demoNote}</p>
+    </div>
+  );
 }
 
-// ===========================================================================
-// LIVE ON-CHAIN STATUS
-// ===========================================================================
+function SimRow({
+  label,
+  value,
+  big,
+  accent,
+  last,
+}: {
+  label: string;
+  value: string;
+  big?: boolean;
+  accent?: boolean;
+  last?: boolean;
+}) {
+  return (
+    <div className={`flex items-baseline justify-between ${last ? "" : "border-b border-[#1C2126] pb-3"}`}>
+      <span className="text-sm text-[#9AA3A0]">{label}</span>
+      <span
+        className={`${mono} ${big ? "text-[22px] font-semibold" : "text-base"} ${
+          accent ? "text-[#8BE9B0]" : "text-[#E8ECEA]"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
 
-const PASSPORT_SAMPLE = "GBV676BNXDPVZDLUAB6O7DHWUIS42OTIWI5MIKCFJOWMJWTVKQNXFWCM";
+// --- trust strip --------------------------------------------------------------
 
-function LiveOnchainStatus() {
-  const { lang } = useLang();
+function TrustStrip() {
+  const { t } = useCopy();
+  return (
+    <div className="border-y border-[#1C2126] bg-[#0E1114]">
+      <div className={`${mono} mx-auto flex max-w-6xl flex-wrap justify-between gap-4 px-6 py-4 text-[13px] text-[#9AA3A0]`}>
+        <span>{t.strip1}</span>
+        <span>{t.strip2}</span>
+        <span>{t.strip3}</span>
+        <span>{t.strip4}</span>
+      </div>
+    </div>
+  );
+}
+
+// --- how it works -------------------------------------------------------------
+
+function SectionHeading({ title, sub }: { title: string; sub?: string }) {
+  return (
+    <>
+      <h2 className="mb-3 text-3xl font-bold tracking-tight md:text-[34px]">{title}</h2>
+      {sub && <p className="mb-10 max-w-[600px] text-base text-[#9AA3A0]">{sub}</p>}
+    </>
+  );
+}
+
+function HowItWorks() {
+  const { t } = useCopy();
+  return (
+    <section id="how" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+      <SectionHeading title={t.howTitle} sub={t.howSub} />
+      <div className="grid gap-5 md:grid-cols-3">
+        {t.steps.map((step) => (
+          <div key={step.num} className="rounded-[14px] border border-[#23282E] bg-[#12151A] p-6">
+            <div className={`${mono} mb-3.5 text-[13px] text-[#8BE9B0]`}>{step.num}</div>
+            <h3 className="mb-2.5 text-[19px] font-semibold">{step.title}</h3>
+            <p className="text-sm leading-relaxed text-[#9AA3A0]">{step.body}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// --- differentiator -----------------------------------------------------------
+
+function Differentiator() {
+  const { t } = useCopy();
+  return (
+    <section className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+      <div className="grid items-start gap-10 md:grid-cols-2 md:gap-14">
+        <div>
+          <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-[34px]">{t.diffTitle}</h2>
+          <p className="mb-4 text-base leading-relaxed text-[#B4BCB9]">{t.diffBody1}</p>
+          <p className="text-base leading-relaxed text-[#B4BCB9]">{t.diffBody2}</p>
+        </div>
+        <div className="overflow-hidden rounded-[14px] border border-[#23282E] bg-[#12151A]">
+          <div className={`${mono} grid grid-cols-[1.2fr_1fr_1fr] border-b border-[#23282E] px-5 py-3.5 text-xs text-[#6B7370]`}>
+            <span />
+            <span>{t.diffColCdp}</span>
+            <span className="text-[#8BE9B0]">vigente</span>
+          </div>
+          {t.diffRows.map((row) => (
+            <div
+              key={row.label}
+              className="grid grid-cols-[1.2fr_1fr_1fr] items-baseline border-b border-[#1C2126] px-5 py-3.5 text-sm last:border-b-0"
+            >
+              <span className="text-[#9AA3A0]">{row.label}</span>
+              <span className="text-[#6B7370]">{row.cdp}</span>
+              <span className="text-[#E8ECEA]">{row.vig}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// --- who it's for ---------------------------------------------------------------
+
+function WhoItsFor() {
+  const { t } = useCopy();
+  return (
+    <section id="who" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+      <SectionHeading title={t.whoTitle} />
+      <div className="grid gap-5 md:grid-cols-2">
+        {t.segments.map((seg) => (
+          <div key={seg.tag} className="rounded-[14px] border border-[#23282E] bg-[#12151A] p-7">
+            <div className={`${mono} mb-3.5 text-xs text-[#8BE9B0]`}>{seg.tag}</div>
+            <h3 className="mb-3 text-[22px] font-semibold tracking-tight">{seg.title}</h3>
+            <p className="text-[15px] leading-relaxed text-[#9AA3A0]">{seg.body}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// --- financial passport ---------------------------------------------------------
+
+type HistoryKey = "none" | "always" | "sometimes" | "late";
+const HISTORY_BONUS: Record<HistoryKey, number> = { always: 100, sometimes: 30, late: -80, none: 0 };
+const TIER_LTVS = [50, 65, 75];
+
+interface PassportResult {
+  score: number;
+  tierIdx: number;
+  ltv: number;
+  inc: number;
+  rem: number;
+  exp: number;
+  history: HistoryKey;
+}
+
+function calcPassport(incRaw: string, remRaw: string, expRaw: string, history: HistoryKey): PassportResult | null {
+  const inc = parseFloat(incRaw) || 0;
+  const rem = parseFloat(remRaw) || 0;
+  const exp = parseFloat(expRaw) || 0;
+  if (inc + rem <= 0) return null;
+  const flow = inc + rem * 0.8;
+  const ratio = Math.max(0, Math.min(1, (flow - exp) / flow));
+  const remitBonus = rem > 0 ? 40 : 0;
+  const score = Math.round(Math.max(300, Math.min(850, 350 + ratio * 360 + HISTORY_BONUS[history] + remitBonus)));
+  const tierIdx = score >= 700 ? 2 : score >= 550 ? 1 : 0;
+  return { score, tierIdx, ltv: TIER_LTVS[tierIdx], inc, rem, exp, history };
+}
+
+const passportInputCls =
+  "rounded-[10px] border border-[#2A2F35] bg-[#0B0D0F] px-3.5 py-3 text-[15px] text-[#E8ECEA] outline-none transition-colors focus:border-[#8BE9B0]";
+
+function PassportSection() {
+  const { t } = useCopy();
+  const [income, setIncome] = useState("");
+  const [remit, setRemit] = useState("");
+  const [expenses, setExpenses] = useState("");
+  const [history, setHistory] = useState<HistoryKey>("none");
+  const [result, setResult] = useState<PassportResult | null>(null);
+  const [calcError, setCalcError] = useState(false);
+
+  const [wallet, setWallet] = useState("");
+  const [walletError, setWalletError] = useState<"format" | "read" | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [onchain, setOnchain] = useState<BadgeState | null>(null);
+
+  const verified = onchain !== null;
+
+  function handleCalc() {
+    const r = calcPassport(income, remit, expenses, history);
+    if (!r) {
+      setCalcError(true);
+      return;
+    }
+    setCalcError(false);
+    setResult(r);
+    try {
+      localStorage.setItem(
+        "vigente_passport",
+        JSON.stringify({ score: r.score, tierIdx: r.tierIdx, ltv: r.ltv, ts: Date.now() }),
+      );
+    } catch {
+      // localStorage unavailable (private mode) — the on-screen result is enough
+    }
+  }
+
+  async function handleVerify() {
+    const addr = wallet.trim();
+    if (!PUBKEY_RE.test(addr)) {
+      setWalletError("format");
+      return;
+    }
+    setWalletError(null);
+    setVerifying(true);
+    try {
+      setOnchain(await verifyBadge(addr));
+    } catch {
+      setWalletError("read");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  function handleDownload() {
+    if (!result || !verified) return;
+    const f = t.ppFile;
+    const histLabel = t.ppHistoryOpts.find((o) => o.v === result.history)?.label ?? result.history;
+    const onchainLine =
+      onchain && onchain.score != null ? `${onchain.score} / 1000` : f.onchainNone;
+    const lines = [
+      f.title,
+      "=".repeat(f.title.length),
+      "",
+      `${f.date}: ${new Date().toISOString().slice(0, 10)}`,
+      `${f.score}: ${result.score} / 850`,
+      `${f.tier}: ${t.ppTiers[result.tierIdx]}`,
+      `${f.ltv}: ${result.ltv}%`,
+      "",
+      `${f.income}: $${result.inc}`,
+      `${f.remit}: $${result.rem}`,
+      `${f.expenses}: $${result.exp}`,
+      `${f.history}: ${histLabel}`,
+      "",
+      `Wallet (Stellar): ${wallet.trim()}`,
+      `${f.onchain}: ${onchainLine}`,
+      `Contract: ${CONTRACT_ID} (testnet)`,
+      "",
+      f.note,
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vigente-passport-${result.score}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  return (
+    <section id="passport" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+      <div className="rounded-[18px] border border-[#23282E] bg-gradient-to-b from-[#12151A] to-[#0E1114] p-7 md:p-12">
+        <div className={`${mono} mb-3.5 text-xs text-[#8BE9B0]`}>{t.ppTag}</div>
+        <h2 className="mb-3 text-3xl font-bold tracking-tight md:text-[34px]">{t.ppTitle}</h2>
+        <p className="mb-9 max-w-[640px] text-base leading-relaxed text-[#9AA3A0]">{t.ppSub}</p>
+        <div className="grid items-start gap-10 md:grid-cols-2">
+          {/* form */}
+          <div className="grid gap-4">
+            <label className="grid gap-1.5 text-sm text-[#B4BCB9]">
+              <span>{t.ppIncome}</span>
+              <input
+                type="number"
+                min="0"
+                value={income}
+                onChange={(e) => {
+                  setIncome(e.target.value);
+                  setCalcError(false);
+                }}
+                placeholder="500"
+                className={`${mono} ${passportInputCls}`}
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm text-[#B4BCB9]">
+              <span>{t.ppRemit}</span>
+              <input
+                type="number"
+                min="0"
+                value={remit}
+                onChange={(e) => {
+                  setRemit(e.target.value);
+                  setCalcError(false);
+                }}
+                placeholder="200"
+                className={`${mono} ${passportInputCls}`}
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm text-[#B4BCB9]">
+              <span>{t.ppExpenses}</span>
+              <input
+                type="number"
+                min="0"
+                value={expenses}
+                onChange={(e) => {
+                  setExpenses(e.target.value);
+                  setCalcError(false);
+                }}
+                placeholder="350"
+                className={`${mono} ${passportInputCls}`}
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm text-[#B4BCB9]">
+              <span>{t.ppHistory}</span>
+              <select
+                value={history}
+                onChange={(e) => setHistory(e.target.value as HistoryKey)}
+                className={passportInputCls}
+              >
+                {t.ppHistoryOpts.map((opt) => (
+                  <option key={opt.v} value={opt.v}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={handleCalc}
+              className="mt-1 rounded-[10px] bg-[#8BE9B0] px-5 py-3.5 text-base font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2]"
+            >
+              {t.ppCalc}
+            </button>
+            {calcError && <p className="text-[13px] text-[#E9998B]">{t.ppError}</p>}
+            <p className="text-xs leading-relaxed text-[#6B7370]">{t.ppPrivacy}</p>
+          </div>
+
+          {/* result */}
+          <div className="flex min-h-[320px] flex-col justify-center rounded-[14px] border border-[#23282E] bg-[#0B0D0F] p-7">
+            {!result ? (
+              <div className="text-center">
+                <div className={`${mono} mb-3.5 text-[40px] text-[#2A2F35]`}>···</div>
+                <p className="text-sm leading-relaxed text-[#6B7370]">{t.ppEmpty}</p>
+              </div>
+            ) : (
+              <div>
+                <div className={`${mono} mb-2.5 text-xs text-[#9AA3A0]`}>{t.ppScoreLabel}</div>
+                <div className="mb-4 flex items-baseline gap-3.5">
+                  <span className={`${mono} text-[52px] font-semibold leading-none text-[#8BE9B0]`}>{result.score}</span>
+                  <span className={`${mono} text-sm text-[#9AA3A0]`}>/ 850</span>
+                  <span
+                    className={`${mono} rounded border px-2 py-0.5 text-[11px] ${
+                      verified
+                        ? "border-[#8BE9B0]/40 text-[#8BE9B0]"
+                        : "border-[#E9C98B]/35 text-[#E9C98B]"
+                    }`}
+                  >
+                    {verified ? t.ppBadgeVerified : t.ppBadgePreview}
+                  </span>
+                </div>
+                <div className="mb-4 h-2 overflow-hidden rounded-full bg-[#1C2126]">
+                  <div
+                    className="h-full rounded-full bg-[#8BE9B0] transition-all duration-300"
+                    style={{ width: `${Math.round(((result.score - 300) / 550) * 100)}%` }}
+                  />
+                </div>
+                <div className="mb-5 grid gap-2.5">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[#9AA3A0]">{t.ppTierLabel}</span>
+                    <span className={`${mono} text-[#E8ECEA]`}>{t.ppTiers[result.tierIdx]}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[#9AA3A0]">{t.ppLtvLabel}</span>
+                    <span className={`${mono} text-[#8BE9B0]`}>{result.ltv}%</span>
+                  </div>
+                  {verified && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-[#9AA3A0]">{t.ppOnchainScore}</span>
+                      <span className={`${mono} text-[#E8ECEA]`}>
+                        {onchain && onchain.score != null ? `${onchain.score} / 1000` : t.ppOnchainNone}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <p className="mb-5 text-[13px] leading-relaxed text-[#9AA3A0]">{t.ppNote}</p>
+
+                {!verified ? (
+                  <div className="rounded-xl border border-[#2A2F35] bg-[#E9C98B]/[0.03] p-4.5">
+                    <div className={`${mono} mb-2 text-xs text-[#E9C98B]`}>{t.ppLockTag}</div>
+                    <p className="mb-3.5 text-[13px] leading-relaxed text-[#9AA3A0]">{t.ppLockBody}</p>
+                    <div className="grid gap-2.5">
+                      <input
+                        type="text"
+                        value={wallet}
+                        onChange={(e) => {
+                          setWallet(e.target.value);
+                          setWalletError(null);
+                        }}
+                        placeholder="G…"
+                        spellCheck={false}
+                        className={`${mono} rounded-[10px] border border-[#2A2F35] bg-[#0B0D0F] px-3.5 py-3 text-[13px] text-[#E8ECEA] outline-none transition-colors focus:border-[#8BE9B0]`}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleVerify}
+                        disabled={verifying}
+                        className="rounded-[10px] bg-[#8BE9B0] px-4 py-3 text-sm font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2] disabled:opacity-60"
+                      >
+                        {verifying ? t.ppVerifying : t.ppVerify}
+                      </button>
+                      {walletError && (
+                        <p className="text-xs text-[#E9998B]">
+                          {walletError === "format" ? t.ppWalletError : t.ppReadError}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-4 rounded-xl border border-[#8BE9B0]/35 bg-[#8BE9B0]/5 p-4.5">
+                      <div className={`${mono} mb-1.5 text-xs text-[#8BE9B0]`}>✓ {t.ppVerifiedTag}</div>
+                      <div className={`${mono} truncate text-xs text-[#9AA3A0]`}>
+                        {wallet.trim().slice(0, 8)}…{wallet.trim().slice(-6)}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={handleDownload}
+                        className="rounded-[10px] border border-[#8BE9B0]/40 px-4 py-3 text-sm font-semibold text-[#8BE9B0] transition-colors hover:bg-[#8BE9B0]/10"
+                      >
+                        {t.ppDownload} ↓
+                      </button>
+                      <a
+                        href="#waitlist"
+                        className="rounded-[10px] border border-[#2A2F35] px-4 py-3 text-sm text-[#E8ECEA] transition-colors hover:border-[#8BE9B0]"
+                      >
+                        {t.ppNext}
+                      </a>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// --- trust / infrastructure -----------------------------------------------------
+
+function TrustSection() {
+  const { t } = useCopy();
   const [status, setStatus] = useState<OracleStatus | null>(null);
   const [statusError, setStatusError] = useState(false);
 
@@ -359,1186 +690,335 @@ function LiveOnchainStatus() {
     };
   }, []);
 
+  const live = status !== null && !statusError;
   const k = status?.threshold ?? 3;
   const n = status?.keyCount ?? 5;
   const minAge = status?.minWalletAgeDays;
-  const live = status !== null && !statusError;
 
   return (
-    <section
-      id="live"
-      className="border-t border-white/5 py-20 md:py-28 px-6 md:px-12"
-    >
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <span
-            className={`h-2 w-2 rounded-full ${
-              live ? "bg-[#818cf8] animate-pulse" : "bg-white/30"
-            }`}
-          />
-          <h2 className="text-2xl md:text-4xl font-medium tracking-tight">
-            {tr(lang, "live on-chain", "en vivo on-chain")}
-          </h2>
-          <span className="text-xs text-white/40">
-            {live
-              ? tr(lang, "read from the contract just now", "leído del contrato ahora")
-              : tr(lang, "reading…", "leyendo…")}
-          </span>
-        </div>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-          <LiveStat label={tr(lang, "threshold", "umbral")} value={`${k} of ${n}`} sub={tr(lang, "ed25519 quorum", "quórum ed25519")} />
-          <LiveStat label={tr(lang, "oracle keys", "claves del oráculo")} value={`${n}`} sub={tr(lang, "independent signers", "firmantes independientes")} />
-          <LiveStat
-            label={tr(lang, "wallet age floor", "edad mínima de cuenta")}
-            value={minAge != null ? `${minAge}d` : "—"}
-            sub={tr(lang, "anti-sybil mint gate", "control anti-sybil")}
-          />
-          <LiveStat
-            label={tr(lang, "contract", "contrato")}
-            value="CDLLO7QE…"
-            sub={tr(lang, "testnet · soroban", "testnet · soroban")}
-            href="https://stellar.expert/explorer/testnet/contract/CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD"
-          />
-        </div>
-
-        <BadgeLookup />
+    <section id="trust" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+      <SectionHeading title={t.trustTitle} sub={t.trustSub} />
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {t.trustCards.map((card) => (
+          <div key={card.name} className="rounded-[14px] border border-[#23282E] bg-[#12151A] p-6">
+            <div className={`${mono} mb-2.5 text-sm font-semibold text-[#E8ECEA]`}>{card.name}</div>
+            <p className="text-sm leading-relaxed text-[#9AA3A0]">{card.body}</p>
+          </div>
+        ))}
       </div>
+
+      {/* live proof of the "live primitive" card — real read from the contract */}
+      <div className="mt-8 rounded-[14px] border border-[#23282E] bg-[#12151A] p-6">
+        <div className="mb-5 flex items-center gap-3">
+          <span className={`h-2 w-2 rounded-full ${live ? "animate-pulse bg-[#8BE9B0]" : "bg-white/30"}`} />
+          <span className="text-lg font-semibold">{t.liveTitle}</span>
+          <span className="text-xs text-[#6B7370]">{live ? t.liveRead : t.liveReading}</span>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <LiveStat label={t.liveThreshold} value={`${k} / ${n}`} sub={t.liveThresholdSub} />
+          <LiveStat label={t.liveKeys} value={`${n}`} sub={t.liveKeysSub} />
+          <LiveStat label={t.liveAge} value={minAge != null ? `${minAge}d` : "—"} sub={t.liveAgeSub} />
+          <LiveStat label={t.liveContract} value="CDLLO7QE…" sub={t.liveContractSub} href={CONTRACT_URL} />
+        </div>
+      </div>
+
+      <a
+        href={CONTRACT_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${mono} mt-6 inline-block rounded-lg border border-[#8BE9B0]/30 px-4 py-2.5 text-[13px] text-[#8BE9B0] transition-colors hover:bg-[#8BE9B0]/10`}
+      >
+        CDLLO7QE…HWVD · stellar.expert →
+      </a>
     </section>
   );
 }
 
-function LiveStat({
-  label,
-  value,
-  sub,
-  href,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  href?: string;
-}) {
+function LiveStat({ label, value, sub, href }: { label: string; value: string; sub: string; href?: string }) {
   const inner = (
-    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-5 h-full">
-      <div className="text-[10px] uppercase tracking-wider text-white/40 mb-2">
-        {label}
-      </div>
-      <div className="text-2xl font-medium text-white tracking-tight">{value}</div>
-      <div className="text-xs text-white/40 mt-1">{sub}</div>
+    <div className="h-full rounded-xl border border-[#1C2126] bg-[#0B0D0F] p-4">
+      <div className={`${mono} mb-1.5 text-[10px] uppercase tracking-wider text-[#6B7370]`}>{label}</div>
+      <div className={`${mono} text-xl font-medium text-[#E8ECEA]`}>{value}</div>
+      <div className="mt-1 text-xs text-[#6B7370]">{sub}</div>
     </div>
   );
-  if (href) {
-    return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className="block hover:border-[#818cf8]/40">
-        {inner}
-      </a>
-    );
-  }
-  return inner;
+  return href ? (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="block transition-opacity hover:opacity-80">
+      {inner}
+    </a>
+  ) : (
+    inner
+  );
 }
 
-function BadgeLookup() {
-  const { lang } = useLang();
-  const [pubkey, setPubkey] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<BadgeState | null>(null);
-  const [error, setError] = useState<string | null>(null);
+// --- waitlist --------------------------------------------------------------------
 
-  const isValid = PUBKEY_RE.test(pubkey.trim());
+function WaitlistSection() {
+  const { t } = useCopy();
+  const [email, setEmail] = useState("");
+  const [wantsData, setWantsData] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [emailError, setEmailError] = useState(false);
 
-  async function lookup() {
-    const addr = pubkey.trim();
-    if (!PUBKEY_RE.test(addr)) {
-      setError(tr(lang, "enter a valid G… public key", "ingresa una clave pública válida (G…)"));
+  function handleSubmit() {
+    if (!EMAIL_RE.test(email)) {
+      setEmailError(true);
       return;
     }
-    setLoading(true);
-    setError(null);
-    setResult(null);
     try {
-      setResult(await verifyBadge(addr));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tr(lang, "lookup failed", "lectura fallida"));
-    } finally {
-      setLoading(false);
+      const key = "vigente_waitlist_signups";
+      const prev = JSON.parse(localStorage.getItem(key) || "[]") as unknown[];
+      prev.push({ email, wantsData, ts: Date.now() });
+      localStorage.setItem(key, JSON.stringify(prev));
+    } catch {
+      // storage unavailable — the mailto fallback below still captures the signup
     }
+    setSubmitted(true);
   }
 
-  return (
-    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-        <div>
-          <div className="text-sm font-medium text-white">
-            {tr(lang, "read a live badge", "lee una atestación en vivo")}
-          </div>
-          <div className="text-xs text-white/40">
-            {tr(
-              lang,
-              "permissionless get_score / is_defaulted — no wallet, no signature",
-              "get_score / is_defaulted permissionless — sin wallet ni firma",
-            )}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setPubkey(PASSPORT_SAMPLE)}
-          className="self-start md:self-auto text-xs text-white/50 hover:text-[#818cf8] transition-colors"
-        >
-          {tr(lang, "use a sample address", "usar una dirección de ejemplo")}
-        </button>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-3">
-        <input
-          value={pubkey}
-          onChange={(e) => setPubkey(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && lookup()}
-          placeholder={tr(lang, "G… stellar public key", "G… clave pública de stellar")}
-          spellCheck={false}
-          className="flex-1 bg-[#050505] border border-white/10 rounded-lg px-4 py-3 text-sm font-mono outline-none focus:border-[#818cf8]/60"
-        />
-        <button
-          type="button"
-          onClick={lookup}
-          disabled={loading || !isValid}
-          className="bg-[#818cf8] hover:bg-[#a5b4fc] disabled:opacity-40 disabled:cursor-not-allowed text-[#050505] font-medium text-sm rounded-lg px-6 py-3 transition-colors"
-        >
-          {loading ? tr(lang, "reading…", "leyendo…") : tr(lang, "read", "leer")}
-        </button>
-      </div>
-
-      {error && <div className="text-red-400 text-sm mt-3">{error}</div>}
-
-      {result && (
-        <div className="flex flex-wrap items-center gap-6 mt-4 pt-4 border-t border-white/5">
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-white/40">score</div>
-            <div className="text-xl font-medium text-white">
-              {result.score != null ? `${result.score}/1000` : tr(lang, "no badge", "sin badge")}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-white/40">default</div>
-            <div
-              className={`text-xl font-medium ${
-                result.isDefaulted ? "text-red-400" : "text-[#818cf8]"
-              }`}
-            >
-              {result.isDefaulted ? tr(lang, "yes", "sí") : "no"}
-            </div>
-          </div>
-          <Link
-            href="/passport"
-            className="ml-auto text-sm text-[#818cf8] hover:text-[#a5b4fc] transition-colors"
-          >
-            {tr(lang, "full credit passport →", "pasaporte crediticio completo →")}
-          </Link>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ===========================================================================
-// MODULE 1 — evaluate any stellar address (wallet-aware)
-// ===========================================================================
-
-function ModuleEvaluate() {
-  const { lang } = useLang();
-  const { address: connectedAddress } = useWalletKit();
-  const [pubkey, setPubkey] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<ScoreResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const effective = pubkey.trim() || connectedAddress || "";
-  const valid = useMemo(() => PUBKEY_RE.test(effective), [effective]);
-
-  async function evaluate() {
-    setLoading(true);
-    setError(null);
-    setData(null);
-    try {
-      const r = await fetch(
-        `/api/oracle/score-onchain?pubkey=${encodeURIComponent(effective)}`,
-      );
-      const j = (await r.json()) as ScoreResponse | { error: string };
-      if (!r.ok || "error" in j) {
-        throw new Error("error" in j ? j.error : `HTTP ${r.status}`);
-      }
-      setData(j);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
+  const mailtoHref = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Whitelist Vigente")}&body=${encodeURIComponent(
+    `${email}${wantsData ? " · pre-calificar reputación (datos ingreso/remesas)" : ""}`,
+  )}`;
 
   return (
-    <section
-      id="protocol"
-      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
-    >
-      <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-10 md:gap-16">
+    <section id="waitlist" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+      <div className="grid items-center gap-10 rounded-[18px] border border-[#23282E] bg-gradient-to-b from-[#12151A] to-[#0E1114] p-8 md:grid-cols-2 md:gap-12 md:p-12">
         <div>
-          <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
-            {tr(lang, "score any address, live", "evalúa cualquier dirección, en vivo")}
-          </h2>
-          <p className="text-white/70 mb-6 text-base md:text-lg max-w-md">
-            {tr(
-              lang,
-              "paste any stellar public key. the scoring engine reads horizon and returns the same features the oracle signs — no fintech, no private data.",
-              "pega cualquier clave pública de stellar. el motor de scoring lee horizon y devuelve las mismas features que firma el oráculo — sin fintech, sin datos privados.",
-            )}
-          </p>
-
-          {connectedAddress && (
-            <div className="mb-4 text-xs text-white/60">
-              {tr(lang, "wallet connected", "wallet conectada")} ·{" "}
-              <span className="font-mono text-[#818cf8]">
-                {connectedAddress.slice(0, 8)}…{connectedAddress.slice(-6)}
-              </span>{" "}
-              {tr(lang, "(auto-filled below)", "(autocompletado abajo)")}
-            </div>
-          )}
-
-          <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
-            <input
-              type="text"
-              value={pubkey || connectedAddress || ""}
-              onChange={(e) => setPubkey(e.target.value)}
-              placeholder="GBV676BN..."
-              className="flex-1 px-4 py-3 rounded-lg bg-[#0d0f11] border border-white/10 focus:border-[#818cf8] outline-none text-white placeholder-white/30 font-mono text-sm"
-            />
-            <button
-              onClick={evaluate}
-              disabled={!valid || loading}
-              className="px-6 py-3 rounded-lg bg-[#818cf8] hover:bg-[#a5b4fc] disabled:bg-white/10 disabled:text-white/40 text-[#050505] font-medium text-sm transition-colors"
-            >
-              {loading ? tr(lang, "evaluating…", "evaluando…") : tr(lang, "evaluate", "evaluar")}
-            </button>
-          </div>
-          {effective.length > 0 && !valid && (
-            <p className="text-rose-400 text-sm mt-2">
-              {tr(lang, "format must be G + 55 base32 characters.", "el formato debe ser G + 55 caracteres base32.")}
-            </p>
-          )}
-          {error && <p className="text-rose-400 text-sm mt-2">{error}</p>}
+          <h2 className="mb-3.5 text-3xl font-bold tracking-tight md:text-[34px]">{t.wlTitle}</h2>
+          <p className="text-base leading-relaxed text-[#9AA3A0]">{t.wlSub}</p>
         </div>
-
-        <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 min-h-[320px] flex flex-col gap-4">
-          {!data && !loading && (
-            <div className="text-white/40 text-sm flex-1 flex items-center justify-center">
-              {tr(lang, "run an evaluation to see live features", "ejecuta una evaluación para ver features en vivo")}
-            </div>
-          )}
-          {loading && (
-            <div className="text-white/60 text-sm flex-1 flex items-center justify-center">
-              {tr(lang, "calling horizon + scoring engine…", "llamando a horizon + motor de scoring…")}
-            </div>
-          )}
-          {data && (
-            <>
-              <div className="flex items-center justify-between">
-                <span className="text-white/60 text-xs uppercase tracking-wider">
-                  {tr(lang, "tier", "tier")}
-                </span>
-                <span
-                  className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    TIER_PILL[data.score.badgeType]
-                  }`}
-                >
-                  {data.score.badgeType}
-                </span>
-              </div>
-              <Row label={tr(lang, "total score", "puntaje total")} value={`${data.score.totalScore} / 100`} />
-              <Row label={tr(lang, "account age", "edad de la cuenta")} value={`${data.features.account_age_days} d`} />
-              <Row
-                label={tr(lang, "ops evaluated", "ops evaluadas")}
-                value={`${data.features.ops_evaluated}${
-                  data.features.capped ? tr(lang, " (capped)", " (limitado)") : ""
-                }`}
+        <div>
+          {!submitted ? (
+            <div className="grid gap-3.5">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setEmailError(false);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                placeholder={t.wlPlaceholder}
+                className="rounded-[10px] border border-[#2A2F35] bg-[#0B0D0F] px-4 py-3.5 text-[15px] text-[#E8ECEA] outline-none transition-colors focus:border-[#8BE9B0]"
               />
-              <Row label={tr(lang, "total volume", "volumen total")} value={`$${data.features.total_volume_usd_equiv.toFixed(2)}`} />
-              <Row label={tr(lang, "ecosystem", "ecosistema")} value={`$${data.features.contract_volume_usd_equiv.toFixed(2)}`} />
-              <Row label={tr(lang, "p2p (penalized)", "p2p (penalizado)")} value={`$${data.features.p2p_volume_usd_equiv.toFixed(2)}`} />
-              <Row label={tr(lang, "adjusted volume", "volumen ajustado")} value={`$${data.features.adjusted_volume_usd_equiv.toFixed(2)}`} />
-              <div className="text-[10px] text-white/30 text-right pt-2">
-                {data.latency_ms} ms{data.cache_hit ? tr(lang, " · cache hit", " · cache hit") : ""}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between text-sm">
-      <span className="text-white/60">{label}</span>
-      <span className="font-mono text-white">{value}</span>
-    </div>
-  );
-}
-
-// ===========================================================================
-// MODULE 2 — watch the threshold sign
-// ===========================================================================
-
-function ModuleThresholdSign() {
-  const { lang } = useLang();
-  const SIGNING_INDICES = [0, 1, 2];
-  const ORACLES = [0, 1, 2, 3, 4];
-
-  return (
-    <section className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12 bg-gradient-to-b from-transparent via-[#818cf8]/[0.02] to-transparent">
-      <div className="max-w-6xl mx-auto">
-        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
-          {tr(lang, "watch the threshold sign", "mira firmar el umbral")}
-        </h2>
-        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
-          {tr(
-            lang,
-            "every mint requires k of n independent oracle signatures over the canonical 92-byte message. no single party can authorise alone.",
-            "cada minteo requiere k de n firmas de oráculos independientes sobre el mensaje canónico de 92 bytes. ninguna parte puede autorizar sola.",
-          )}
-        </p>
-
-        <div className="flex items-center justify-center gap-6 md:gap-12 mb-16 flex-wrap">
-          {ORACLES.map((i) => {
-            const signing = SIGNING_INDICES.includes(i);
-            return (
-              <div key={i} className="flex flex-col items-center gap-2">
-                <div
-                  className={`w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center border-2 transition-colors ${
-                    signing
-                      ? "border-[#818cf8] bg-[#818cf8]/10"
-                      : "border-white/10 bg-white/5"
-                  }`}
-                >
-                  {signing ? (
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="#818cf8"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="w-8 h-8"
-                    >
-                      <polyline points="4 13 10 19 20 6" />
-                    </svg>
-                  ) : (
-                    <span className="text-white/30 text-xs uppercase">
-                      {tr(lang, "idle", "inactivo")}
-                    </span>
-                  )}
-                </div>
-                <span className="text-xs text-white/60 font-mono">
-                  oracle&nbsp;{i}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 max-w-4xl mx-auto">
-          <div className="text-xs uppercase tracking-wider text-white/40 mb-3">
-            {tr(lang, "canonical signed message — 92 bytes", "mensaje canónico firmado — 92 bytes")}
-          </div>
-          <div className="flex flex-wrap gap-2 text-[11px] font-mono">
-            <Chunk label="borrower xdr (44)" color="#1e3a5f" />
-            <Chunk label="score u32 (4)" color="#818cf8" />
-            <Chunk label="expiration u64 (8)" color="#818cf8" />
-            <Chunk label="age_days u32 (4)" color="#818cf8" />
-            <Chunk label="nonce (32)" color="#a5b4fc" />
-          </div>
-          <div className="mt-4 text-xs text-white/50 leading-relaxed">
-            {tr(
-              lang,
-              "each oracle signs the same byte sequence with ed25519. the contract calls",
-              "cada oráculo firma la misma secuencia de bytes con ed25519. el contrato llama",
-            )}{" "}
-            <code className="text-[#818cf8]">env.crypto().ed25519_verify</code>{" "}
-            {tr(
-              lang,
-              "k times. fewer than k valid signatures, a duplicated oracle index, or any single tampered byte rejects the mint at simulation — no ledger pollution, no gas spent.",
-              "k veces. menos de k firmas válidas, un índice de oráculo duplicado, o un solo byte alterado rechaza el minteo en simulación — sin contaminar el ledger, sin gastar gas.",
-            )}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Chunk({ label, color }: { label: string; color: string }) {
-  return (
-    <span
-      className="px-3 py-1.5 rounded border"
-      style={{
-        borderColor: `${color}66`,
-        background: `${color}1a`,
-        color: "white",
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-// ===========================================================================
-// ARCHITECTURE SECTION
-// ===========================================================================
-
-function ArchitectureSection() {
-  const { lang } = useLang();
-  const cards = [
-    {
-      step: "1",
-      title: tr(lang, "synthetic scoring engine", "motor de scoring sintético"),
-      body: tr(
-        lang,
-        "off-chain reader of stellar horizon. 180-day window, 200-op cap. p2p churn discounted 70% against an ecosystem whitelist. zero fintech dependency.",
-        "lector off-chain de stellar horizon. ventana de 180 días, límite de 200 ops. rotación p2p descontada 70% contra una lista blanca del ecosistema. cero dependencia fintech.",
-      ),
-      tag: tr(lang, "off-chain", "off-chain"),
-    },
-    {
-      step: "2",
-      title: tr(lang, "threshold oracle quorum", "quórum de oráculo de umbral"),
-      body: tr(
-        lang,
-        "five independent ed25519 keypairs. three signatures required. each signs the canonical 92-byte mint message. tampering one byte breaks all signatures.",
-        "cinco pares de claves ed25519 independientes. tres firmas requeridas. cada una firma el mensaje canónico de 92 bytes. alterar un byte rompe todas las firmas.",
-      ),
-      tag: tr(lang, "off-chain", "off-chain"),
-    },
-    {
-      step: "3",
-      title: tr(lang, "soroban contracts", "contratos soroban"),
-      body: tr(
-        lang,
-        "vigente-badge (soulbound credit token, threshold-verified mint, immutable slash) + reference-vault (credit-gated lending with TVL cap, util limit, withdrawal timelock).",
-        "vigente-badge (token de crédito soulbound, minteo verificado por umbral, slash inmutable) + reference-vault (préstamo gateado por crédito con tope de TVL, límite de utilización, timelock de retiro).",
-      ),
-      tag: tr(lang, "on-chain", "on-chain"),
-    },
-  ];
-
-  return (
-    <section
-      id="architecture"
-      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
-    >
-      <div className="max-w-6xl mx-auto">
-        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
-          {tr(lang, "architecture", "arquitectura")}
-        </h2>
-        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
-          {tr(
-            lang,
-            "three components, each independently verifiable. nothing in the trust path is owned by a single party.",
-            "tres componentes, cada uno verificable de forma independiente. nada en el camino de confianza es propiedad de una sola parte.",
-          )}
-        </p>
-
-        <div className="grid md:grid-cols-3 gap-6 mb-12">
-          {cards.map((c) => (
-            <ArchCard key={c.step} step={c.step} title={c.title} body={c.body} tag={c.tag} />
-          ))}
-        </div>
-
-        <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 md:p-8">
-          <div className="text-xs uppercase tracking-wider text-white/40 mb-6">
-            {tr(lang, "the road ahead — the pipeline", "el camino por delante — el pipeline")}
-          </div>
-          <PipelineInfographic />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ArchCard({
-  step,
-  title,
-  body,
-  tag,
-}: {
-  step: string;
-  title: string;
-  body: string;
-  tag: string;
-}) {
-  return (
-    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <span className="text-3xl font-medium text-white/30 tracking-tight">
-          {step}
-        </span>
-        <span
-          className="text-[10px] uppercase tracking-wider px-2 py-1 rounded"
-          style={{ background: `${VIGENTE_NAVY}55`, color: "#cbd5e1" }}
-        >
-          {tag}
-        </span>
-      </div>
-      <h3 className="text-lg font-medium text-white">{title}</h3>
-      <p className="text-sm text-white/60 leading-relaxed">{body}</p>
-    </div>
-  );
-}
-
-const PIPELINE_TAG_COLOR: Record<string, string> = {
-  optional: "bg-white/10 text-white/50",
-  "off-chain": "bg-[#1e3a5f]/50 text-slate-300",
-  "on-chain": "bg-[#818cf8]/15 text-[#818cf8]",
-  read: "bg-[#1e3a5f]/50 text-slate-300",
-  impact: "bg-amber-400/15 text-amber-300",
-};
-
-function PipelineInfographic() {
-  const { lang } = useLang();
-  const stages = [
-    { key: "optional", title: tr(lang, "open finance", "open finance"), note: tr(lang, "consented bank-data enrichment", "enriquecimiento de datos bancarios consentido") },
-    { key: "off-chain", title: tr(lang, "scoring engine", "motor de scoring"), note: tr(lang, "horizon · 180d · zero fintech in trust path", "horizon · 180d · cero fintech en el path") },
-    { key: "off-chain", title: tr(lang, "threshold oracle", "oráculo de umbral"), note: tr(lang, "k-of-n ed25519 · signs the mint", "k-de-n ed25519 · firma el minteo") },
-    { key: "on-chain", title: tr(lang, "badge SBT", "badge SBT"), note: tr(lang, "soulbound · immutable defaults", "soulbound · defaults inmutables") },
-    { key: "read", title: tr(lang, "consumers", "consumidores"), note: tr(lang, "wallets · originators · opt-in protocols", "wallets · originadores · protocolos opt-in") },
-    { key: "impact", title: tr(lang, "inclusion", "inclusión"), note: tr(lang, "first-time credit · measured (IRIS+)", "primer crédito · medido (IRIS+)") },
-  ];
-
-  return (
-    <div className="flex flex-col md:flex-row md:items-stretch gap-2">
-      {stages.map((s, i) => (
-        <div key={`${s.key}-${i}`} className="flex flex-col md:flex-row md:items-stretch gap-2 md:flex-1">
-          <div className="flex-1 bg-[#050505] border border-white/5 rounded-lg p-4 flex flex-col gap-2">
-            <span
-              className={`self-start text-[9px] uppercase tracking-wider rounded-full px-2 py-0.5 ${
-                PIPELINE_TAG_COLOR[s.key]
-              }`}
-            >
-              {s.key}
-            </span>
-            <div className="text-sm font-medium text-white">{s.title}</div>
-            <div className="text-[11px] text-white/40 leading-snug">{s.note}</div>
-          </div>
-          {i < stages.length - 1 && (
-            <div className="flex items-center justify-center text-[#818cf8]/60 shrink-0 rotate-90 md:rotate-0">
-              →
+              <label className="flex cursor-pointer items-start gap-2.5 text-[13px] leading-relaxed text-[#9AA3A0]">
+                <input
+                  type="checkbox"
+                  checked={wantsData}
+                  onChange={(e) => setWantsData(e.target.checked)}
+                  className="mt-0.5 accent-[#8BE9B0]"
+                />
+                <span>{t.wlCheckbox}</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                className="rounded-[10px] bg-[#8BE9B0] px-5 py-3.5 text-base font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2]"
+              >
+                {t.wlButton}
+              </button>
+              {emailError && <p className="text-[13px] text-[#E9998B]">{t.wlError}</p>}
+              <p className="text-xs text-[#6B7370]">{t.wlPrivacy}</p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-[#8BE9B0]/35 bg-[#8BE9B0]/[0.06] p-6">
+              <div className="mb-2 text-lg font-semibold text-[#8BE9B0]">{t.wlSuccessTitle}</div>
+              <p className="mb-4 text-sm leading-relaxed text-[#B4BCB9]">
+                {t.wlSuccessBody}
+                {wantsData && ` ${t.wlSuccessData}`}
+              </p>
+              <a
+                href={mailtoHref}
+                className="inline-block rounded-[10px] bg-[#8BE9B0] px-4 py-2.5 text-sm font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2]"
+              >
+                {t.wlSuccessMail} →
+              </a>
             </div>
           )}
         </div>
-      ))}
-    </div>
+      </div>
+    </section>
   );
 }
 
-// ===========================================================================
-// THREAT MODEL SECTION
-// ===========================================================================
+// --- vision / glide-path ------------------------------------------------------------
 
-function ThreatModelSection() {
-  const { lang } = useLang();
-  const threats = [
-    {
-      vector: tr(lang, "carousel / wash trading", "carrusel / wash trading"),
-      mitigation: tr(
-        lang,
-        "ecosystem whitelist + 70% penalty on p2p volume, monthly bins and effective tx count",
-        "lista blanca del ecosistema + 70% de penalización al volumen p2p, bins mensuales y conteo efectivo de tx",
-      ),
-    },
-    {
-      vector: tr(lang, "sybil bot farms", "granjas de bots sybil"),
-      mitigation: tr(
-        lang,
-        "30-day wallet age floor folded into the signed mint message; tampered age breaks all sigs",
-        "edad mínima de 30 días incluida en el mensaje firmado; alterar la edad rompe todas las firmas",
-      ),
-    },
-    {
-      vector: tr(lang, "long-con default", "default de estafa larga"),
-      mitigation: tr(
-        lang,
-        "credit ladder: first loan = 10% of tier ceiling; full cap unlocked only after first successful repay",
-        "escalera de crédito: primer préstamo = 10% del tope del tier; el tope completo se desbloquea solo tras el primer repago exitoso",
-      ),
-    },
-    {
-      vector: tr(lang, "vault drainage / unbounded exposure", "drenaje del vault / exposición ilimitada"),
-      mitigation: tr(
-        lang,
-        "admin circuit breaker + TVL cap + 85% utilization rail (15% always liquid for LPs)",
-        "circuit breaker de admin + tope de TVL + riel de utilización 85% (15% siempre líquido para LPs)",
-      ),
-    },
-    {
-      vector: tr(lang, "centralized oracle compromise", "compromiso de oráculo centralizado"),
-      mitigation: tr(
-        lang,
-        "k-of-n ed25519 verification on-chain; anti-replay nonce stored per-mint",
-        "verificación k-de-n ed25519 on-chain; nonce anti-replay almacenado por minteo",
-      ),
-    },
-    {
-      vector: tr(lang, "LP bank run", "corrida de LPs"),
-      mitigation: tr(
-        lang,
-        "14-day withdrawal timelock + utilization floor — no single LP can drain on rumor alone",
-        "timelock de retiro de 14 días + piso de utilización — ningún LP puede drenar por un rumor",
-      ),
-    },
-  ];
-
+function VisionSection() {
+  const { t } = useCopy();
   return (
-    <section
-      id="threat-model"
-      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
-    >
-      <div className="max-w-6xl mx-auto">
-        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
-          {tr(lang, "threat model", "modelo de amenazas")}
-        </h2>
-        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
-          {tr(
-            lang,
-            "six adversarial scenarios. each one has a code-level mitigation that ships in the current testnet contracts.",
-            "seis escenarios adversariales. cada uno tiene una mitigación a nivel de código que ya está en los contratos de testnet.",
-          )}
-        </p>
-
-        <div className="bg-[#0d0f11] border border-white/5 rounded-xl overflow-hidden">
-          <div className="grid grid-cols-12 px-4 md:px-6 py-3 text-[10px] md:text-xs uppercase tracking-wider text-white/40 border-b border-white/5">
-            <div className="col-span-4 md:col-span-3">{tr(lang, "vector", "vector")}</div>
-            <div className="col-span-6 md:col-span-7">{tr(lang, "mitigation", "mitigación")}</div>
-            <div className="col-span-2 text-right">{tr(lang, "status", "estado")}</div>
-          </div>
-          {threats.map((t, i) => (
-            <div
-              key={t.vector}
-              className={`grid grid-cols-12 px-4 md:px-6 py-4 text-sm ${
-                i % 2 === 1 ? "bg-white/[0.015]" : ""
-              }`}
-            >
-              <div className="col-span-4 md:col-span-3 text-white font-medium">
-                {t.vector}
-              </div>
-              <div className="col-span-6 md:col-span-7 text-white/70 leading-relaxed">
-                {t.mitigation}
-              </div>
-              <div className="col-span-2 text-right">
-                <span className="inline-block text-[10px] uppercase tracking-wider px-2 py-1 rounded bg-[#818cf8]/15 text-[#818cf8]">
-                  {tr(lang, "shipped", "listo")}
-                </span>
-              </div>
+    <section className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+      <div className="max-w-[720px]">
+        <div className={`${mono} mb-3.5 text-xs text-[#8BE9B0]`}>{t.visionTag}</div>
+        <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-[34px]">{t.visionTitle}</h2>
+        <p className="mb-4 text-[17px] leading-relaxed text-[#B4BCB9]">{t.visionBody1}</p>
+        <p className="text-[17px] leading-relaxed text-[#B4BCB9]">{t.visionBody2}</p>
+      </div>
+      <div className="mt-10 flex flex-col items-stretch gap-6 md:flex-row md:gap-0">
+        {t.glidePath.map((gp) => (
+          <div key={gp.phase} className="flex-1 py-1 pl-5 pr-6" style={{ borderLeft: `2px solid ${gp.border}` }}>
+            <div className={`${mono} mb-2 text-xs`} style={{ color: gp.color }}>
+              {gp.phase}
             </div>
-          ))}
-        </div>
-
-        <p className="text-xs text-white/40 mt-6 max-w-2xl">
-          {tr(
-            lang,
-            "out-of-scope items (validator collapse, compromised user wallet, sdk bugs) are deliberately listed as such so the boundary of the protocol's responsibility is explicit.",
-            "los ítems fuera de alcance (colapso de validadores, wallet de usuario comprometida, bugs del sdk) se listan deliberadamente como tales para que el límite de responsabilidad del protocolo sea explícito.",
-          )}
-        </p>
-      </div>
-    </section>
-  );
-}
-
-// ===========================================================================
-// PARTNERS SECTION
-// ===========================================================================
-
-function PartnersSection() {
-  const { lang } = useLang();
-  return (
-    <section
-      id="partners"
-      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
-    >
-      <div className="max-w-6xl mx-auto">
-        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
-          {tr(lang, "partners we're building with", "socios con los que construimos")}
-        </h2>
-        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
-          {tr(
-            lang,
-            "vigente is the credit primitive — the lending stack lives on top, the data layer feeds in. we're forming partnerships in two directions, with conservative limits and client protection baked in.",
-            "vigente es el primitivo de crédito — el stack de préstamo va encima, la capa de datos alimenta. formamos alianzas en dos direcciones, con límites conservadores y protección al cliente incorporada.",
-          )}
-        </p>
-
-        <div className="grid md:grid-cols-2 gap-6 mb-12">
-          <PartnerCard
-            track={tr(lang, "layer 1 · lending protocols", "capa 1 · protocolos de préstamo")}
-            who={tr(lang, "soroban lending markets", "mercados de préstamo soroban")}
-            why={tr(
-              lang,
-              "a protocol reads get_score / is_defaulted to open a reputation-tier pool. for price-oracle markets, vigente gates eligibility off-chain at conservative, throttled limits (CP2). reference-vault is the on-chain reference any protocol can read directly.",
-              "un protocolo lee get_score / is_defaulted para abrir un pool por tier de reputación. para mercados con oráculo de precio, vigente gatea la elegibilidad off-chain con límites conservadores y throttled (CP2). reference-vault es la referencia on-chain que cualquier protocolo puede leer directo.",
-            )}
-            cta={tr(lang, "integrate vigente as credit layer", "integrar vigente como capa de crédito")}
-            email="zzzbedream@gmail.com"
-          />
-          <PartnerCard
-            track={tr(lang, "data · open finance (optional enrichment)", "datos · open finance (enriquecimiento opcional)")}
-            who={tr(lang, "open finance aggregators · chile-first", "agregadores de open finance · chile primero")}
-            why={tr(
-              lang,
-              "the core score reads only stellar horizon, so the trust path stays fintech-free. open finance is opt-in enrichment that adds detail to a thin-file borrower's profile — never a gate, never published on-chain.",
-              "el score core lee solo stellar horizon, así el camino de confianza queda libre de fintech. el open finance es enriquecimiento opt-in que añade detalle al perfil de un prestatario sin historial — nunca un gate, nunca publicado on-chain.",
-            )}
-            cta={tr(lang, "partner on data", "aliarse en datos")}
-            email="zzzbedream@gmail.com"
-          />
-        </div>
-
-        <div className="bg-[#0d0f11] border border-[#818cf8]/20 rounded-xl p-6 md:p-8 flex flex-col md:flex-row gap-6 md:items-center">
-          <div className="flex-1">
-            <div className="text-xs uppercase tracking-wider text-[#818cf8] mb-2">
-              {tr(lang, "for protocol founders", "para fundadores de protocolos")}
-            </div>
-            <p className="text-white text-base md:text-lg leading-relaxed">
-              {tr(
-                lang,
-                "if you run a soroban lending market and want to plug vigente's credit primitive in front of your pool — same week integration, zero token swap.",
-                "si operas un mercado de préstamo soroban y quieres conectar el primitivo de crédito de vigente frente a tu pool — integración la misma semana, sin token swap.",
-              )}
-            </p>
-          </div>
-          <a
-            href="mailto:zzzbedream@gmail.com?subject=Integration%20inquiry"
-            className="bg-[#818cf8] hover:bg-[#a5b4fc] text-[#050505] font-medium text-sm rounded-full px-6 py-3 transition-colors whitespace-nowrap"
-          >
-            zzzbedream@gmail.com
-          </a>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function PartnerCard({
-  track,
-  who,
-  why,
-  cta,
-  email,
-}: {
-  track: string;
-  who: string;
-  why: string;
-  cta: string;
-  email: string;
-}) {
-  return (
-    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 flex flex-col gap-4">
-      <div>
-        <div className="text-xs uppercase tracking-wider text-[#818cf8] mb-2">
-          {track}
-        </div>
-        <div className="text-base font-medium text-white">{who}</div>
-      </div>
-      <p className="text-sm text-white/60 leading-relaxed flex-1">{why}</p>
-      <a
-        href={`mailto:${email}`}
-        className="inline-flex items-center gap-2 text-sm text-[#818cf8] hover:text-[#a5b4fc] transition-colors"
-      >
-        {cta}
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="w-3 h-3"
-        >
-          <line x1="5" y1="12" x2="19" y2="12" />
-          <polyline points="12 5 19 12 12 19" />
-        </svg>
-      </a>
-    </div>
-  );
-}
-
-// ===========================================================================
-// IMPACT / INCLUSION
-// ===========================================================================
-
-function ImpactSection() {
-  const { lang } = useLang();
-  const cards = [
-    {
-      title: tr(lang, "shared value, not charity", "valor compartido, no caridad"),
-      body: tr(
-        lang,
-        "the underserved market — earners with on-chain or open-finance data but no traditional score — IS the target market. every score that unlocks fair credit earns a fee and cuts financial exclusion at the same time.",
-        "el mercado desatendido — personas con datos on-chain o de open finance pero sin score tradicional — ES el mercado objetivo. cada score que habilita crédito justo cobra un fee y a la vez reduce la exclusión financiera.",
-      ),
-    },
-    {
-      title: tr(lang, "no over-indebtedness", "sin sobreendeudamiento"),
-      body: tr(
-        lang,
-        "conservative tier ceilings, a first-loan throttle to 10%, and immutable defaults. enabling credit to the unbanked must never push them into unpayable debt — the limits are proven on-chain in reference-vault.",
-        "topes conservadores por tier, un throttle de 10% en el primer préstamo, y defaults inmutables. habilitar crédito a los no bancarizados nunca debe empujarlos a una deuda impagable — los límites están probados on-chain en reference-vault.",
-      ),
-    },
-    {
-      title: tr(lang, "metrics that aren't vanity", "métricas que no son vanidad"),
-      body: tr(
-        lang,
-        "we measure first-time credit access, cost of credit before vs. after, real default rate, and 6/12-month persistence — with a baseline and external verification. not 'wallets created'.",
-        "medimos acceso a crédito por primera vez, costo del crédito antes vs. después, tasa real de default, y persistencia a 6/12 meses — con línea base y verificación externa. no 'wallets creadas'.",
-      ),
-    },
-    {
-      title: tr(lang, "fair, explainable, private", "justo, explicable, privado"),
-      body: tr(
-        lang,
-        "disparate-impact audits across groups, an explainable score with a right to human review (Ley 21.719), and no personal data published on-chain. client protection (Cerise+SPTF) is a release gate, not a slogan.",
-        "auditorías de impacto dispar entre grupos, un score explicable con derecho a revisión humana (Ley 21.719), y sin datos personales publicados on-chain. la protección al cliente (Cerise+SPTF) es un gate de release, no un eslogan.",
-      ),
-    },
-  ];
-
-  return (
-    <section
-      id="impact"
-      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
-    >
-      <div className="max-w-6xl mx-auto">
-        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
-          {tr(lang, "inclusion is the product", "la inclusión es el producto")}
-        </h2>
-        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
-          {tr(
-            lang,
-            "a credit history is an asset the user owns — soulbound, portable, readable by every protocol that integrates vigente. it turns on-chain activity into fair credit. funded by the protocols that use it, not by grants — sustainable by design, not charity.",
-            "un historial crediticio es un activo que el usuario posee — soulbound, portable, legible por cada protocolo que integra vigente. convierte la actividad on-chain en crédito justo. financiado por los protocolos que lo usan, no por grants — sostenible por diseño, no caridad.",
-          )}
-        </p>
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {cards.map((c) => (
-            <div
-              key={c.title}
-              className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 flex flex-col gap-3"
-            >
-              <h3 className="text-base font-medium text-white">{c.title}</h3>
-              <p className="text-sm text-white/60 leading-relaxed">{c.body}</p>
-            </div>
-          ))}
-        </div>
-
-        <p className="text-white/40 text-xs mt-8 max-w-2xl">
-          {tr(
-            lang,
-            "aligned to SDG 1 / 5 / 8 / 10 and the Cerise+SPTF client-protection standards. measured with IRIS+ — baseline, comparison group, external verification.",
-            "alineado a los ODS 1 / 5 / 8 / 10 y a los estándares de protección al cliente Cerise+SPTF. medido con IRIS+ — línea base, grupo de comparación, verificación externa.",
-          )}
-        </p>
-      </div>
-    </section>
-  );
-}
-
-// ===========================================================================
-// MODULE 3 — pinned testnet evidence
-// ===========================================================================
-
-function ModuleLiveTestnet() {
-  const { lang } = useLang();
-  return (
-    <section className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12">
-      <div className="max-w-6xl mx-auto">
-        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
-          {tr(lang, "see it live on testnet", "míralo en vivo en testnet")}
-        </h2>
-        <p className="text-white/70 max-w-2xl mb-12 text-base md:text-lg">
-          {tr(lang, "two real soroban calls against", "dos llamadas soroban reales contra")}{" "}
-          <code className="text-[#818cf8]">CDLLO7QE…</code>.{" "}
-          {tr(
-            lang,
-            "the negative one shows the age floor enforcing on-chain through the signed account_age bytes.",
-            "la negativa muestra la edad mínima aplicándose on-chain a través de los bytes firmados de account_age.",
-          )}
-        </p>
-
-        <div className="grid md:grid-cols-2 gap-6">
-          <TxCard
-            title={tr(lang, "positive mint", "minteo positivo")}
-            color="#818cf8"
-            txHash="8b9fccfc9daaf594e457e19808ef9c0746e8e45f37aab8417b5fe8d59641bc85"
-            badge={tr(lang, "tx on ledger", "tx en ledger")}
-            fields={[
-              ["score", "880"],
-              [tr(lang, "age days", "días de edad"), "90"],
-              ["status", "SUCCESS"],
-              ["sigs", "3 of 5"],
-              ["get_score returned", "880"],
-            ]}
-          />
-          <TxCard
-            title={tr(lang, "age-floor trap", "trampa de edad mínima")}
-            color="#ef4444"
-            txHash={null}
-            badge={tr(lang, "rejected", "rechazado")}
-            fields={[
-              ["score", "700"],
-              [tr(lang, "age days", "días de edad"), tr(lang, "10 (below 30 floor)", "10 (bajo el piso de 30)")],
-              ["status", "Error(WasmVm, InvalidAction)"],
-              [tr(lang, "ledger affected", "ledger afectado"), tr(lang, "no — rejected at simulation", "no — rechazado en simulación")],
-              [tr(lang, "gas spent", "gas gastado"), "0"],
-            ]}
-          />
-        </div>
-
-        <div className="mt-12 text-center">
-          <Link
-            href="/v3"
-            className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-[#818cf8] hover:bg-[#a5b4fc] text-[#050505] font-medium transition-colors"
-          >
-            {tr(lang, "try a mint yourself", "haz un minteo tú mismo")}
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="w-4 h-4"
-            >
-              <line x1="5" y1="12" x2="19" y2="12" />
-              <polyline points="12 5 19 12 12 19" />
-            </svg>
-          </Link>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function TxCard({
-  title,
-  color,
-  txHash,
-  badge,
-  fields,
-}: {
-  title: string;
-  color: string;
-  txHash: string | null;
-  badge: string;
-  fields: Array<[string, string]>;
-}) {
-  return (
-    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-medium text-white">{title}</h3>
-        <span
-          className="px-2 py-1 rounded text-[10px] uppercase tracking-wider"
-          style={{ background: `${color}22`, color }}
-        >
-          {badge}
-        </span>
-      </div>
-      <div className="space-y-2 mb-4">
-        {fields.map(([k, v]) => (
-          <div key={k} className="flex items-baseline justify-between text-sm">
-            <span className="text-white/60">{k}</span>
-            <span className="font-mono text-white text-right">{v}</span>
+            <div className="mb-1.5 text-[15px] font-semibold">{gp.title}</div>
+            <div className="text-[13px] leading-relaxed text-[#9AA3A0]">{gp.body}</div>
           </div>
         ))}
       </div>
-      {txHash && (
-        <a
-          href={`https://stellar.expert/explorer/testnet/tx/${txHash}`}
-          target="_blank"
-          rel="noreferrer"
-          className="text-xs text-[#818cf8] hover:text-[#a5b4fc] break-all font-mono block pt-3 border-t border-white/5"
-        >
-          {txHash}
-        </a>
-      )}
-    </div>
+    </section>
   );
 }
 
-// ===========================================================================
-// ROADMAP
-// ===========================================================================
+// --- onboarding flow -----------------------------------------------------------------
+
+function FlowSection() {
+  const { t } = useCopy();
+  return (
+    <section id="flow" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+      <SectionHeading title={t.flowTitle} sub={t.flowSub} />
+      <div className="grid gap-y-3.5 md:grid-cols-3">
+        {t.flow.map((fs, i) => {
+          const showArrow = (i + 1) % 3 !== 0 && i < t.flow.length - 1;
+          return (
+            <div key={fs.num} className="flex items-center">
+              <div
+                className={`flex-1 self-stretch rounded-xl border bg-[#12151A] p-4 ${
+                  fs.optional ? "border-[#E9C98B]/40" : "border-[#23282E]"
+                }`}
+              >
+                <div className={`${mono} mb-2 text-[11px] ${fs.optional ? "text-[#E9C98B]" : "text-[#8BE9B0]"}`}>
+                  {fs.num}
+                  {fs.optional ? t.flowOptional : ""}
+                </div>
+                <div className="mb-1.5 text-[15px] font-semibold">{fs.title}</div>
+                <div className="text-[12.5px] leading-relaxed text-[#9AA3A0]">{fs.body}</div>
+              </div>
+              <div className={`${mono} hidden px-2 text-[15px] text-[#8BE9B0] md:block`}>{showArrow ? "→" : " "}</div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// --- network banner -------------------------------------------------------------------
+
+function NetworkSection() {
+  const { t } = useCopy();
+  return (
+    <section className="relative mt-24 overflow-hidden border-y border-[#1C2126] bg-[#080A0C]">
+      <NetworkCanvas count={70} alpha={0.9} dist={170} className="pointer-events-none absolute inset-0 h-full w-full" />
+      <div className="relative mx-auto max-w-6xl px-6 py-24 text-center md:py-28">
+        <div className={`${mono} mb-4 text-xs tracking-[0.15em] text-[#8BE9B0]`}>{t.netTag}</div>
+        <h2 className="mx-auto mb-5 max-w-[760px] text-4xl font-bold leading-[1.1] tracking-tight md:text-[52px]">
+          {t.netTitle}
+        </h2>
+        <p className="mx-auto max-w-[560px] text-[17px] leading-relaxed text-[#9AA3A0]">{t.netSub}</p>
+        <div className="mt-12 flex flex-wrap justify-center gap-12">
+          {t.netStats.map((ns) => (
+            <div key={ns.label}>
+              <div className={`${mono} text-3xl font-semibold text-[#8BE9B0]`}>{ns.value}</div>
+              <div className="mt-1.5 text-[13px] text-[#6B7370]">{ns.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// --- roadmap ------------------------------------------------------------------------
 
 function RoadmapSection() {
-  const { lang } = useLang();
-  const cards = [
-    {
-      tag: tr(lang, "shipped · live now", "listo · en vivo"),
-      tagClass: "bg-[#818cf8]/15 text-[#818cf8]",
-      title: tr(lang, "credit primitive", "primitivo de crédito"),
-      items: [
-        tr(lang, "3-of-5 threshold oracle verified on-chain", "oráculo de umbral 3-de-5 verificado on-chain"),
-        tr(lang, "soulbound credit badge + immutable defaults", "badge de crédito soulbound + defaults inmutables"),
-        tr(lang, "credit-gated reference vault (TVL cap, timelock)", "reference vault gateado por crédito (tope TVL, timelock)"),
-        tr(lang, "credit oracle interface v1 + ABI for integrators", "interfaz v1 del oráculo de crédito + ABI para integradores"),
-        tr(lang, "180-day on-chain credit heat map", "mapa de calor de crédito on-chain de 180 días"),
-      ],
-    },
-    {
-      tag: tr(lang, "tranche 1 · off-chain gate (primary)", "tramo 1 · gate off-chain (primario)"),
-      tagClass: "bg-[#818cf8]/15 text-[#818cf8]",
-      title: tr(lang, "first originator integration", "primera integración de originador"),
-      items: [
-        tr(lang, "remittance / payfi originator reads the score via api (off-chain, tested)", "originador de remesas / payfi lee el score vía api (off-chain, probado)"),
-        tr(lang, "attestation api hardened: keys, rate limits, signed payloads", "api de atestación endurecida: claves, rate limits, payloads firmados"),
-        tr(lang, "oracle ops + key rotation runbook", "ops del oráculo + runbook de rotación de claves"),
-        tr(lang, "SEP draft: credit attestation standard", "borrador SEP: estándar de atestación de crédito"),
-      ],
-    },
-    {
-      tag: tr(lang, "tranche 2 · yield layer", "tramo 2 · capa de yield"),
-      tagClass: "bg-white/10 text-white/70",
-      title: tr(lang, "data + capital efficiency", "datos + eficiencia de capital"),
-      items: [
-        tr(lang, "open finance enrichment (consented bank data)", "enriquecimiento open finance (datos bancarios consentidos)"),
-        tr(lang, "SEP-0056 tokenized vault + tokenized-vault listing", "vault tokenizado SEP-0056 + listado de vault tokenizado"),
-        tr(lang, "idle reserve earning yield in soroban pools", "reserva ociosa ganando yield en pools soroban"),
-        tr(lang, "/earn — one-click USDC deposits for LPs", "/earn — depósitos USDC de un clic para LPs"),
-      ],
-    },
-    {
-      tag: tr(lang, "tranche 3 · mainnet", "tramo 3 · mainnet"),
-      tagClass: "bg-white/10 text-white/70",
-      title: tr(lang, "open infrastructure", "infraestructura abierta"),
-      items: [
-        tr(lang, "mainnet deploy behind multi-sig", "deploy a mainnet detrás de multi-sig"),
-        tr(lang, "typescript SDK on npm", "SDK de typescript en npm"),
-        tr(lang, "tier-segmented pools + staking", "pools segmentados por tier + staking"),
-        tr(lang, "inclusion pilot + client-protection metrics (IRIS+)", "piloto de inclusión + métricas de protección al cliente (IRIS+)"),
-      ],
-    },
-  ];
-
+  const { t } = useCopy();
   return (
-    <section
-      id="roadmap"
-      className="border-t border-white/5 py-24 md:py-32 px-6 md:px-12"
-    >
-      <div className="max-w-6xl mx-auto">
-        <h2 className="text-3xl md:text-5xl font-medium tracking-tight mb-4">
-          {tr(lang, "roadmap", "roadmap")}
-        </h2>
-        <p className="text-white/70 max-w-2xl mb-4 text-base md:text-lg">
-          {tr(
-            lang,
-            "built in the open, funded in tranches. everything marked shipped is verifiable on-chain today — the rest is scoped, costed, and labeled by the tranche that pays for it.",
-            "construido en abierto, financiado por tramos. todo lo marcado como listo es verificable on-chain hoy — el resto está dimensionado, costeado y etiquetado por el tramo que lo paga.",
-          )}
-        </p>
-        <p className="text-[#818cf8] max-w-2xl mb-12 text-sm md:text-base">
-          {tr(
-            lang,
-            "the wedge is an off-chain originator: a remittance / payfi wallet reading the score via api in production. the reference-vault is the on-chain credit-gating demo. distribution and the data layer compound from there.",
-            "la cuña es un originador off-chain: una wallet de remesas / payfi leyendo el score vía api en producción. el reference-vault es la demo on-chain del gateo por crédito. la distribución y la capa de datos se acumulan desde ahí.",
-          )}
-        </p>
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {cards.map((c) => (
-            <RoadmapCard key={c.title} tag={c.tag} tagClass={c.tagClass} title={c.title} items={c.items} />
-          ))}
-        </div>
-
-        <p className="text-white/40 text-xs mt-8 max-w-2xl">
-          {tr(
-            lang,
-            "deliberately out of scope until mainnet: any dependency on an immutable price-oracle market reading our score on-chain (those markets consume only SEP-40 price oracles, so they can't gate on reputation), own token, multi-chain, retail KYC, competing with existing lending markets. vigente is the credit layer other protocols and originators read — not another lending app.",
-            "deliberadamente fuera de alcance hasta mainnet: cualquier dependencia de un mercado con oráculo de precio inmutable que lea nuestro score on-chain (esos mercados consumen solo oráculos de precio SEP-40, así que no pueden gatear por reputación), token propio, multi-chain, KYC retail, competir con mercados de préstamo existentes. vigente es la capa de crédito que otros protocolos y originadores leen — no otra app de préstamo.",
-          )}
-        </p>
+    <section id="roadmap" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+      <SectionHeading title={t.roadmapTitle} />
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {t.roadmap.map((r) => (
+          <div key={r.phase} className="pt-4" style={{ borderTop: `2px solid ${r.accent}` }}>
+            <div className={`${mono} mb-2.5 text-xs`} style={{ color: r.accent }}>
+              {r.phase} · {r.status}
+            </div>
+            <div className="mb-2 text-lg font-semibold">{r.title}</div>
+            <p className="text-[13.5px] leading-relaxed text-[#9AA3A0]">{r.body}</p>
+          </div>
+        ))}
       </div>
     </section>
   );
 }
 
-function RoadmapCard({
-  tag,
-  tagClass,
-  title,
-  items,
-}: {
-  tag: string;
-  tagClass: string;
-  title: string;
-  items: string[];
-}) {
+// --- faq ----------------------------------------------------------------------------
+
+function FaqSection() {
+  const { t } = useCopy();
+  const [open, setOpen] = useState(0);
   return (
-    <div className="bg-[#0d0f11] border border-white/5 rounded-xl p-6 flex flex-col gap-4">
-      <span
-        className={`self-start text-[10px] uppercase tracking-wider rounded-full px-2.5 py-1 ${tagClass}`}
-      >
-        {tag}
-      </span>
-      <h3 className="text-lg font-medium text-white">{title}</h3>
-      <ul className="space-y-2 text-sm text-white/70">
-        {items.map((item) => (
-          <li key={item} className="flex gap-2">
-            <span className="text-[#818cf8] shrink-0">·</span>
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <section id="faq" className="mx-auto max-w-3xl px-6 pt-22 md:pt-24">
+      <h2 className="mb-8 text-3xl font-bold tracking-tight md:text-[34px]">{t.faqTitle}</h2>
+      <div className="grid gap-3">
+        {t.faqs.map((faq, i) => {
+          const isOpen = open === i;
+          return (
+            <div key={faq.q} className="overflow-hidden rounded-xl border border-[#23282E] bg-[#12151A]">
+              <button
+                type="button"
+                onClick={() => setOpen(isOpen ? -1 : i)}
+                aria-expanded={isOpen}
+                className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left text-base font-semibold text-[#E8ECEA]"
+              >
+                <span>{faq.q}</span>
+                <span className={`${mono} shrink-0 text-lg text-[#8BE9B0]`}>{isOpen ? "−" : "+"}</span>
+              </button>
+              {isOpen && (
+                <div className="px-6 pb-5">
+                  <p className="text-[15px] leading-relaxed text-[#9AA3A0]">{faq.a}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
-// ===========================================================================
-// FOOTER
-// ===========================================================================
+// --- footer -------------------------------------------------------------------------
 
 function Footer() {
-  const { lang } = useLang();
+  const { t } = useCopy();
   return (
-    <footer className="border-t border-white/5 py-12 px-6 md:px-12">
-      <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-6 items-center justify-between text-xs text-white/40">
-        <div className="flex items-center gap-2">
-          <BrandMark />
+    <footer className="mt-24 border-t border-[#1C2126]">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8">
+        <div className={`${mono} flex items-center gap-2 text-[13px] text-[#6B7370]`}>
+          <VigenteLogo className="h-4 w-4" />
           <span>vigente protocol · stellar soroban · testnet</span>
         </div>
-        <div className="flex gap-6">
-          <a
-            href="mailto:zzzbedream@gmail.com"
-            className="hover:text-white transition-colors"
-          >
-            {tr(lang, "contact", "contacto")}
+        <div className="flex flex-wrap items-center gap-5 text-[13px]">
+          <a href={`mailto:${CONTACT_EMAIL}`} className="text-[#9AA3A0] transition-colors hover:text-[#E8ECEA]">
+            {t.footContact}
           </a>
-          <Link href="/v3" className="hover:text-white transition-colors">
-            {tr(lang, "app", "app")}
+          <Link href="/v3" className="text-[#9AA3A0] transition-colors hover:text-[#E8ECEA]">
+            {t.footApp}
           </Link>
-          <Link href="/passport" className="hover:text-white transition-colors">
-            {tr(lang, "passport", "pasaporte")}
+          <Link href="/passport" className="text-[#9AA3A0] transition-colors hover:text-[#E8ECEA]">
+            {t.footPassport}
           </Link>
-          <Link href="/onepager" className="hover:text-white transition-colors">
-            {tr(lang, "one-pager", "one-pager")}
+          <Link href="/onepager" className="text-[#9AA3A0] transition-colors hover:text-[#E8ECEA]">
+            {t.footOnePager}
           </Link>
           <a
-            href="https://stellar.expert/explorer/testnet/contract/CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD"
+            href={CONTRACT_URL}
             target="_blank"
-            rel="noreferrer"
-            className="hover:text-white transition-colors"
+            rel="noopener noreferrer"
+            className="text-[#9AA3A0] transition-colors hover:text-[#E8ECEA]"
           >
-            {tr(lang, "on-chain", "on-chain")}
+            {t.footOnchain} →
           </a>
         </div>
       </div>
+      <div className="mx-auto max-w-6xl px-6 pb-7 text-xs leading-relaxed text-[#4C5350]">{t.footDisclaimer}</div>
     </footer>
   );
 }
