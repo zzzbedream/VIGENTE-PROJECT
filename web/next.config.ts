@@ -70,6 +70,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  // Cap build workers and Turbopack memory: the defaults (one worker per
+  // logical CPU — 23 on the dev machine — and an unbounded Turbopack cache)
+  // exhaust Windows commit memory during `next build`.
+  experimental: { cpus: 4, turbopackMemoryLimit: 1_610_612_736 },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
