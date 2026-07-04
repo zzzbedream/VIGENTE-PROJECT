@@ -68,7 +68,7 @@ Per SCF Build guidelines, Tranche 1 is **shippable product**, not architecture, 
 **Tranche 1 work (post-funding):**
 
 1. Persist the score JSON in Redis (currently in-memory Map) so the 5-minute TTL survives across Vercel function invocations.
-2. Extend the whitelist seed to ~25 verified ecosystem addresses (anchors, AMM routers, lending pools, MoneyGram bridge on mainnet).
+2. Extend the whitelist seed to ~25 verified ecosystem addresses (anchors, AMM routers, lending pools on mainnet).
 
 ### 2.4 Payku Oracle Adapter (preserved as optional enrichment)
 
