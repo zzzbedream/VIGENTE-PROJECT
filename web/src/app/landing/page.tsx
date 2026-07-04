@@ -11,7 +11,10 @@
  * Live on-chain pieces are real reads against the testnet contract:
  *  - TrustSection shows oracle status via `getOracleStatus()`.
  *  - PassportSection's wallet verification calls `verifyBadge()` (permissionless
- *    get_score / is_defaulted simulation) — no fake timers.
+ *    get_score / is_defaulted simulation) — no fake timers. The address comes
+ *    either from a pasted G… string or from the wallet kit (`useWalletKit`);
+ *    the connect modal lives here, not in the nav, to preserve the approved
+ *    nav design.
  *
  * Copy lives in ./copy.ts (ES canonical, EN mirror). Hero alternates are
  * selectable via `?hero=a|b|c` for partner/AB tests; default is variant A.
@@ -23,6 +26,7 @@ import { createContext, useContext, useEffect, useState, useSyncExternalStore } 
 import { getOracleStatus, type OracleStatus } from "@/lib/integrations/vigente-read";
 import { verifyBadge } from "@/lib/stellar/vigente-contract";
 import type { BadgeState } from "@/lib/integrations/eligibility-adapter";
+import { useWalletKit } from "@/contexts/WalletKitContext";
 import { VigenteLogo } from "@/components/VigenteLogo";
 import { COPY, type Lang, type LandingCopy } from "./copy";
 import { NetworkCanvas } from "./network-canvas";
@@ -397,6 +401,7 @@ const passportInputCls =
 
 function PassportSection() {
   const { t } = useCopy();
+  const { address: kitAddress, connecting, connect, disconnect } = useWalletKit();
   const [income, setIncome] = useState("");
   const [remit, setRemit] = useState("");
   const [expenses, setExpenses] = useState("");
@@ -408,6 +413,7 @@ function PassportSection() {
   const [walletError, setWalletError] = useState<"format" | "read" | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [onchain, setOnchain] = useState<BadgeState | null>(null);
+  const [onchainAddr, setOnchainAddr] = useState("");
 
   const verified = onchain !== null;
 
@@ -430,7 +436,9 @@ function PassportSection() {
   }
 
   async function handleVerify() {
-    const addr = wallet.trim();
+    // Connected wallet wins; the pasted address is the fallback path so anyone
+    // on Stellar can verify without installing a wallet.
+    const addr = (kitAddress ?? wallet).trim();
     if (!PUBKEY_RE.test(addr)) {
       setWalletError("format");
       return;
@@ -439,6 +447,7 @@ function PassportSection() {
     setVerifying(true);
     try {
       setOnchain(await verifyBadge(addr));
+      setOnchainAddr(addr);
     } catch {
       setWalletError("read");
     } finally {
@@ -466,7 +475,7 @@ function PassportSection() {
       `${f.expenses}: $${result.exp}`,
       `${f.history}: ${histLabel}`,
       "",
-      `Wallet (Stellar): ${wallet.trim()}`,
+      `Wallet (Stellar): ${onchainAddr}`,
       `${f.onchain}: ${onchainLine}`,
       `Contract: ${CONTRACT_ID} (testnet)`,
       "",
@@ -488,7 +497,13 @@ function PassportSection() {
       <div className="rounded-[18px] border border-[#23282E] bg-gradient-to-b from-[#12151A] to-[#0E1114] p-7 md:p-12">
         <div className={`${mono} mb-3.5 text-xs text-[#8BE9B0]`}>{t.ppTag}</div>
         <h2 className="mb-3 text-3xl font-bold tracking-tight md:text-[34px]">{t.ppTitle}</h2>
-        <p className="mb-9 max-w-[640px] text-base leading-relaxed text-[#9AA3A0]">{t.ppSub}</p>
+        <p className="mb-3 max-w-[640px] text-base leading-relaxed text-[#9AA3A0]">{t.ppSub}</p>
+        <p className={`${mono} mb-9 text-xs text-[#6B7370]`}>
+          {t.ppOnchainHint}{" "}
+          <Link href="/passport" className="text-[#8BE9B0] transition-colors hover:text-[#A5F0C2]">
+            → /passport
+          </Link>
+        </p>
         <div className="grid items-start gap-10 md:grid-cols-2">
           {/* form */}
           <div className="grid gap-4">
@@ -562,7 +577,7 @@ function PassportSection() {
           {/* result */}
           <div className="flex min-h-[320px] flex-col justify-center rounded-[14px] border border-[#23282E] bg-[#0B0D0F] p-7">
             {!result ? (
-              <div className="text-center">
+              <div className="mb-6 text-center">
                 <div className={`${mono} mb-3.5 text-[40px] text-[#2A2F35]`}>···</div>
                 <p className="text-sm leading-relaxed text-[#6B7370]">{t.ppEmpty}</p>
               </div>
@@ -607,12 +622,29 @@ function PassportSection() {
                   )}
                 </div>
                 <p className="mb-5 text-[13px] leading-relaxed text-[#9AA3A0]">{t.ppNote}</p>
+              </div>
+            )}
 
-                {!verified ? (
-                  <div className="rounded-xl border border-[#2A2F35] bg-[#E9C98B]/[0.03] p-4.5">
-                    <div className={`${mono} mb-2 text-xs text-[#E9C98B]`}>{t.ppLockTag}</div>
-                    <p className="mb-3.5 text-[13px] leading-relaxed text-[#9AA3A0]">{t.ppLockBody}</p>
-                    <div className="grid gap-2.5">
+            {!verified ? (
+              <div className="rounded-xl border border-[#2A2F35] bg-[#E9C98B]/[0.03] p-4.5">
+                <div className={`${mono} mb-2 text-xs text-[#E9C98B]`}>{t.ppCapacityTitle}</div>
+                <p className="mb-3.5 text-[13px] leading-relaxed text-[#9AA3A0]">{t.ppGlidepath}</p>
+                <div className="grid gap-2.5">
+                  {kitAddress ? (
+                    <div className="flex items-center justify-between gap-3 rounded-[10px] border border-[#8BE9B0]/35 bg-[#8BE9B0]/5 px-3.5 py-2.5">
+                      <span className={`${mono} min-w-0 truncate text-xs text-[#8BE9B0]`}>
+                        {t.ppConnectedAs.replace("{addr}", `${kitAddress.slice(0, 4)}…${kitAddress.slice(-4)}`)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void disconnect()}
+                        className={`${mono} shrink-0 text-xs text-[#9AA3A0] transition-colors hover:text-[#E8ECEA]`}
+                      >
+                        {t.ppDisconnect}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2.5">
                       <input
                         type="text"
                         value={wallet}
@@ -622,49 +654,77 @@ function PassportSection() {
                         }}
                         placeholder="G…"
                         spellCheck={false}
-                        className={`${mono} rounded-[10px] border border-[#2A2F35] bg-[#0B0D0F] px-3.5 py-3 text-[13px] text-[#E8ECEA] outline-none transition-colors focus:border-[#8BE9B0]`}
+                        className={`${mono} min-w-0 flex-1 rounded-[10px] border border-[#2A2F35] bg-[#0B0D0F] px-3.5 py-3 text-[13px] text-[#E8ECEA] outline-none transition-colors focus:border-[#8BE9B0]`}
                       />
                       <button
                         type="button"
-                        onClick={handleVerify}
-                        disabled={verifying}
-                        className="rounded-[10px] bg-[#8BE9B0] px-4 py-3 text-sm font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2] disabled:opacity-60"
+                        onClick={() => {
+                          setWalletError(null);
+                          void connect();
+                        }}
+                        disabled={connecting}
+                        className="shrink-0 rounded-[10px] border border-[#8BE9B0]/40 px-3.5 py-3 text-[13px] font-semibold text-[#8BE9B0] transition-colors hover:bg-[#8BE9B0]/10 disabled:opacity-60"
                       >
-                        {verifying ? t.ppVerifying : t.ppVerify}
+                        {connecting ? t.ppConnecting : t.ppConnect}
                       </button>
-                      {walletError && (
-                        <p className="text-xs text-[#E9998B]">
-                          {walletError === "format" ? t.ppWalletError : t.ppReadError}
-                        </p>
-                      )}
                     </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="mb-4 rounded-xl border border-[#8BE9B0]/35 bg-[#8BE9B0]/5 p-4.5">
-                      <div className={`${mono} mb-1.5 text-xs text-[#8BE9B0]`}>✓ {t.ppVerifiedTag}</div>
-                      <div className={`${mono} truncate text-xs text-[#9AA3A0]`}>
-                        {wallet.trim().slice(0, 8)}…{wallet.trim().slice(-6)}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        onClick={handleDownload}
-                        className="rounded-[10px] border border-[#8BE9B0]/40 px-4 py-3 text-sm font-semibold text-[#8BE9B0] transition-colors hover:bg-[#8BE9B0]/10"
-                      >
-                        {t.ppDownload} ↓
-                      </button>
-                      <a
-                        href="#waitlist"
-                        className="rounded-[10px] border border-[#2A2F35] px-4 py-3 text-sm text-[#E8ECEA] transition-colors hover:border-[#8BE9B0]"
-                      >
-                        {t.ppNext}
-                      </a>
-                    </div>
-                  </>
-                )}
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleVerify}
+                    disabled={verifying}
+                    className="rounded-[10px] bg-[#8BE9B0] px-4 py-3 text-sm font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2] disabled:opacity-60"
+                  >
+                    {verifying ? t.ppVerifying : t.ppVerify}
+                  </button>
+                  {walletError && (
+                    <p className="text-xs text-[#E9998B]">
+                      {walletError === "format" ? t.ppWalletError : t.ppReadError}
+                    </p>
+                  )}
+                  <p className="text-xs leading-relaxed text-[#6B7370]">{t.ppLockBody}</p>
+                </div>
               </div>
+            ) : (
+              <>
+                <div className="mb-4 rounded-xl border border-[#8BE9B0]/35 bg-[#8BE9B0]/5 p-4.5">
+                  <div className={`${mono} mb-1.5 text-xs text-[#8BE9B0]`}>✓ {t.ppVerifiedTag}</div>
+                  <div className={`${mono} truncate text-xs text-[#9AA3A0]`}>
+                    {onchainAddr.slice(0, 8)}…{onchainAddr.slice(-6)}
+                  </div>
+                  {!result && (
+                    <div className="mt-2.5 flex justify-between text-sm">
+                      <span className="text-[#9AA3A0]">{t.ppOnchainScore}</span>
+                      <span className={`${mono} text-[#E8ECEA]`}>
+                        {onchain && onchain.score != null ? `${onchain.score} / 1000` : t.ppOnchainNone}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {result && (
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="rounded-[10px] border border-[#8BE9B0]/40 px-4 py-3 text-sm font-semibold text-[#8BE9B0] transition-colors hover:bg-[#8BE9B0]/10"
+                    >
+                      {t.ppDownload} ↓
+                    </button>
+                  )}
+                  <Link
+                    href="/passport"
+                    className="rounded-[10px] border border-[#2A2F35] px-4 py-3 text-sm text-[#E8ECEA] transition-colors hover:border-[#8BE9B0]"
+                  >
+                    {t.ppFullPassport} →
+                  </Link>
+                  <a
+                    href="#waitlist"
+                    className="rounded-[10px] border border-[#2A2F35] px-4 py-3 text-sm text-[#E8ECEA] transition-colors hover:border-[#8BE9B0]"
+                  >
+                    {t.ppNext}
+                  </a>
+                </div>
+              </>
             )}
           </div>
         </div>
