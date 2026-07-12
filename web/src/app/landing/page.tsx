@@ -85,6 +85,7 @@ export default function LandingPage() {
 
 function Nav() {
   const { lang, setLang, t } = useCopy();
+  const [open, setOpen] = useState(false);
   const links = [
     { label: t.navHow, href: "#how" },
     { label: t.navWho, href: "#who" },
@@ -94,15 +95,15 @@ function Nav() {
 
   return (
     <nav className="sticky top-0 z-50 border-b border-[#1C2126] bg-[#0B0D0F]/85 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3.5">
-        <div className="flex items-baseline gap-2.5">
-          <VigenteLogo className="h-5 w-5 self-center" />
-          <span className="text-lg font-bold tracking-tight">vigente protocol</span>
-          <span className={`${mono} rounded border border-[#8BE9B0]/30 px-1.5 py-0.5 text-[11px] text-[#8BE9B0]`}>
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-3.5">
+        <div className="flex min-w-0 items-baseline gap-2 sm:gap-2.5">
+          <VigenteLogo className="h-5 w-5 shrink-0 self-center" />
+          <span className="truncate text-base font-bold tracking-tight sm:text-lg">vigente protocol</span>
+          <span className={`${mono} hidden rounded border border-[#8BE9B0]/30 px-1.5 py-0.5 text-[11px] text-[#8BE9B0] sm:inline`}>
             testnet
           </span>
         </div>
-        <div className="flex items-center gap-5 text-sm">
+        <div className="flex shrink-0 items-center gap-2.5 text-sm sm:gap-5">
           <div className="hidden items-center gap-5 md:flex">
             {links.map((l) => (
               <a key={l.href} href={l.href} className="whitespace-nowrap text-[#9AA3A0] transition-colors hover:text-[#E8ECEA]">
@@ -126,12 +127,35 @@ function Nav() {
           </div>
           <a
             href="#waitlist"
-            className="shrink-0 whitespace-nowrap rounded-lg bg-[#8BE9B0] px-4 py-2 text-[13px] font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2]"
+            className="shrink-0 whitespace-nowrap rounded-lg bg-[#8BE9B0] px-3 py-2 text-xs font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2] sm:px-4 sm:text-[13px]"
           >
             {t.navCta}
           </a>
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-label="Menu"
+            aria-expanded={open}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#2A2F35] text-[#9AA3A0] transition-colors hover:text-[#E8ECEA] md:hidden"
+          >
+            <span aria-hidden className="text-lg leading-none">{open ? "×" : "≡"}</span>
+          </button>
         </div>
       </div>
+      {open && (
+        <div className="border-t border-[#1C2126] px-4 pb-4 pt-2 md:hidden">
+          {links.map((l) => (
+            <a
+              key={l.href}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              className="block py-2.5 text-[15px] text-[#B4BCB9] transition-colors hover:text-[#E8ECEA]"
+            >
+              {l.label}
+            </a>
+          ))}
+        </div>
+      )}
     </nav>
   );
 }
@@ -165,20 +189,20 @@ function Hero() {
   return (
     <header className="relative overflow-hidden">
       <NetworkCanvas count={34} alpha={0.55} dist={150} className="pointer-events-none absolute inset-0 h-full w-full opacity-40" />
-      <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-6 pb-14 pt-16 md:grid-cols-[1.15fr_0.85fr] md:pt-20">
+      <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 pb-12 pt-12 sm:px-6 md:grid-cols-[1.15fr_0.85fr] md:gap-14 md:pb-14 md:pt-20">
         <div>
           <h1 className="mb-5 text-4xl font-bold leading-[1.06] tracking-tight md:text-[52px]">{hero.title}</h1>
           <p className="mb-8 max-w-[520px] text-lg leading-relaxed text-[#B4BCB9]">{hero.sub}</p>
           <div className="flex flex-wrap items-center gap-3.5">
             <a
               href="#waitlist"
-              className="rounded-[10px] bg-[#8BE9B0] px-6 py-3.5 text-base font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2]"
+              className="w-full rounded-[10px] bg-[#8BE9B0] px-6 py-3.5 text-center text-base font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2] sm:w-auto"
             >
               {t.heroCta}
             </a>
             <a
               href="#passport"
-              className="rounded-[10px] border border-[#2A2F35] px-5 py-3.5 text-[15px] text-[#E8ECEA] transition-colors hover:border-[#8BE9B0]"
+              className="w-full rounded-[10px] border border-[#2A2F35] px-5 py-3.5 text-center text-[15px] text-[#E8ECEA] transition-colors hover:border-[#8BE9B0] sm:w-auto"
             >
               {t.heroCta3}
             </a>
@@ -298,7 +322,7 @@ function SectionHeading({ title, sub }: { title: string; sub?: string }) {
 function HowItWorks() {
   const { t } = useCopy();
   return (
-    <section id="how" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+    <section id="how" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
       <SectionHeading title={t.howTitle} sub={t.howSub} />
       <div className="grid gap-5 md:grid-cols-3">
         {t.steps.map((step) => (
@@ -318,7 +342,7 @@ function HowItWorks() {
 function Differentiator() {
   const { t } = useCopy();
   return (
-    <section className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+    <section className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
       <div className="grid items-start gap-10 md:grid-cols-2 md:gap-14">
         <div>
           <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-[34px]">{t.diffTitle}</h2>
@@ -326,7 +350,7 @@ function Differentiator() {
           <p className="text-base leading-relaxed text-[#B4BCB9]">{t.diffBody2}</p>
         </div>
         <div className="overflow-hidden rounded-[14px] border border-[#23282E] bg-[#12151A]">
-          <div className={`${mono} grid grid-cols-[1.2fr_1fr_1fr] border-b border-[#23282E] px-5 py-3.5 text-xs text-[#6B7370]`}>
+          <div className={`${mono} grid grid-cols-[1.2fr_1fr_1fr] gap-x-2 border-b border-[#23282E] px-3.5 py-3 text-xs text-[#6B7370] sm:px-5 sm:py-3.5`}>
             <span />
             <span>{t.diffColCdp}</span>
             <span className="text-[#8BE9B0]">vigente</span>
@@ -334,7 +358,7 @@ function Differentiator() {
           {t.diffRows.map((row) => (
             <div
               key={row.label}
-              className="grid grid-cols-[1.2fr_1fr_1fr] items-baseline border-b border-[#1C2126] px-5 py-3.5 text-sm last:border-b-0"
+              className="grid grid-cols-[1.2fr_1fr_1fr] items-baseline gap-x-2 border-b border-[#1C2126] px-3.5 py-3 text-[13px] last:border-b-0 sm:px-5 sm:py-3.5 sm:text-sm"
             >
               <span className="text-[#9AA3A0]">{row.label}</span>
               <span className="text-[#6B7370]">{row.cdp}</span>
@@ -352,7 +376,7 @@ function Differentiator() {
 function WhoItsFor() {
   const { t } = useCopy();
   return (
-    <section id="who" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+    <section id="who" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
       <SectionHeading title={t.whoTitle} />
       <div className="grid gap-5 md:grid-cols-2">
         {t.segments.map((seg) => (
@@ -493,8 +517,8 @@ function PassportSection() {
   }
 
   return (
-    <section id="passport" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
-      <div className="rounded-[18px] border border-[#23282E] bg-gradient-to-b from-[#12151A] to-[#0E1114] p-7 md:p-12">
+    <section id="passport" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
+      <div className="rounded-[18px] border border-[#23282E] bg-gradient-to-b from-[#12151A] to-[#0E1114] p-5 sm:p-7 md:p-12">
         <div className={`${mono} mb-3.5 text-xs text-[#8BE9B0]`}>{t.ppTag}</div>
         <h2 className="mb-3 text-3xl font-bold tracking-tight md:text-[34px]">{t.ppTitle}</h2>
         <p className="mb-3 max-w-[640px] text-base leading-relaxed text-[#9AA3A0]">{t.ppSub}</p>
@@ -575,7 +599,7 @@ function PassportSection() {
           </div>
 
           {/* result */}
-          <div className="flex min-h-[320px] flex-col justify-center rounded-[14px] border border-[#23282E] bg-[#0B0D0F] p-7">
+          <div className="flex min-h-[280px] flex-col justify-center rounded-[14px] border border-[#23282E] bg-[#0B0D0F] p-5 sm:min-h-[320px] sm:p-7">
             {!result ? (
               <div className="mb-6 text-center">
                 <div className={`${mono} mb-3.5 text-[40px] text-[#2A2F35]`}>···</div>
@@ -585,7 +609,7 @@ function PassportSection() {
               <div>
                 <div className={`${mono} mb-2.5 text-xs text-[#9AA3A0]`}>{t.ppScoreLabel}</div>
                 <div className="mb-4 flex items-baseline gap-3.5">
-                  <span className={`${mono} text-[52px] font-semibold leading-none text-[#8BE9B0]`}>{result.score}</span>
+                  <span className={`${mono} text-[44px] font-semibold leading-none text-[#8BE9B0] sm:text-[52px]`}>{result.score}</span>
                   <span className={`${mono} text-sm text-[#9AA3A0]`}>/ 850</span>
                   <span
                     className={`${mono} rounded border px-2 py-0.5 text-[11px] ${
@@ -756,7 +780,7 @@ function TrustSection() {
   const minAge = status?.minWalletAgeDays;
 
   return (
-    <section id="trust" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+    <section id="trust" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
       <SectionHeading title={t.trustTitle} sub={t.trustSub} />
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {t.trustCards.map((card) => (
@@ -841,8 +865,8 @@ function WaitlistSection() {
   )}`;
 
   return (
-    <section id="waitlist" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
-      <div className="grid items-center gap-10 rounded-[18px] border border-[#23282E] bg-gradient-to-b from-[#12151A] to-[#0E1114] p-8 md:grid-cols-2 md:gap-12 md:p-12">
+    <section id="waitlist" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
+      <div className="grid items-center gap-8 rounded-[18px] border border-[#23282E] bg-gradient-to-b from-[#12151A] to-[#0E1114] p-6 sm:p-8 md:grid-cols-2 md:gap-12 md:p-12">
         <div>
           <h2 className="mb-3.5 text-3xl font-bold tracking-tight md:text-[34px]">{t.wlTitle}</h2>
           <p className="text-base leading-relaxed text-[#9AA3A0]">{t.wlSub}</p>
@@ -906,7 +930,7 @@ function WaitlistSection() {
 function VisionSection() {
   const { t } = useCopy();
   return (
-    <section className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+    <section className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
       <div className="max-w-[720px]">
         <div className={`${mono} mb-3.5 text-xs text-[#8BE9B0]`}>{t.visionTag}</div>
         <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-[34px]">{t.visionTitle}</h2>
@@ -933,7 +957,7 @@ function VisionSection() {
 function FlowSection() {
   const { t } = useCopy();
   return (
-    <section id="flow" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+    <section id="flow" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
       <SectionHeading title={t.flowTitle} sub={t.flowSub} />
       <div className="grid gap-y-3.5 md:grid-cols-3">
         {t.flow.map((fs, i) => {
@@ -966,15 +990,15 @@ function FlowSection() {
 function NetworkSection() {
   const { t } = useCopy();
   return (
-    <section className="relative mt-24 overflow-hidden border-y border-[#1C2126] bg-[#080A0C]">
+    <section className="relative mt-16 overflow-hidden border-y border-[#1C2126] bg-[#080A0C] md:mt-24">
       <NetworkCanvas count={70} alpha={0.9} dist={170} className="pointer-events-none absolute inset-0 h-full w-full" />
-      <div className="relative mx-auto max-w-6xl px-6 py-24 text-center md:py-28">
+      <div className="relative mx-auto max-w-6xl px-6 py-16 text-center md:py-28">
         <div className={`${mono} mb-4 text-xs tracking-[0.15em] text-[#8BE9B0]`}>{t.netTag}</div>
-        <h2 className="mx-auto mb-5 max-w-[760px] text-4xl font-bold leading-[1.1] tracking-tight md:text-[52px]">
+        <h2 className="mx-auto mb-5 max-w-[760px] text-3xl font-bold leading-[1.1] tracking-tight sm:text-4xl md:text-[52px]">
           {t.netTitle}
         </h2>
-        <p className="mx-auto max-w-[560px] text-[17px] leading-relaxed text-[#9AA3A0]">{t.netSub}</p>
-        <div className="mt-12 flex flex-wrap justify-center gap-12">
+        <p className="mx-auto max-w-[560px] text-base leading-relaxed text-[#9AA3A0] sm:text-[17px]">{t.netSub}</p>
+        <div className="mt-10 flex flex-wrap justify-center gap-8 sm:gap-12">
           {t.netStats.map((ns) => (
             <div key={ns.label}>
               <div className={`${mono} text-3xl font-semibold text-[#8BE9B0]`}>{ns.value}</div>
@@ -992,7 +1016,7 @@ function NetworkSection() {
 function RoadmapSection() {
   const { t } = useCopy();
   return (
-    <section id="roadmap" className="mx-auto max-w-6xl px-6 pt-22 md:pt-24">
+    <section id="roadmap" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
       <SectionHeading title={t.roadmapTitle} />
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {t.roadmap.map((r) => (
@@ -1015,7 +1039,7 @@ function FaqSection() {
   const { t } = useCopy();
   const [open, setOpen] = useState(0);
   return (
-    <section id="faq" className="mx-auto max-w-3xl px-6 pt-22 md:pt-24">
+    <section id="faq" className="mx-auto max-w-3xl px-6 pt-16 md:pt-24">
       <h2 className="mb-8 text-3xl font-bold tracking-tight md:text-[34px]">{t.faqTitle}</h2>
       <div className="grid gap-3">
         {t.faqs.map((faq, i) => {
@@ -1026,13 +1050,13 @@ function FaqSection() {
                 type="button"
                 onClick={() => setOpen(isOpen ? -1 : i)}
                 aria-expanded={isOpen}
-                className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left text-base font-semibold text-[#E8ECEA]"
+                className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left text-[15px] font-semibold text-[#E8ECEA] sm:px-6 sm:py-5 sm:text-base"
               >
                 <span>{faq.q}</span>
                 <span className={`${mono} shrink-0 text-lg text-[#8BE9B0]`}>{isOpen ? "−" : "+"}</span>
               </button>
               {isOpen && (
-                <div className="px-6 pb-5">
+                <div className="px-4 pb-4 sm:px-6 sm:pb-5">
                   <p className="text-[15px] leading-relaxed text-[#9AA3A0]">{faq.a}</p>
                 </div>
               )}
@@ -1049,7 +1073,7 @@ function FaqSection() {
 function Footer() {
   const { t } = useCopy();
   return (
-    <footer className="mt-24 border-t border-[#1C2126]">
+    <footer className="mt-16 border-t border-[#1C2126] md:mt-24">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8">
         <div className={`${mono} flex items-center gap-2 text-[13px] text-[#6B7370]`}>
           <VigenteLogo className="h-4 w-4" />
