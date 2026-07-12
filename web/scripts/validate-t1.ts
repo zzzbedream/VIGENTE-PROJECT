@@ -21,9 +21,100 @@ import {
   __resetOracleSet,
 } from "../src/services/threshold-oracle";
 import { createPublicKey, verify as nodeVerify } from "node:crypto";
+import {
+  Account,
+  Address,
+  BASE_FEE,
+  Contract,
+  Keypair,
+  Networks,
+  rpc,
+  scValToNative,
+  TransactionBuilder,
+  type xdr,
+} from "@stellar/stellar-sdk";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// --- margin controller (pivot 2026-07: reputation-tuned LTV over Blend) -----
+
+const MARGIN_CONTROLLER_ID =
+  process.env.NEXT_PUBLIC_MARGIN_CONTROLLER_ID ||
+  "CAZ2JITV36BJ5FO3UYM5XS32CISZ3JUCLW4GWYLGDUXHOGNJHELTS3FC";
+/** Demo badge holder (score 650 → Silver tier → 7500 bps on the live ladder). */
+const MARGIN_DEMO_USER =
+  "GBV676BNXDPVZDLUAB6O7DHWUIS42OTIWI5MIKCFJOWMJWTVKQNXFWCM";
+const MARGIN_RPC_URL =
+  process.env.NEXT_PUBLIC_RPC_URL || "https://soroban-testnet.stellar.org";
+
+interface MarginLiveReads {
+  ltv_bps_demo_user: number | null;
+  max_borrow_units: string | null;
+  debt_units: string | null;
+  health_pct: number | null;
+}
+
+interface MarginBlock {
+  contract_id: string;
+  blend_pool: string;
+  price_oracle: string;
+  tests_passed: number | null;
+  code_compiles: boolean;
+  live: MarginLiveReads;
+}
+
+/** Read-only simulation against the margin controller (no funds, no signing). */
+async function marginSimRead(
+  method: string,
+  args: xdr.ScVal[],
+): Promise<xdr.ScVal | undefined> {
+  const server = new rpc.Server(MARGIN_RPC_URL, {
+    allowHttp: MARGIN_RPC_URL.startsWith("http://"),
+  });
+  const contract = new Contract(MARGIN_CONTROLLER_ID);
+  const source = new Account(Keypair.random().publicKey(), "0");
+  const tx = new TransactionBuilder(source, {
+    fee: BASE_FEE,
+    networkPassphrase: process.env.NETWORK_PASSPHRASE || Networks.TESTNET,
+  })
+    .addOperation(contract.call(method, ...args))
+    .setTimeout(30)
+    .build();
+  const sim = await server.simulateTransaction(tx);
+  if (rpc.Api.isSimulationError(sim)) {
+    throw new Error(`margin read '${method}' failed: ${sim.error}`);
+  }
+  return rpc.Api.isSimulationSuccess(sim) ? sim.result?.retval : undefined;
+}
+
+async function readMarginLive(notes: string[]): Promise<MarginLiveReads> {
+  const user = [Address.fromString(MARGIN_DEMO_USER).toScVal()];
+  const live: MarginLiveReads = {
+    ltv_bps_demo_user: null,
+    max_borrow_units: null,
+    debt_units: null,
+    health_pct: null,
+  };
+  try {
+    const ltv = await marginSimRead("ltv_bps_for", user);
+    live.ltv_bps_demo_user = ltv ? Number(scValToNative(ltv)) : null;
+    const maxb = await marginSimRead("max_borrow", user);
+    live.max_borrow_units = maxb ? String(scValToNative(maxb)) : null;
+    const debt = await marginSimRead("get_debt", user);
+    live.debt_units = debt ? String(scValToNative(debt)) : null;
+    const health = await marginSimRead("health", user);
+    live.health_pct = health ? Number(scValToNative(health)) : null;
+    notes.push(
+      `margin_controller live: ltv=${live.ltv_bps_demo_user}bps max_borrow=${live.max_borrow_units} debt=${live.debt_units} health=${live.health_pct}%`,
+    );
+  } catch (err) {
+    notes.push(
+      `margin_controller live reads failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  return live;
+}
 
 interface ThresholdDemo {
   k: number;
@@ -47,6 +138,7 @@ interface ValidationResult {
     tests_passed: number | null;
     code_compiles: boolean;
   };
+  margin_controller: MarginBlock;
   scoring_engine: {
     horizon_module_present: boolean;
     ecosystem_whitelist_present: boolean;
@@ -146,6 +238,11 @@ async function run(): Promise<ValidationResult> {
   if (vault.ok) notes.push(`reference-vault: ${vault.passed} tests passed`);
   else notes.push("reference-vault: cargo test failed");
 
+  const margin = runCargoTest(path.join(projectRoot, "contracts", "margin-controller"));
+  if (margin.ok) notes.push(`margin-controller: ${margin.passed} tests passed`);
+  else notes.push("margin-controller: cargo test failed");
+  const marginLive = await readMarginLive(notes);
+
   const horizon = fs.existsSync(
     path.join(projectRoot, "web", "src", "services", "horizon-scoring.ts"),
   );
@@ -188,9 +285,15 @@ async function run(): Promise<ValidationResult> {
     );
   }
 
+  const marginOk =
+    margin.ok &&
+    marginLive.ltv_bps_demo_user !== null &&
+    marginLive.ltv_bps_demo_user > 0;
+
   const allOk =
     badge.ok &&
     vault.ok &&
+    marginOk &&
     horizon &&
     ecosystem &&
     payku &&
@@ -212,6 +315,14 @@ async function run(): Promise<ValidationResult> {
     reference_vault: {
       tests_passed: vault.passed,
       code_compiles: vault.ok,
+    },
+    margin_controller: {
+      contract_id: MARGIN_CONTROLLER_ID,
+      blend_pool: "CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF",
+      price_oracle: "CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63",
+      tests_passed: margin.passed,
+      code_compiles: margin.ok,
+      live: marginLive,
     },
     scoring_engine: {
       horizon_module_present: horizon,
