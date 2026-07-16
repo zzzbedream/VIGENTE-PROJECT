@@ -22,7 +22,7 @@
 
 import Link from "next/link";
 import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
-import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getOracleStatus, type OracleStatus } from "@/lib/integrations/vigente-read";
 import { verifyBadge } from "@/lib/stellar/vigente-contract";
 import type { BadgeState } from "@/lib/integrations/eligibility-adapter";
@@ -839,16 +839,18 @@ function LiveStat({ label, value, sub, href }: { label: string; value: string; s
 
 function WaitlistSection() {
   const { lang, t } = useCopy();
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const companyInputRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState("");
   const [wantsData, setWantsData] = useState(false);
-  const [company, setCompany] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [emailError, setEmailError] = useState(false);
 
   async function handleSubmit() {
     if (submitting) return;
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = (emailInputRef.current?.value ?? email).trim().toLowerCase();
+    const company = companyInputRef.current?.value ?? "";
     if (!EMAIL_RE.test(normalizedEmail)) {
       setEmailError(true);
       return;
@@ -901,10 +903,17 @@ function WaitlistSection() {
           {!submitted ? (
             <div className="grid gap-3.5">
               <input
+                ref={emailInputRef}
+                name="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
+                  setEmailError(false);
+                }}
+                onInput={(e) => {
+                  setEmail(e.currentTarget.value);
                   setEmailError(false);
                 }}
                 onKeyDown={(e) => e.key === "Enter" && void handleSubmit()}
@@ -914,12 +923,12 @@ function WaitlistSection() {
               <div aria-hidden="true" className="absolute left-[-9999px] top-auto h-px w-px overflow-hidden">
                 <label htmlFor="waitlist-company">Company</label>
                 <input
+                  ref={companyInputRef}
                   id="waitlist-company"
+                  name="vigente-contact-url"
                   type="text"
-                  value={company}
-                  onChange={(e) => setCompany(e.target.value)}
                   tabIndex={-1}
-                  autoComplete="organization"
+                  autoComplete="off"
                 />
               </div>
               <label className="flex cursor-pointer items-start gap-2.5 text-[13px] leading-relaxed text-[#9AA3A0]">
