@@ -838,25 +838,51 @@ function LiveStat({ label, value, sub, href }: { label: string; value: string; s
 // --- waitlist --------------------------------------------------------------------
 
 function WaitlistSection() {
-  const { t } = useCopy();
+  const { lang, t } = useCopy();
   const [email, setEmail] = useState("");
   const [wantsData, setWantsData] = useState(false);
+  const [company, setCompany] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [emailError, setEmailError] = useState(false);
 
-  function handleSubmit() {
-    if (!EMAIL_RE.test(email)) {
+  async function handleSubmit() {
+    if (submitting) return;
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!EMAIL_RE.test(normalizedEmail)) {
       setEmailError(true);
       return;
     }
+    setSubmitting(true);
     try {
       const key = "vigente_waitlist_signups";
       const prev = JSON.parse(localStorage.getItem(key) || "[]") as unknown[];
-      prev.push({ email, wantsData, ts: Date.now() });
+      prev.push({ email: normalizedEmail, wantsData, ts: Date.now() });
       localStorage.setItem(key, JSON.stringify(prev));
     } catch {
       // storage unavailable — the mailto fallback below still captures the signup
     }
+    try {
+      const response = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          wantsData,
+          source: "landing_waitlist",
+          locale: lang,
+          company,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`waitlist api ${response.status}`);
+      }
+    } catch (err) {
+      console.warn("[waitlist] falling back to localStorage + mailto:", err);
+    } finally {
+      setSubmitting(false);
+    }
+    setEmail(normalizedEmail);
     setSubmitted(true);
   }
 
@@ -881,10 +907,21 @@ function WaitlistSection() {
                   setEmail(e.target.value);
                   setEmailError(false);
                 }}
-                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                onKeyDown={(e) => e.key === "Enter" && void handleSubmit()}
                 placeholder={t.wlPlaceholder}
                 className="rounded-[10px] border border-[#2A2F35] bg-[#0B0D0F] px-4 py-3.5 text-[15px] text-[#E8ECEA] outline-none transition-colors focus:border-[#8BE9B0]"
               />
+              <div aria-hidden="true" className="absolute left-[-9999px] top-auto h-px w-px overflow-hidden">
+                <label htmlFor="waitlist-company">Company</label>
+                <input
+                  id="waitlist-company"
+                  type="text"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  tabIndex={-1}
+                  autoComplete="organization"
+                />
+              </div>
               <label className="flex cursor-pointer items-start gap-2.5 text-[13px] leading-relaxed text-[#9AA3A0]">
                 <input
                   type="checkbox"
@@ -896,10 +933,11 @@ function WaitlistSection() {
               </label>
               <button
                 type="button"
-                onClick={handleSubmit}
-                className="rounded-[10px] bg-[#8BE9B0] px-5 py-3.5 text-base font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2]"
+                onClick={() => void handleSubmit()}
+                disabled={submitting}
+                className="rounded-[10px] bg-[#8BE9B0] px-5 py-3.5 text-base font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2] disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {t.wlButton}
+                {submitting ? t.wlSubmitting : t.wlButton}
               </button>
               {emailError && <p className="text-[13px] text-[#E9998B]">{t.wlError}</p>}
               <p className="text-xs text-[#6B7370]">{t.wlPrivacy}</p>

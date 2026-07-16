@@ -221,11 +221,12 @@ const es = {
   wlCheckbox:
     "quiero pre-calificar mi reputación conectando datos de ingreso o remesas (opcional, con consentimiento, revocable).",
   wlButton: "reservar mi lugar",
+  wlSubmitting: "reservando…",
   wlError: "escribe un correo válido.",
   wlPrivacy: "sin spam. solo avisos del piloto. nunca publicamos tus datos on-chain.",
   wlSuccessTitle: "listo — estás en la lista.",
-  wlSuccessBody: "para asegurar tu cupo mientras conectamos el registro, envíanos tu correo con un clic:",
-  wlSuccessMail: "confirmar mi cupo por correo",
+  wlSuccessBody: "registramos tu interés. si quieres reforzar el contacto, también puedes enviarnos tu correo con un clic:",
+  wlSuccessMail: "enviar respaldo por correo",
   wlSuccessData: "marcaste pre-calificación de reputación: te contactaremos primero para conectar tus datos.",
 
   visionTag: "la visión",
@@ -543,11 +544,12 @@ const en: LandingCopy = {
   wlCheckbox:
     "i want to pre-qualify my reputation by connecting income or remittance data (optional, consented, revocable).",
   wlButton: "reserve my spot",
+  wlSubmitting: "reserving…",
   wlError: "please enter a valid email.",
   wlPrivacy: "no spam. pilot updates only. we never publish your data on-chain.",
   wlSuccessTitle: "done — you're on the list.",
-  wlSuccessBody: "to secure your spot while we wire up the registry, send us your email with one click:",
-  wlSuccessMail: "confirm my spot by email",
+  wlSuccessBody: "we registered your interest. if you want a manual backup, you can also send us your email with one click:",
+  wlSuccessMail: "send email backup",
   wlSuccessData: "you checked reputation pre-qualification: we'll contact you first to connect your data.",
 
   visionTag: "the vision",
