@@ -41,7 +41,8 @@ const __dirname = path.dirname(__filename);
 
 const MARGIN_CONTROLLER_ID =
   process.env.NEXT_PUBLIC_MARGIN_CONTROLLER_ID ||
-  "CAZ2JITV36BJ5FO3UYM5XS32CISZ3JUCLW4GWYLGDUXHOGNJHELTS3FC";
+  // v1 (non-custodial hardening). v0 CAZ2JITV… deprecated — see crate README.
+  "CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV";
 /** Demo badge holder (score 650 → Silver tier → 7500 bps on the live ladder). */
 const MARGIN_DEMO_USER =
   "GBV676BNXDPVZDLUAB6O7DHWUIS42OTIWI5MIKCFJOWMJWTVKQNXFWCM";
