@@ -6,7 +6,8 @@ the pool or the oracle:
 
 | Piece | Contract (Stellar testnet) | Role |
 |---|---|---|
-| **Margin Controller** (this crate) | `CAZ2JITV36BJ5FO3UYM5XS32CISZ3JUCLW4GWYLGDUXHOGNJHELTS3FC` | Reputation → LTV gate + per-user accounting |
+| **Margin Controller v1** (this crate) | `CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV` | Reputation → LTV gate + per-user accounting (non-custodial hardened) |
+| Margin Controller v0 (deprecated) | `CAZ2JITV36BJ5FO3UYM5XS32CISZ3JUCLW4GWYLGDUXHOGNJHELTS3FC` | Superseded by v1 after the 11-jul security audit; demo position exited cleanly (contracts are immutable — fixes require redeploy) |
 | Reputation Registry (`vigente-badge`) | `CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD` | `get_score` / `is_defaulted` / `slash` (3-of-5 threshold ed25519) |
 | Price oracle (SEP-40, Reflector) | `CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63` | `lastprice(Other("XLM"))` / `lastprice(Other("USDC"))`, 14 decimals |
 | Blend pool (canonical TestnetV2) | `CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF` | Liquidity: `submit` SupplyCollateral / Borrow / Repay / WithdrawCollateral |
@@ -57,10 +58,34 @@ aggregate position can never be liquidated by Blend at a user's limit.
 - **Prices:** every operation calls SEP-40 `lastprice`; missing, non-positive,
   or older than `max_price_age` (900 s configured) → **revert**.
 - **Caps:** per-asset total-collateral caps (pilot guardrail).
-- **Pause:** admin circuit breaker.
+- **Pause:** admin circuit breaker — **only freezes `deposit_collateral` and
+  `borrow`** (entry of new risk). It can NEVER freeze `withdraw_collateral`,
+  `repay`, or `liquidate`.
 - **Nested auth:** the pool pulls tokens from the controller inside `submit`;
   the controller pre-authorizes exactly that transfer via
   `authorize_as_current_contract` (see `authorize_pool_pull`).
+
+## Non-custodial guarantees — admin powers inventory (v1)
+
+Set at init and **immutable** (no setter exists): `min_ltv_floor` = 5000 bps,
+`param_grace_secs` = 172800 (48 h). The contract has **no upgrade function**
+(`update_current_contract_wasm` is absent) — the code cannot be changed after
+deploy; fixes require a new contract and voluntary user migration.
+
+| The admin CAN | The admin CANNOT |
+|---|---|
+| `pause`/`unpause` — freezes only `deposit_collateral` + `borrow` | Move, seize, or receive user funds — the only direct token transfers are user-authorized (`deposit_collateral`, `repay`); every outbound transfer goes to the user's own wallet |
+| `queue_set_tier_ltv` — announce a ladder change (event) that only takes effect after the 48 h grace via permissionless `apply_tier_ltv` | Freeze `withdraw_collateral`, `repay`, or `liquidate` — these ignore pause by construction |
+| `set_cap` — cap NEW deposits per asset (never affects held collateral) | Make a healthy position liquidatable instantly — LTV changes are timelocked; a badge slash keeps the position valued at its borrow-time LTV during the grace window |
+| `add_collateral_asset` — allowlist a new asset (adds an option) | Set any tier LTV below `min_ltv_floor` or above `MAX_LTV_BPS` (9000) |
+| `propose_admin` → `accept_admin` — two-step rotation (multisig migration path) | Extract `Seized` collateral or `PendingSettlement` — no extraction function exists |
+| — | Upgrade the contract — immutable wasm |
+
+**Multisig status:** after these fixes no remaining admin power is custodial,
+so a single admin key is acceptable for the capped testnet pilot. Converting
+the admin account to a 2-of-3 multisig (Stellar account signers/thresholds)
+is a **pre-mainnet checklist item**; `propose_admin`/`accept_admin` exists so
+that rotation requires no redeploy.
 
 ## Liquidation (sprint scope) + keeper runbook
 

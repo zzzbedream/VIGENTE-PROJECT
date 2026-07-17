@@ -91,19 +91,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "4d0b96d00af20a896baf7e93e7bc677884c0eb9ad2024dc121a3b0c323b48ffb"
+                      "bytes": "61f24ef7649adb519e1bb4265ba3b6d19768d9abb762ad49d32f5bfbabeffc27"
                     },
                     {
-                      "bytes": "0050d3fe18e1b9791a528dc214712519a7becf653eea59592f53b5d495d273f1"
+                      "bytes": "dd940973a29c132f0a0a0f289a0d0ae62b296624de776024fce7055171340e55"
                     },
                     {
-                      "bytes": "c150b4bfc1571a87e991998959d0adf9b700a301c4f9510973c59286d595cc29"
+                      "bytes": "0278407244afe548de582a506ed6bdf146dd004767304c7c08c896cf09cfe35f"
                     },
                     {
-                      "bytes": "22a0878496fde942076fb335a50e460a5d65e629a863de5f4eb5a65ef3b2e1ab"
+                      "bytes": "7bf2b75b891d6fb6c8600940b22a97045eff63a11a0ea828fd2359e8889ccddf"
                     },
                     {
-                      "bytes": "f0efc742c4bde534e00b85fd9fe2156baec3f97f18334c8803342a14c5a042e3"
+                      "bytes": "ccdbac6ac4b6c0ca460274e678ba6f4da57c4ee25633ef43960f034f74b550ff"
                     }
                   ]
                 },
@@ -239,10 +239,26 @@
                     },
                     {
                       "key": {
+                        "symbol": "min_ltv_floor"
+                      },
+                      "val": {
+                        "u32": 5000
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "oracle"
                       },
                       "val": {
                         "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "param_grace_secs"
+                      },
+                      "val": {
+                        "u64": 3600
                       }
                     },
                     {
@@ -1165,19 +1181,19 @@
                         "val": {
                           "vec": [
                             {
-                              "bytes": "4d0b96d00af20a896baf7e93e7bc677884c0eb9ad2024dc121a3b0c323b48ffb"
+                              "bytes": "61f24ef7649adb519e1bb4265ba3b6d19768d9abb762ad49d32f5bfbabeffc27"
                             },
                             {
-                              "bytes": "0050d3fe18e1b9791a528dc214712519a7becf653eea59592f53b5d495d273f1"
+                              "bytes": "dd940973a29c132f0a0a0f289a0d0ae62b296624de776024fce7055171340e55"
                             },
                             {
-                              "bytes": "c150b4bfc1571a87e991998959d0adf9b700a301c4f9510973c59286d595cc29"
+                              "bytes": "0278407244afe548de582a506ed6bdf146dd004767304c7c08c896cf09cfe35f"
                             },
                             {
-                              "bytes": "22a0878496fde942076fb335a50e460a5d65e629a863de5f4eb5a65ef3b2e1ab"
+                              "bytes": "7bf2b75b891d6fb6c8600940b22a97045eff63a11a0ea828fd2359e8889ccddf"
                             },
                             {
-                              "bytes": "f0efc742c4bde534e00b85fd9fe2156baec3f97f18334c8803342a14c5a042e3"
+                              "bytes": "ccdbac6ac4b6c0ca460274e678ba6f4da57c4ee25633ef43960f034f74b550ff"
                             }
                           ]
                         }
@@ -1646,12 +1662,36 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "MinLtvFloor"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 5000
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "Oracle"
                             }
                           ]
                         },
                         "val": {
                           "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "ParamGraceSecs"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u64": 3600
                         }
                       },
                       {
@@ -2058,19 +2098,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "4d0b96d00af20a896baf7e93e7bc677884c0eb9ad2024dc121a3b0c323b48ffb"
+                      "bytes": "61f24ef7649adb519e1bb4265ba3b6d19768d9abb762ad49d32f5bfbabeffc27"
                     },
                     {
-                      "bytes": "0050d3fe18e1b9791a528dc214712519a7becf653eea59592f53b5d495d273f1"
+                      "bytes": "dd940973a29c132f0a0a0f289a0d0ae62b296624de776024fce7055171340e55"
                     },
                     {
-                      "bytes": "c150b4bfc1571a87e991998959d0adf9b700a301c4f9510973c59286d595cc29"
+                      "bytes": "0278407244afe548de582a506ed6bdf146dd004767304c7c08c896cf09cfe35f"
                     },
                     {
-                      "bytes": "22a0878496fde942076fb335a50e460a5d65e629a863de5f4eb5a65ef3b2e1ab"
+                      "bytes": "7bf2b75b891d6fb6c8600940b22a97045eff63a11a0ea828fd2359e8889ccddf"
                     },
                     {
-                      "bytes": "f0efc742c4bde534e00b85fd9fe2156baec3f97f18334c8803342a14c5a042e3"
+                      "bytes": "ccdbac6ac4b6c0ca460274e678ba6f4da57c4ee25633ef43960f034f74b550ff"
                     }
                   ]
                 },
@@ -2502,10 +2542,26 @@
                 },
                 {
                   "key": {
+                    "symbol": "min_ltv_floor"
+                  },
+                  "val": {
+                    "u32": 5000
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "oracle"
                   },
                   "val": {
                     "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "param_grace_secs"
+                  },
+                  "val": {
+                    "u64": 3600
                   }
                 },
                 {

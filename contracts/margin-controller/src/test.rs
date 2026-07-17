@@ -188,6 +188,22 @@ impl OracleSet {
     }
 }
 
+/// Advance the ledger clock. Prices become stale past MAX_PRICE_AGE — tests
+/// that read prices after advancing must re-set them at the new timestamp.
+fn advance_time(env: &Env, secs: u64) {
+    let now = env.ledger().timestamp();
+    env.ledger().set(LedgerInfo {
+        timestamp: now + secs,
+        protocol_version: 22,
+        sequence_number: 100,
+        network_id: Default::default(),
+        base_reserve: 10,
+        min_temp_entry_ttl: 10,
+        min_persistent_entry_ttl: 10,
+        max_entry_ttl: 12_614_400,
+    });
+}
+
 fn fresh_nonce(seed: u32) -> [u8; 32] {
     let mut n = [0u8; 32];
     n[0..4].copy_from_slice(&seed.to_be_bytes());
@@ -202,6 +218,8 @@ fn fresh_nonce(seed: u32) -> [u8; 32] {
 const INITIAL_TIMESTAMP: u64 = 1_700_000_000;
 const BADGE_EXPIRY: u64 = INITIAL_TIMESTAMP + 7_776_000; // +90 days
 const MAX_PRICE_AGE: u64 = 300; // 5 minutes, mirrors the testnet config
+const MIN_LTV_FLOOR: u32 = 5_000; // immutable floor, below the Bronze tier
+const GRACE_SECS: u64 = 3_600; // parameter/slash grace window in tests
 
 /// Oracle prices at 14 decimals (Reflector's scale).
 const P_XLM: i128 = 19_000_000_000_000; // $0.19
@@ -301,6 +319,8 @@ fn setup_with_cap(xlm_cap: i128) -> Harness<'static> {
         collateral_cap: xlm_cap,
         tier_ltv: default_tiers(&env),
         max_price_age: MAX_PRICE_AGE,
+        min_ltv_floor: MIN_LTV_FLOOR,
+        param_grace_secs: GRACE_SECS,
     });
 
     // Controller may slash badges on liquidation.
@@ -665,24 +685,163 @@ fn test_tier_ltv_above_c_factor_margin_rejected() {
     let mut tiers = Vec::new(&h.env);
     // 95% would sit above the Blend c_factor safety margin (max 90%).
     tiers.push_back(TierLevel { min_score: 300, ltv_bps: 9_500 });
-    h.ctrl.set_tier_ltv(&tiers);
+    h.ctrl.queue_set_tier_ltv(&tiers);
 }
 
 #[test]
-fn test_set_tier_ltv_replaces_ladder() {
+fn test_queue_apply_tier_ltv_replaces_ladder() {
     let h = setup();
     h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
     mint_badge(&h, &h.borrower, 850, 1);
 
     let mut tiers = Vec::new(&h.env);
     tiers.push_back(TierLevel { min_score: 800, ltv_bps: 5_000 });
-    h.ctrl.set_tier_ltv(&tiers);
+    h.ctrl.queue_set_tier_ltv(&tiers);
+    // Announced but not effective: the active ladder is untouched.
+    assert_eq!(h.ctrl.ltv_bps_for(&h.borrower), 8_500);
+
+    advance_time(&h.env, GRACE_SECS + 1);
+    let now = h.env.ledger().timestamp();
+    h.price_oracle.set_price(&Asset::Stellar(h.xlm_id.clone()), &P_XLM, &now);
+    h.price_oracle.set_price(&Asset::Stellar(h.usdc_id.clone()), &P_USDC, &now);
+    h.ctrl.apply_tier_ltv();
 
     assert_eq!(h.ctrl.ltv_bps_for(&h.borrower), 5_000);
     assert_eq!(
         h.ctrl.max_borrow(&h.borrower),
         expected_capacity(units(1_000), P_XLM, P_USDC, 5_000)
     );
+}
+
+// =============================================================================
+// NON-CUSTODIAL INVARIANTS (fixes de auditoría — DoD LOI)
+// =============================================================================
+
+#[test]
+fn test_pause_does_not_block_withdraw_or_repay() {
+    let h = setup();
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 1);
+    let max = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &(max / 2));
+
+    h.ctrl.pause();
+    // Deleverage and exit stay live while paused.
+    h.ctrl.repay(&h.borrower, &(max / 4));
+    h.ctrl.withdraw_collateral(&h.borrower, &h.xlm_id, &units(100));
+    assert_eq!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id), units(900));
+    // Entry of NEW risk stays blocked.
+    assert!(h.ctrl.try_deposit_collateral(&h.borrower, &h.xlm_id, &units(1)).is_err());
+    assert!(h.ctrl.try_borrow(&h.borrower, &1).is_err());
+}
+
+#[test]
+fn test_pause_does_not_block_liquidate() {
+    let h = setup();
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 1);
+    let max = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &max);
+
+    h.price_oracle.set_price(&Asset::Stellar(h.xlm_id.clone()), &(P_XLM / 2), &INITIAL_TIMESTAMP);
+    h.ctrl.pause();
+
+    let keeper = Address::generate(&h.env);
+    h.ctrl.liquidate(&keeper, &h.borrower);
+    assert!(h.badge.is_defaulted(&h.borrower));
+    assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
+}
+
+#[test]
+fn test_queued_ltv_downgrade_respects_grace_period() {
+    let h = setup();
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 1);
+    let max = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &max); // health == 100 at 8500 bps
+
+    // Admin queues a crushing (floor-respecting) downgrade.
+    let mut tiers = Vec::new(&h.env);
+    tiers.push_back(TierLevel { min_score: 300, ltv_bps: 5_000 });
+    h.ctrl.queue_set_tier_ltv(&tiers);
+
+    // Announced but NOT effective: the healthy position cannot be made
+    // liquidatable by the admin's parameter change during the grace window.
+    assert!(h.ctrl.get_pending_tiers().is_some());
+    assert_eq!(h.ctrl.health(&h.borrower), 100);
+    let keeper = Address::generate(&h.env);
+    assert!(h.ctrl.try_liquidate(&keeper, &h.borrower).is_err());
+    assert!(h.ctrl.try_apply_tier_ltv().is_err());
+
+    // After the grace window anyone applies; the user had N hours to react.
+    advance_time(&h.env, GRACE_SECS + 1);
+    let now = h.env.ledger().timestamp();
+    h.price_oracle.set_price(&Asset::Stellar(h.xlm_id.clone()), &P_XLM, &now);
+    h.price_oracle.set_price(&Asset::Stellar(h.usdc_id.clone()), &P_USDC, &now);
+    h.ctrl.apply_tier_ltv();
+    assert!(h.ctrl.get_pending_tiers().is_none());
+    assert!(h.ctrl.health(&h.borrower) < 100);
+    h.ctrl.liquidate(&keeper, &h.borrower);
+    assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
+}
+
+#[test]
+fn test_slash_grace_protects_healthy_position() {
+    let h = setup();
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 1);
+    let max = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &max); // health == 100 at 8500 bps
+
+    // Badge-admin-side slash (harness admin doubles as authorized vault).
+    h.badge.add_vault(&h.admin);
+    h.badge.slash(&h.admin, &h.borrower, &2_u32);
+
+    // Inside the grace window the position is valued at its borrow-time LTV
+    // snapshot: still healthy, not liquidatable.
+    assert_eq!(h.ctrl.health(&h.borrower), 100);
+    let keeper = Address::generate(&h.env);
+    assert!(h.ctrl.try_liquidate(&keeper, &h.borrower).is_err());
+
+    // Past the grace window it drops to the lowest tier and is liquidatable —
+    // and liquidate must not double-slash an already-defaulted borrower.
+    advance_time(&h.env, GRACE_SECS + 1);
+    let now = h.env.ledger().timestamp();
+    h.price_oracle.set_price(&Asset::Stellar(h.xlm_id.clone()), &P_XLM, &now);
+    h.price_oracle.set_price(&Asset::Stellar(h.usdc_id.clone()), &P_USDC, &now);
+    assert!(h.ctrl.health(&h.borrower) < 100);
+    h.ctrl.liquidate(&keeper, &h.borrower);
+    assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
+    assert_eq!(h.ctrl.get_seized(&h.xlm_id), units(1_000));
+}
+
+#[test]
+#[should_panic(expected = "tier ltv below immutable floor")]
+fn test_queue_rejects_ltv_below_floor() {
+    let h = setup();
+    let mut tiers = Vec::new(&h.env);
+    tiers.push_back(TierLevel { min_score: 300, ltv_bps: MIN_LTV_FLOOR - 1 });
+    h.ctrl.queue_set_tier_ltv(&tiers);
+}
+
+#[test]
+#[should_panic(expected = "no pending tier change")]
+fn test_apply_without_pending_fails() {
+    let h = setup();
+    h.ctrl.apply_tier_ltv();
+}
+
+#[test]
+fn test_admin_two_step_rotation() {
+    let h = setup();
+    let new_admin = Address::generate(&h.env);
+    h.ctrl.propose_admin(&new_admin);
+    // Not effective until the proposed admin accepts.
+    assert_eq!(h.ctrl.get_admin(), h.admin);
+    h.ctrl.accept_admin();
+    assert_eq!(h.ctrl.get_admin(), new_admin);
+    // The pending slot is consumed.
+    assert!(h.ctrl.try_accept_admin().is_err());
 }
 
 #[test]
