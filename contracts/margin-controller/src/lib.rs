@@ -47,6 +47,7 @@ pub trait Badge {
     fn is_defaulted(env: Env, borrower: Address) -> bool;
     fn get_score(env: Env, borrower: Address) -> Option<u32>;
     fn slash(env: Env, caller: Address, borrower: Address, reason: u32);
+    fn get_default(env: Env, borrower: Address) -> Option<DefaultBadge>;
 }
 
 /// SEP-40 asset identifier. Variant names must match the deployed oracle
@@ -152,6 +153,37 @@ pub enum DataKey {
     Seized(Address),
     /// Debt written off at liquidation, pending Blend-side settlement.
     PendingSettlement,
+    /// IMMUTABLE floor for any tier LTV — set once at init, no setter exists.
+    /// Prevents the admin from making positions liquidatable by crushing LTVs.
+    MinLtvFloor,
+    /// IMMUTABLE grace window (seconds) for parameter/slash effects — set
+    /// once at init, no setter exists.
+    ParamGraceSecs,
+    /// Queued tier-ladder change awaiting its grace period (timelock).
+    PendingTiers,
+    /// LTV bps applied at the user's last borrow — the valuation basis for
+    /// their position during the post-slash grace window.
+    LtvAtBorrow(Address),
+    /// Two-step admin rotation: proposed new admin awaiting acceptance.
+    PendingAdmin,
+}
+
+/// A tier-ladder change queued behind the grace-period timelock.
+#[derive(Clone, Debug, PartialEq)]
+#[contracttype]
+pub struct PendingTierChange {
+    pub tiers: Vec<TierLevel>,
+    pub effective_at: u64,
+}
+
+/// Mirror of vigente-badge's DefaultBadge (field names must match the badge).
+#[derive(Clone, Debug, PartialEq)]
+#[contracttype]
+pub struct DefaultBadge {
+    pub score_at_default: u32,
+    pub defaulted_at: u64,
+    pub slashed_by: Address,
+    pub reason: u32,
 }
 
 /// One score band of the credit ladder: score >= min_score → ltv_bps.
@@ -177,6 +209,11 @@ pub struct InitConfig {
     pub collateral_cap: i128,
     pub tier_ltv: Vec<TierLevel>,
     pub max_price_age: u64,
+    /// Immutable after init: no tier may ever have an LTV below this.
+    pub min_ltv_floor: u32,
+    /// Immutable after init: grace window (s) for tier changes and slash
+    /// effects on existing positions (48 h recommended in production).
+    pub param_grace_secs: u64,
 }
 
 /// Hard ceiling for any tier LTV. Must stay strictly below the Blend
@@ -210,7 +247,13 @@ impl MarginController {
         }
         config.admin.require_auth();
 
-        Self::validate_tiers(&config.tier_ltv);
+        if config.min_ltv_floor == 0 || config.min_ltv_floor > MAX_LTV_BPS {
+            panic!("min_ltv_floor out of range");
+        }
+        if config.param_grace_secs == 0 {
+            panic!("param_grace_secs must be positive");
+        }
+        Self::validate_tiers(&config.tier_ltv, config.min_ltv_floor);
         if config.max_price_age == 0 {
             panic!("max_price_age must be positive");
         }
@@ -242,6 +285,9 @@ impl MarginController {
         s.set(&DataKey::Cap(config.collateral_asset.clone()), &config.collateral_cap);
         s.set(&DataKey::TierLtv, &config.tier_ltv);
         s.set(&DataKey::MaxPriceAge, &config.max_price_age);
+        // Immutable by construction: no setter exists for either key.
+        s.set(&DataKey::MinLtvFloor, &config.min_ltv_floor);
+        s.set(&DataKey::ParamGraceSecs, &config.param_grace_secs);
         s.set(&DataKey::Paused, &false);
         s.set(&DataKey::TotalDebt, &0_i128);
         s.set(&DataKey::PendingSettlement, &0_i128);
@@ -311,7 +357,7 @@ impl MarginController {
     /// Release collateral back to the user — only if the position stays
     /// healthy at current oracle prices afterward.
     pub fn withdraw_collateral(env: Env, user: Address, asset: Address, amount: i128) {
-        Self::require_not_paused(&env);
+        // NON-CUSTODIAL INVARIANT: exits are NEVER pausable. See `pause()`.
         user.require_auth();
         if amount <= 0 {
             panic!("amount must be positive");
@@ -430,6 +476,12 @@ impl MarginController {
         let prev: i128 = env.storage().persistent().get(&debt_key).unwrap_or(0);
         env.storage().persistent().set(&debt_key, &(prev + amount));
         env.storage().persistent().extend_ttl(&debt_key, TTL_LEDGERS, TTL_LEDGERS);
+
+        // Snapshot the LTV this position was underwritten at — it is the
+        // valuation basis during the post-slash grace window (Fix B.3).
+        let snap_key = DataKey::LtvAtBorrow(user.clone());
+        env.storage().persistent().set(&snap_key, &ltv);
+        env.storage().persistent().extend_ttl(&snap_key, TTL_LEDGERS, TTL_LEDGERS);
         let total: i128 = env.storage().instance().get(&DataKey::TotalDebt).unwrap_or(0);
         env.storage().instance().set(&DataKey::TotalDebt, &(total + amount));
 
@@ -443,7 +495,7 @@ impl MarginController {
     /// Repay debt: pull the borrow asset from the user and settle it against
     /// the controller's Blend position.
     pub fn repay(env: Env, user: Address, amount: i128) {
-        Self::require_not_paused(&env);
+        // NON-CUSTODIAL INVARIANT: deleveraging is NEVER pausable. See `pause()`.
         user.require_auth();
         if amount <= 0 {
             panic!("amount must be positive");
@@ -476,6 +528,9 @@ impl MarginController {
         env.storage().persistent().set(&debt_key, &(debt - amount));
         let total: i128 = env.storage().instance().get(&DataKey::TotalDebt).unwrap_or(0);
         env.storage().instance().set(&DataKey::TotalDebt, &(total - amount));
+        if debt - amount == 0 {
+            env.storage().persistent().remove(&DataKey::LtvAtBorrow(user.clone()));
+        }
 
         // NOTE (T2): endogenous reputation update on repay hooks in here.
         env.events()
@@ -493,14 +548,7 @@ impl MarginController {
         if debt <= 0 {
             return HEALTH_NO_DEBT;
         }
-        let badge = Self::badge_client(&env);
-        let ltv = match badge.get_score(&user) {
-            // A slashed/expired badge keeps the last tier out of reach;
-            // health is then measured against the base (lowest) tier so the
-            // position is still quantifiable.
-            Some(s) => Self::ltv_for_score(&env, s),
-            None => Self::lowest_tier_ltv(&env),
-        };
+        let ltv = Self::effective_user_ltv(&env, &user);
         if ltv == 0 {
             return 0;
         }
@@ -521,7 +569,7 @@ impl MarginController {
     /// is a manual keeper runbook in this sprint; automated in T2. The event
     /// payload carries everything a keeper (or a future OEV solver) needs.
     pub fn liquidate(env: Env, liquidator: Address, user: Address) {
-        Self::require_not_paused(&env);
+        // Risk management must keep working while paused. See `pause()`.
         liquidator.require_auth();
 
         let debt: i128 = Self::get_debt(env.clone(), user.clone());
@@ -560,6 +608,7 @@ impl MarginController {
 
         // Write the debt off the user's books into the settlement bucket.
         env.storage().persistent().set(&DataKey::Debt(user.clone()), &0_i128);
+        env.storage().persistent().remove(&DataKey::LtvAtBorrow(user.clone()));
         let total: i128 = env.storage().instance().get(&DataKey::TotalDebt).unwrap_or(0);
         env.storage().instance().set(&DataKey::TotalDebt, &(total - debt));
         let pending: i128 = env
@@ -573,8 +622,14 @@ impl MarginController {
 
         // Cross-contract: burn the reputation. The controller must be in the
         // badge contract's AuthVaults list (badge.add_vault at deploy).
+        // An already-defaulted borrower (e.g. slashed elsewhere, liquidated
+        // here after the grace window) must still be liquidatable — the badge
+        // rejects double-slashing, so skip it.
         let me = env.current_contract_address();
-        Self::badge_client(&env).slash(&me, &user, &3_u32);
+        let badge = Self::badge_client(&env);
+        if !badge.is_defaulted(&user) {
+            badge.slash(&me, &user, &3_u32);
+        }
 
         env.events()
             .publish((symbol_short!("liq"), user), (debt, hp, now));
@@ -584,14 +639,69 @@ impl MarginController {
     // ADMIN
     // -------------------------------------------------------------------------
 
-    /// Replace the score→LTV ladder atomically.
-    pub fn set_tier_ltv(env: Env, tiers: Vec<TierLevel>) {
+    /// Queue a tier-ladder replacement behind the grace-period timelock.
+    /// NON-CUSTODIAL INVARIANT: a healthy position can never become
+    /// liquidatable by an instant parameter change — every ladder change is
+    /// announced (event) and only takes effect after `ParamGraceSecs`.
+    pub fn queue_set_tier_ltv(env: Env, tiers: Vec<TierLevel>) {
         let admin = Self::require_admin(&env);
         admin.require_auth();
-        Self::validate_tiers(&tiers);
-        env.storage().instance().set(&DataKey::TierLtv, &tiers);
-        env.events()
-            .publish((symbol_short!("acl"), symbol_short!("tiers")), tiers.len());
+        let floor: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MinLtvFloor)
+            .expect("not initialized");
+        Self::validate_tiers(&tiers, floor);
+        let grace: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::ParamGraceSecs)
+            .expect("not initialized");
+        let effective_at = env.ledger().timestamp() + grace;
+        let pending = PendingTierChange { tiers, effective_at };
+        env.storage().instance().set(&DataKey::PendingTiers, &pending);
+        env.events().publish((symbol_short!("tier_q"),), effective_at);
+    }
+
+    /// Apply a queued ladder change once its grace period has elapsed.
+    /// Permissionless on purpose: the admin cannot delay or veto the apply
+    /// any more than they can rush it.
+    pub fn apply_tier_ltv(env: Env) {
+        let pending: PendingTierChange = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingTiers)
+            .expect("no pending tier change");
+        if env.ledger().timestamp() < pending.effective_at {
+            panic!("tier change still in grace period");
+        }
+        env.storage().instance().set(&DataKey::TierLtv, &pending.tiers);
+        env.storage().instance().remove(&DataKey::PendingTiers);
+        env.events().publish((symbol_short!("tier_ok"),), pending.effective_at);
+    }
+
+    pub fn get_pending_tiers(env: Env) -> Option<PendingTierChange> {
+        env.storage().instance().get(&DataKey::PendingTiers)
+    }
+
+    /// Two-step admin rotation (enables migrating to a multisig account).
+    pub fn propose_admin(env: Env, new_admin: Address) {
+        let admin = Self::require_admin(&env);
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::PendingAdmin, &new_admin);
+        env.events().publish((symbol_short!("adm_prop"),), new_admin);
+    }
+
+    pub fn accept_admin(env: Env) {
+        let pending: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingAdmin)
+            .expect("no pending admin");
+        pending.require_auth();
+        env.storage().instance().set(&DataKey::Admin, &pending);
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+        env.events().publish((symbol_short!("adm_ok"),), pending);
     }
 
     /// Set the total-collateral cap for an asset (0 = uncapped).
@@ -639,6 +749,10 @@ impl MarginController {
         env.events().publish((symbol_short!("asset"), asset), cap);
     }
 
+    /// Circuit breaker — NON-CUSTODIAL INVARIANT: `pause` only freezes the
+    /// entry of NEW risk (`deposit_collateral`, `borrow`). It can NEVER
+    /// freeze `withdraw_collateral`, `repay`, or `liquidate`: the user can
+    /// always exit and deleverage, and risk management keeps running.
     pub fn pause(env: Env) {
         let admin = Self::require_admin(&env);
         admin.require_auth();
@@ -742,7 +856,7 @@ impl MarginController {
         }
     }
 
-    fn validate_tiers(tiers: &Vec<TierLevel>) {
+    fn validate_tiers(tiers: &Vec<TierLevel>, min_ltv_floor: u32) {
         if tiers.is_empty() {
             panic!("tier ladder must be non-empty");
         }
@@ -750,6 +864,9 @@ impl MarginController {
         for t in tiers.iter() {
             if t.ltv_bps == 0 || t.ltv_bps > MAX_LTV_BPS {
                 panic!("tier ltv out of range (must stay below pool c_factor)");
+            }
+            if t.ltv_bps < min_ltv_floor {
+                panic!("tier ltv below immutable floor");
             }
             if let Some(p) = prev_floor {
                 if t.min_score >= p {
@@ -772,6 +889,39 @@ impl MarginController {
             }
         }
         0
+    }
+
+    /// LTV basis for valuing an EXISTING position (health / withdraw checks).
+    /// - Active badge → its tier on the active ladder.
+    /// - Slashed badge inside the grace window → the LTV the position was
+    ///   underwritten at (snapshot), so an admin-inducible slash can never
+    ///   make a healthy position liquidatable instantly (Fix B.3).
+    /// - Otherwise (grace elapsed, or badge merely expired — expiry is
+    ///   user-predictable, not admin-inducible) → the lowest tier.
+    /// Note: this only affects LIQUIDATION exposure; new borrowing by a
+    /// defaulted user stays blocked via `is_defaulted` in `borrow`.
+    fn effective_user_ltv(env: &Env, user: &Address) -> u32 {
+        let badge = Self::badge_client(env);
+        if let Some(s) = badge.get_score(user) {
+            return Self::ltv_for_score(env, s);
+        }
+        if let Some(d) = badge.get_default(user) {
+            let grace: u64 = env
+                .storage()
+                .instance()
+                .get(&DataKey::ParamGraceSecs)
+                .unwrap_or(0);
+            if env.ledger().timestamp() < d.defaulted_at + grace {
+                let snap: Option<u32> = env
+                    .storage()
+                    .persistent()
+                    .get(&DataKey::LtvAtBorrow(user.clone()));
+                if let Some(ltv) = snap {
+                    return ltv;
+                }
+            }
+        }
+        Self::lowest_tier_ltv(env)
     }
 
     fn lowest_tier_ltv(env: &Env) -> u32 {
@@ -855,11 +1005,7 @@ impl MarginController {
     /// (used by withdraw_collateral's health pre-check). Uses the user's
     /// CURRENT tier so a withdraw can't lean on a tier they no longer have.
     fn borrow_capacity(env: &Env, user: &Address, asset: &Address, new_amount: i128) -> i128 {
-        let badge = Self::badge_client(env);
-        let ltv = match badge.get_score(user) {
-            Some(s) => Self::ltv_for_score(env, s),
-            None => Self::lowest_tier_ltv(env),
-        };
+        let ltv = Self::effective_user_ltv(env, user);
         if ltv == 0 {
             return 0;
         }
