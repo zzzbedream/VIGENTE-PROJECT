@@ -1,0 +1,24 @@
+[package]
+name = "oracle-aggregator"
+version = "0.1.0"
+edition = "2021"
+description = "Vigente Protocol — SEP-40 oracle aggregator: per-asset routing to independent price sources, with immutable-by-default routes, timelocked changes, staleness and deviation guards"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soroban-sdk = "21.2.0"
+
+[dev-dependencies]
+soroban-sdk = { version = "21.2.0", features = ["testutils"] }
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true
