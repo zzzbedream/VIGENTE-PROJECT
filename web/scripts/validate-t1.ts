@@ -135,10 +135,6 @@ interface ValidationResult {
     tests_passed: number | null;
     code_compiles: boolean;
   };
-  reference_vault: {
-    tests_passed: number | null;
-    code_compiles: boolean;
-  };
   margin_controller: MarginBlock;
   scoring_engine: {
     horizon_module_present: boolean;
@@ -235,9 +231,8 @@ async function run(): Promise<ValidationResult> {
   if (badge.ok) notes.push(`vigente-badge: ${badge.passed} tests passed`);
   else notes.push("vigente-badge: cargo test failed");
 
-  const vault = runCargoTest(path.join(projectRoot, "contracts", "reference-vault"));
-  if (vault.ok) notes.push(`reference-vault: ${vault.passed} tests passed`);
-  else notes.push("reference-vault: cargo test failed");
+  // reference-vault se archivó en archive/ el 2026-07-18 (PoC pre-pivote, fuera
+  // del producto y con un defecto de custodia conocido). Ya no se valida aquí.
 
   const margin = runCargoTest(path.join(projectRoot, "contracts", "margin-controller"));
   if (margin.ok) notes.push(`margin-controller: ${margin.passed} tests passed`);
@@ -293,7 +288,6 @@ async function run(): Promise<ValidationResult> {
 
   const allOk =
     badge.ok &&
-    vault.ok &&
     marginOk &&
     horizon &&
     ecosystem &&
@@ -312,10 +306,6 @@ async function run(): Promise<ValidationResult> {
       contract_id_v1_legacy: v1,
       tests_passed: badge.passed,
       code_compiles: badge.ok,
-    },
-    reference_vault: {
-      tests_passed: vault.passed,
-      code_compiles: vault.ok,
     },
     margin_controller: {
       contract_id: MARGIN_CONTROLLER_ID,
