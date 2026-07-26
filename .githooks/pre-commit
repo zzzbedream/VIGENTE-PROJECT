@@ -21,30 +21,38 @@ PATTERNS=(
 )
 
 # Solo archivos staged, de texto, que se añaden o modifican.
-FILES=$(git diff --cached --name-only --diff-filter=ACM)
-[ -z "$FILES" ] && exit 0
+# Una SOLA pasada sobre todo el diff staged. Recorrer archivo por archivo y
+# patrón por patrón hacía N×M invocaciones de git y volvía el hook inusable en
+# commits grandes (un archivado de ~130 archivos lo colgaba durante minutos).
+#
+# Se excluyen binarios, dependencias y los dos ficheros que contienen los
+# patrones como texto literal (si no, se bloquean a sí mismos).
+DIFF=$(git diff --cached -U0 --diff-filter=ACM \
+  -- . \
+  ':(exclude)*.wasm' ':(exclude)*.png' ':(exclude)*.jpg' ':(exclude)*.jpeg' \
+  ':(exclude)*.gif' ':(exclude)*.pdf' ':(exclude)*.ico' ':(exclude)*.lock' \
+  ':(exclude)node_modules' ':(exclude)*/node_modules' \
+  ':(exclude).githooks/pre-commit' ':(exclude).github/workflows/secret-scan.yml' \
+  2>/dev/null)
+[ -z "$DIFF" ] && exit 0
+
+# Solo líneas AÑADIDAS (descartando la cabecera '+++' del diff).
+ADDED=$(printf '%s\n' "$DIFF" | grep -E '^\+' | grep -v '^+++')
+[ -z "$ADDED" ] && exit 0
 
 FOUND=0
-for f in $FILES; do
-  # Saltar binarios y directorios que no son código fuente.
-  git diff --cached --numstat -- "$f" | grep -q '^-' && continue
-  case "$f" in
-    *.wasm|*.png|*.jpg|*.jpeg|*.gif|*.pdf|*.ico|node_modules/*|*/node_modules/*) continue ;;
-    # Auto-exclusión: este hook y el job de CI contienen los patrones como
-    # texto literal; sin esto se bloquean a sí mismos.
-    .githooks/pre-commit|.github/workflows/secret-scan.yml) continue ;;
-  esac
-
-  for p in "${PATTERNS[@]}"; do
-    # Solo las líneas AÑADIDAS por este commit.
-    # `-e` es obligatorio: hay patrones que empiezan con '-' (claves PEM)
-    # y grep los interpretaría como opciones.
-    if git diff --cached -U0 -- "$f" | grep -E '^\+' | grep -qE -e "$p"; then
-      echo "❌ SECRETO DETECTADO en: $f"
-      echo "   patrón: $p"
-      FOUND=1
-    fi
-  done
+for p in "${PATTERNS[@]}"; do
+  # `-e` es obligatorio: hay patrones que empiezan con '-' (claves PEM)
+  # y grep los interpretaría como opciones.
+  if printf '%s\n' "$ADDED" | grep -qE -e "$p"; then
+    echo "❌ SECRETO DETECTADO — patrón: $p"
+    # Localiza el archivo culpable sin volcar el valor.
+    printf '%s\n' "$DIFF" | awk -v pat="$p" '
+      /^\+\+\+ b\// { file = substr($0, 7) }
+      /^\+/ && $0 !~ /^\+\+\+/ { if ($0 ~ pat) print "   en: " file }
+    ' | sort -u
+    FOUND=1
+  fi
 done
 
 if [ "$FOUND" -ne 0 ]; then

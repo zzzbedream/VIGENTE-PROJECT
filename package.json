@@ -11,10 +11,11 @@
     "start": "npm run start -w web",
     "lint": "npm run lint -w web",
 
-    "build:contract": "cd contracts && cargo build --release --target wasm32-unknown-unknown",
-    "test:contract": "cd contracts && cargo test",
-    "optimize:contract": "cd contracts && stellar contract optimize --wasm target/wasm32-unknown-unknown/release/pyme_token_v1.wasm",
-    "deploy:contract": "cd contracts && stellar contract deploy --network testnet --source admin --wasm target/wasm32-unknown-unknown/release/pyme_token_v1.wasm",
+    "build:contract": "cd contracts/margin-controller && cargo build --release --target wasm32-unknown-unknown",
+    "test:contract": "cd contracts/margin-controller && cargo test",
+    "test:badge": "cd contracts/vigente-badge && cargo test",
+    "optimize:contract": "cd contracts/margin-controller && stellar contract optimize --wasm target/wasm32-unknown-unknown/release/margin_controller.wasm",
+    "deploy:contract": "cd contracts/margin-controller && stellar contract deploy --network testnet --source admin-v2 --wasm target/wasm32-unknown-unknown/release/margin_controller.optimized.wasm",
 
     "smoke-test": "npx tsx web/smoke-test.ts",
     "setup": "cd web && npm install"
