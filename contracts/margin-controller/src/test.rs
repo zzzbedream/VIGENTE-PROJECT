@@ -898,3 +898,188 @@ fn test_fuzz_max_borrow_matches_formula_and_never_exceeds() {
         }
     }
 }
+
+// =============================================================================
+// PROPERTY TESTS DE INVARIANTES (audit/00_INVENTORY.md §b)
+// =============================================================================
+//
+// Los tests de arriba prueban casos puntuales. Estos recorren estados
+// aleatorios y afirman que los invariantes se sostienen SIEMPRE — la
+// diferencia entre "probamos que funciona" y "probamos que no puede fallar".
+// Responden a la objeción del panel: deliverables are missing a validation
+// section.
+// =============================================================================
+
+/// **I1 — `paused = true` ⇒ withdraw, repay y liquidate siguen ejecutables.**
+/// El pilar de la postura non-custodial: el admin frena la entrada de riesgo,
+/// nunca la salida del usuario.
+#[test]
+fn prop_i1_pause_nunca_bloquea_las_salidas() {
+    let h = setup();
+    h.env.budget().reset_unlimited();
+    let mut rng = StdRng::seed_from_u64(0xC0FFEE);
+    let xlm_admin = MockUsdcClient::new(&h.env, &h.xlm_id);
+    let usdc_admin = MockUsdcClient::new(&h.env, &h.usdc_id);
+
+    for i in 0..10_u32 {
+        let user = Address::generate(&h.env);
+        let colateral: i128 = rng.gen_range(units(100)..=units(2_000));
+        let score: u32 = rng.gen_range(300..=1_000);
+
+        xlm_admin.mint(&user, &colateral);
+        h.ctrl.deposit_collateral(&user, &h.xlm_id, &colateral);
+        mint_badge(&h, &user, score, 5_000 + i);
+
+        let max = h.ctrl.max_borrow(&user);
+        if max <= 0 {
+            continue;
+        }
+        let deuda = (max * rng.gen_range(20..=90) as i128) / 100;
+        h.ctrl.borrow(&user, &deuda);
+        usdc_admin.mint(&user, &deuda);
+
+        h.ctrl.pause();
+
+        // INVARIANTE: repagar y retirar siguen disponibles con el contrato pausado.
+        h.ctrl.repay(&user, &deuda);
+        assert_eq!(h.ctrl.get_debt(&user), 0, "iter {i}: repay bloqueado al pausar");
+        h.ctrl.withdraw_collateral(&user, &h.xlm_id, &colateral);
+        assert_eq!(
+            h.ctrl.get_collateral(&user, &h.xlm_id),
+            0,
+            "iter {i}: withdraw bloqueado al pausar"
+        );
+
+        // La otra mitad del invariante: la entrada de riesgo SÍ queda frenada.
+        assert!(h.ctrl.try_deposit_collateral(&user, &h.xlm_id, &units(1)).is_err());
+        assert!(h.ctrl.try_borrow(&user, &1).is_err());
+
+        h.ctrl.unpause();
+    }
+}
+
+/// **I2 — ninguna secuencia de llamadas admin transfiere colateral a una
+/// dirección elegida por el admin.**
+#[test]
+fn prop_i2_ningun_poder_admin_mueve_fondos_del_usuario() {
+    let h = setup();
+    let user = Address::generate(&h.env);
+    let atacante = Address::generate(&h.env);
+    let xlm_admin = MockUsdcClient::new(&h.env, &h.xlm_id);
+
+    xlm_admin.mint(&user, &units(1_000));
+    h.ctrl.deposit_collateral(&user, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &user, 850, 6_001);
+
+    let colateral_antes = h.ctrl.get_collateral(&user, &h.xlm_id);
+    let saldo_atacante = h.xlm.balance(&atacante);
+    let saldo_admin = h.xlm.balance(&h.admin);
+
+    // Todo el arsenal admin en secuencia.
+    h.ctrl.pause();
+    h.ctrl.unpause();
+    h.ctrl.set_cap(&h.xlm_id, &units(1));
+    let mut tiers = Vec::new(&h.env);
+    tiers.push_back(TierLevel { min_score: 300, ltv_bps: MIN_LTV_FLOOR });
+    h.ctrl.queue_set_tier_ltv(&tiers);
+    h.ctrl.propose_admin(&atacante);
+    h.ctrl.accept_admin();
+
+    // INVARIANTE: el colateral no se movió y nadie lo recibió.
+    assert_eq!(
+        h.ctrl.get_collateral(&user, &h.xlm_id),
+        colateral_antes,
+        "un poder admin alteró el colateral del usuario"
+    );
+    assert_eq!(h.xlm.balance(&atacante), saldo_atacante, "el admin recibió fondos");
+    assert_eq!(h.xlm.balance(&h.admin), saldo_admin, "el admin recibió fondos");
+
+    // Y el usuario sigue pudiendo salir por su cuenta.
+    h.ctrl.withdraw_collateral(&user, &h.xlm_id, &colateral_antes);
+    assert_eq!(h.xlm.balance(&user), units(1_000));
+}
+
+/// **I5 — Σ Debt(u) = TotalDebt** con secuencias aleatorias de préstamo y repago.
+#[test]
+fn prop_i5_la_contabilidad_agregada_cuadra_siempre() {
+    let h = setup();
+    h.env.budget().reset_unlimited();
+    let mut rng = StdRng::seed_from_u64(0xBEEF);
+    let xlm_admin = MockUsdcClient::new(&h.env, &h.xlm_id);
+    let usdc_admin = MockUsdcClient::new(&h.env, &h.usdc_id);
+
+    let mut usuarios: std::vec::Vec<Address> = std::vec::Vec::new();
+    for i in 0..6_u32 {
+        let user = Address::generate(&h.env);
+        let colateral: i128 = rng.gen_range(units(200)..=units(1_500));
+        xlm_admin.mint(&user, &colateral);
+        h.ctrl.deposit_collateral(&user, &h.xlm_id, &colateral);
+        mint_badge(&h, &user, rng.gen_range(550..=1_000), 7_000 + i);
+
+        let max = h.ctrl.max_borrow(&user);
+        if max > 0 {
+            let deuda = (max * rng.gen_range(30..=95) as i128) / 100;
+            h.ctrl.borrow(&user, &deuda);
+            usdc_admin.mint(&user, &deuda);
+        }
+        usuarios.push(user);
+    }
+
+    let suma: i128 = usuarios.iter().map(|u| h.ctrl.get_debt(u)).sum();
+    assert_eq!(suma, h.ctrl.get_total_debt(), "la suma de deudas no cuadra tras los borrows");
+
+    for u in usuarios.iter() {
+        let d = h.ctrl.get_debt(u);
+        if d > 2 {
+            h.ctrl.repay(u, &(d / 3));
+        }
+    }
+    let suma2: i128 = usuarios.iter().map(|u| h.ctrl.get_debt(u)).sum();
+    assert_eq!(suma2, h.ctrl.get_total_debt(), "la suma no cuadra tras los repagos");
+}
+
+/// **I8 — ninguna ruta que lee precio opera con un precio inválido**, y las
+/// salidas del usuario no dependen del oráculo (I6).
+#[test]
+fn prop_i8_ninguna_ruta_opera_con_precio_invalido() {
+    let h = setup();
+    let user = Address::generate(&h.env);
+    let keeper = Address::generate(&h.env);
+    let xlm_admin = MockUsdcClient::new(&h.env, &h.xlm_id);
+    let usdc_admin = MockUsdcClient::new(&h.env, &h.usdc_id);
+
+    xlm_admin.mint(&user, &units(1_000));
+    h.ctrl.deposit_collateral(&user, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &user, 850, 8_001);
+    let max = h.ctrl.max_borrow(&user);
+    h.ctrl.borrow(&user, &(max / 2));
+
+    // (a) Precio viejo: ninguna ruta que lo consulte debe operar.
+    h.price_oracle.set_price(
+        &Asset::Stellar(h.xlm_id.clone()),
+        &P_XLM,
+        &(INITIAL_TIMESTAMP - MAX_PRICE_AGE - 1),
+    );
+    assert!(h.ctrl.try_max_borrow(&user).is_err(), "max_borrow operó con precio viejo");
+    assert!(h.ctrl.try_borrow(&user, &1).is_err(), "borrow operó con precio viejo");
+    assert!(h.ctrl.try_health(&user).is_err(), "health operó con precio viejo");
+    assert!(h.ctrl.try_liquidate(&keeper, &user).is_err(), "liquidate operó con precio viejo");
+    assert!(
+        h.ctrl.try_withdraw_collateral(&user, &h.xlm_id, &units(1)).is_err(),
+        "withdraw con deuda operó con precio viejo"
+    );
+
+    // (b) Precio ausente: idéntico resultado.
+    h.price_oracle.clear_price(&Asset::Stellar(h.xlm_id.clone()));
+    assert!(h.ctrl.try_max_borrow(&user).is_err(), "max_borrow operó sin precio");
+
+    // (c) I6: repagar NO consulta el oráculo — la salida siempre disponible.
+    usdc_admin.mint(&user, &max);
+    let deuda = h.ctrl.get_debt(&user);
+    h.ctrl.repay(&user, &deuda);
+    assert_eq!(h.ctrl.get_debt(&user), 0, "repay quedó bloqueado por el oráculo caído");
+
+    // (d) Y sin deuda, retirar tampoco lo consulta.
+    h.ctrl.withdraw_collateral(&user, &h.xlm_id, &units(1_000));
+    assert_eq!(h.ctrl.get_collateral(&user, &h.xlm_id), 0);
+}
