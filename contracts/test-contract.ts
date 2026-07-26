@@ -10,7 +10,16 @@ import {
 } from "@stellar/stellar-sdk";
 import { createHmac } from "crypto";
 
-const SECRET = "***SECRETO_PURGADO***";
+// El secreto NUNCA se escribe en el repositorio: se lee del entorno.
+const SECRET_FROM_ENV = process.env.ADMIN_SECRET;
+if (!SECRET_FROM_ENV) {
+    throw new Error(
+        "ADMIN_SECRET no está definida. Expórtala antes de ejecutar este script " +
+        "(p. ej. `export ADMIN_SECRET=$(stellar keys show admin-v2)`). " +
+        "Nunca la escribas en un archivo versionado."
+    );
+}
+const SECRET: string = SECRET_FROM_ENV;
 const CONTRACT_ID = "CBBHQMIATELVVIFMRCIOQJHHSZJOGWH3PQNX7WOKGHK4FLZEWZUOMJKN";
 const RPC_URL = "https://soroban-testnet.stellar.org";
 const ADMIN_SECRET_FOR_HASH = "mi-secreto-para-hash";

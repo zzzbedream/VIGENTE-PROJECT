@@ -1,5 +1,7 @@
 # .gitignore
 .env
+.env.*
+*.env
 admin.toml
 .soroban/
 serviceAccountKey.json
