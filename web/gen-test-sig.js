@@ -2,7 +2,15 @@
 const { Keypair, Address } = require('@stellar/stellar-sdk');
 const { createHmac } = require('crypto');
 
-const adminSecret = '***SECRETO_PURGADO***';
+// El secreto NUNCA se escribe en el repositorio: se lee del entorno.
+const adminSecret = process.env.ADMIN_SECRET;
+if (!adminSecret) {
+  throw new Error(
+    'ADMIN_SECRET no está definida. Expórtala antes de ejecutar este script ' +
+      '(p. ej. `export ADMIN_SECRET=$(stellar keys show admin-v2)`). ' +
+      'Nunca la escribas en un archivo versionado.',
+  );
+}
 const userAddress = 'GCCQBYTIDSGV4QH624WGSHTFUEOGE53N3NCGL6U4HX4SACYY2YA2POQM';
 const tier = 1;
 const score = 1000;

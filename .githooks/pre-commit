@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Vigente Protocol — pre-commit: bloquea secretos antes de que entren a git
+# =============================================================================
+# Activación (una vez por clon):
+#     git config core.hooksPath .githooks
+#
+# Origen: incidente C-01 (2026-07-18) — la ADMIN_SECRET del margin-controller
+# estuvo hardcodeada en 7 archivos versionados. Este hook impide la reincidencia.
+# =============================================================================
+set -uo pipefail
+
+# Patrones de secreto. El primero es el que causó el incidente.
+PATTERNS=(
+  'S[A-Z2-7]{55}'                    # llave secreta Stellar (seed)
+  '-----BEGIN[A-Z ]*PRIVATE KEY'     # clave privada PEM
+  'AKIA[0-9A-Z]{16}'                 # AWS access key id
+  'sk-[A-Za-z0-9]{20,}'              # token estilo OpenAI
+  'VIGENTE_ORACLE_SEEDS_HEX=.'       # semillas del oráculo k-de-n (con valor)
+  'SERVICE_ROLE_KEY=.'               # service role de Supabase (con valor)
+)
+
+# Solo archivos staged, de texto, que se añaden o modifican.
+FILES=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$FILES" ] && exit 0
+
+FOUND=0
+for f in $FILES; do
+  # Saltar binarios y directorios que no son código fuente.
+  git diff --cached --numstat -- "$f" | grep -q '^-' && continue
+  case "$f" in
+    *.wasm|*.png|*.jpg|*.jpeg|*.gif|*.pdf|*.ico|node_modules/*|*/node_modules/*) continue ;;
+    # Auto-exclusión: este hook y el job de CI contienen los patrones como
+    # texto literal; sin esto se bloquean a sí mismos.
+    .githooks/pre-commit|.github/workflows/secret-scan.yml) continue ;;
+  esac
+
+  for p in "${PATTERNS[@]}"; do
+    # Solo las líneas AÑADIDAS por este commit.
+    # `-e` es obligatorio: hay patrones que empiezan con '-' (claves PEM)
+    # y grep los interpretaría como opciones.
+    if git diff --cached -U0 -- "$f" | grep -E '^\+' | grep -qE -e "$p"; then
+      echo "❌ SECRETO DETECTADO en: $f"
+      echo "   patrón: $p"
+      FOUND=1
+    fi
+  done
+done
+
+if [ "$FOUND" -ne 0 ]; then
+  cat <<'EOF'
+
+═══════════════════════════════════════════════════════════════
+ COMMIT BLOQUEADO — se detectó un posible secreto.
+═══════════════════════════════════════════════════════════════
+ Los secretos NUNCA van al repositorio. Opciones correctas:
+   • Léelo del entorno:  process.env.ADMIN_SECRET
+   • Guárdalo en un .env (ya ignorado por git)
+   • En documentación usa un placeholder: <TU_ADMIN_SECRET>
+
+ Si es un FALSO POSITIVO (p. ej. una clave pública G…, que este
+ hook no bloquea, o datos de prueba), salta el hook a conciencia:
+     git commit --no-verify
+═══════════════════════════════════════════════════════════════
+EOF
+  exit 1
+fi
+
+exit 0

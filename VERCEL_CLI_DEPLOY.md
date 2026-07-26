@@ -126,7 +126,7 @@ vercel env add NEXT_PUBLIC_STELLAR_NETWORK production
 # Valor: TESTNET
 
 vercel env add ADMIN_SECRET production
-# Valor: ***SECRETO_PURGADO***
+# Valor: <TU_ADMIN_SECRET>
 
 vercel env add NETWORK_PASSPHRASE production
 # Valor: Test SDF Network ; September 2015

@@ -1,6 +1,22 @@
 examples/*/target/
 docs/private/
 
+# Dependencias (aplica también a lo movido a archive/, que antes quedaba
+# cubierto por contracts/.gitignore).
+node_modules/
+archive/**/target/
+
+# === Secretos (endurecido tras el incidente C-01, 2026-07-18) ===
+# Cubre cualquier variante de env en cualquier subdirectorio.
+.env
+.env.*
+*.env
+!.env.example
+!.env.local.example
+# Transcripts de sesión de asistentes: han contenido secretos pegados.
+*Debugging*.md
+*session-transcript*.md
+
 # landing design mock (reference prototype, never published)
 Vigente Protocol Landing.html
 

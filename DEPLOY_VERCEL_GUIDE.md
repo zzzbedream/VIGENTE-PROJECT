@@ -126,7 +126,7 @@ Una vez que completes el redeploy:
 
 ### Error: "ADMIN_SECRET not found"
 - Verifica que tengas `ADMIN_SECRET` en las variables de entorno (sin el prefijo NEXT_PUBLIC_)
-- Valor: `***SECRETO_PURGADO***`
+- Valor: `<TU_ADMIN_SECRET>`
 
 ---
 
