@@ -45,7 +45,18 @@ const MARGIN_CONTROLLER_ID =
   "CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV";
 /** Demo badge holder (score 650 → Silver tier → 7500 bps on the live ladder). */
 const MARGIN_DEMO_USER =
+  process.env.NEXT_PUBLIC_MARGIN_DEMO_USER ||
   "GBV676BNXDPVZDLUAB6O7DHWUIS42OTIWI5MIKCFJOWMJWTVKQNXFWCM";
+// Pool and oracle the controller under test is wired to. Env-overridable so the
+// report never claims a wiring the instance does not have: v1 runs on the
+// canonical Blend pool + Reflector, while the pool-activation instance runs on
+// our own pool + our SEP-40 aggregator.
+const MARGIN_BLEND_POOL =
+  process.env.NEXT_PUBLIC_BLEND_POOL_ID ||
+  "CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF";
+const MARGIN_PRICE_ORACLE =
+  process.env.NEXT_PUBLIC_PRICE_ORACLE_ID ||
+  "CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63";
 const MARGIN_RPC_URL =
   process.env.NEXT_PUBLIC_RPC_URL || "https://soroban-testnet.stellar.org";
 
@@ -309,8 +320,8 @@ async function run(): Promise<ValidationResult> {
     },
     margin_controller: {
       contract_id: MARGIN_CONTROLLER_ID,
-      blend_pool: "CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF",
-      price_oracle: "CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63",
+      blend_pool: MARGIN_BLEND_POOL,
+      price_oracle: MARGIN_PRICE_ORACLE,
       tests_passed: margin.passed,
       code_compiles: margin.ok,
       live: marginLive,
