@@ -206,10 +206,14 @@ of the evidence.
 Three defined roles — protocol/contracts, backend and integrations, partnerships — with
 profiles in [`docs/TEAM.md`](docs/TEAM.md). Contact: zzzbedream@gmail.com
 
-**Being straight about execution risk**, since anyone can check in ten seconds with
-`git shortlog -sne --all`: this is founder-led. **177 commits are the founder's, 2 a
-contributing engineer's.** Contracts, oracle and app are effectively one person's work so
-far; the other roles have contributed in design and business, not code.
+**Being straight about execution risk:** this is founder-led. Essentially the entire commit
+history is the founder's — a contributing engineer has two commits, and the other roles have
+contributed in design and business rather than code. Don't take the number from us, it moves
+with every push:
+
+```bash
+git shortlog -sne --all   # four lines, two people: each of us commits under two name spellings
+```
 
 That concentration is a real risk, and it is the one the SCF #41 panel identified. What the
 same history shows is what got shipped anyway: four contracts on testnet, a custom SEP-40

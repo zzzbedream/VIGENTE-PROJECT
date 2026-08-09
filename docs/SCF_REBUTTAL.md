@@ -41,10 +41,11 @@ The team is structured as three seats — CEO (protocol & cryptography), CTO
 the SCF platform with KYC commitment. Profiles: [TEAM.md](TEAM.md).
 
 **On execution risk.** This is a founder-led project and the commit history
-says so honestly: **177 commits by the founder, 2 by a contributing
-engineer**. Verify with `git shortlog -sne --all` — it prints four lines
-because each of us has committed under two name spellings, but there are
-two people in that history, not four.
+says so honestly: essentially all of it is the founder's, with two commits
+from a contributing engineer. We are not quoting a figure that moves with
+every push — verify it yourself with `git shortlog -sne --all`, which
+prints four lines because each of us has committed under two name
+spellings, but there are two people in that history, not four.
 
 What the same history also shows is sustained execution: four contracts
 deployed and verifiable on testnet, a custom SEP-40 oracle aggregator, an
