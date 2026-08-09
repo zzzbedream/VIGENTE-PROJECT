@@ -17,7 +17,6 @@
     "optimize:contract": "cd contracts/margin-controller && stellar contract optimize --wasm target/wasm32-unknown-unknown/release/margin_controller.wasm",
     "deploy:contract": "cd contracts/margin-controller && stellar contract deploy --network testnet --source admin-v2 --wasm target/wasm32-unknown-unknown/release/margin_controller.optimized.wasm",
 
-    "smoke-test": "npx tsx web/smoke-test.ts",
     "setup": "cd web && npm install"
   },
   "dependencies": {

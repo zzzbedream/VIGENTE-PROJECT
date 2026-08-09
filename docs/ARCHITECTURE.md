@@ -19,6 +19,26 @@ The system has two halves, and the split is the trust model:
   This half is **trusted**. The chain verifies signatures, not the methodology that produced
   the score. See §1.2.
 
+### 1.0 What is deployed
+
+Everything described in this document is live on Stellar **testnet** and readable without
+permission. Verification commands are in [`../README.md`](../README.md#verify-it-yourself);
+transaction-level evidence is in
+[`../audit/08_POOL_ACTIVATION.md`](../audit/08_POOL_ACTIVATION.md).
+
+| Component | Contract ID |
+|---|---|
+| `margin-controller` (active) | `CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ` |
+| `oracle-aggregator` | `CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4` |
+| Vigente Blend pool (`status: 0`) | `CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI` |
+| `vigente-badge` v3 | `CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD` |
+| Reflector (upstream, third party) | `CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63` |
+
+`margin-controller` v1 `CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV` remains live on
+Blend's canonical pool `CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF`. Same binary,
+same wasm hash; it exists because `blend_pool` is immutable after `init`, and is kept so
+previously published evidence stays verifiable. **It is history, not the product.**
+
 ### 1.1 Component map
 
 ```

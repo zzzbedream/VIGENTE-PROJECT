@@ -6,11 +6,13 @@ the pool or the oracle:
 
 | Piece | Contract (Stellar testnet) | Role |
 |---|---|---|
-| **Margin Controller v1** (this crate) | `CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV` | Reputation → LTV gate + per-user accounting (non-custodial hardened) |
-| Margin Controller v0 (deprecated) | `CAZ2JITV36BJ5FO3UYM5XS32CISZ3JUCLW4GWYLGDUXHOGNJHELTS3FC` | Superseded by v1 after the 11-jul security audit; demo position exited cleanly (contracts are immutable — fixes require redeploy) |
+| **Margin Controller (active)** | `CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ` | Reputation → LTV gate + per-user accounting, over **our own** pool |
+| **Price oracle — `oracle-aggregator` (ours)** | `CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4` | SEP-40 feed in the pool's immutable oracle slot; routes upstream to Reflector |
+| **Blend pool "Vigente" (ours)** | `CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI` | Isolated pool, `status: 0`. Liquidity: `submit` SupplyCollateral / Borrow / Repay / WithdrawCollateral |
 | Reputation Registry (`vigente-badge`) | `CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD` | `get_score` / `is_defaulted` / `slash` (3-of-5 threshold ed25519) |
-| Price oracle (SEP-40, Reflector) | `CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63` | `lastprice(Other("XLM"))` / `lastprice(Other("USDC"))`, 14 decimals |
-| Blend pool (canonical TestnetV2) | `CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF` | Liquidity: `submit` SupplyCollateral / Borrow / Repay / WithdrawCollateral |
+| Reflector (third party, upstream) | `CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63` | Price source behind our aggregator, 14 decimals |
+| Margin Controller v1 (history) | `CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV` | Same binary, still live on Blend's canonical pool `CCEBVDYM…`. Kept so published evidence stays verifiable |
+| Margin Controller v0 (deprecated) | `CAZ2JITV36BJ5FO3UYM5XS32CISZ3JUCLW4GWYLGDUXHOGNJHELTS3FC` | Superseded by v1 after the 11-jul security audit; demo position exited cleanly |
 | Borrow asset (Blend testnet USDC) | `CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU` | `USDC:GATALTGT…` — borrowers need a classic trustline |
 | Collateral (native XLM SAC) | `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` | Pilot collateral (cap: 100,000 XLM) |
 
@@ -18,25 +20,31 @@ the pool or the oracle:
 tier_ltv(score) / 10000 − debt`) runs in this contract before any `submit`.
 Blend only ever sees the controller's aggregate position.
 
-## Live proof (executed 2026-07-11)
+## Live proof
 
-Real E2E on testnet, no mocks in the path:
+The full credit cycle runs on **our own** pool: supply → borrow → repay →
+withdraw, plus a custody test where the admin pauses the contract and the
+user still withdraws everything. Every transaction hash is in
+[`../../audit/08_POOL_ACTIVATION.md`](../../audit/08_POOL_ACTIVATION.md).
 
-1. `deposit_collateral(GBV676BN…, XLM, 100 XLM)` → collateral flowed
-   controller → canonical Blend pool.
-2. `max_borrow` → `143916153` ($14.39): 100 XLM × Reflector live price ×
-   **7500 bps** (the user's REAL badge, score 650 → Silver tier).
-3. `borrow($5)` → the Blend pool disbursed 5.00 real testnet USDC to the
-   user's wallet (tier event: `(650, 7500)`).
-4. `health` → 287%, `get_debt` → 5 USDC. Position remains live on-chain.
+The sharpest single result: two accounts, identical collateral, same block —
+only the reputation differs.
+
+| Account | Score | `ltv_bps_for` | `max_borrow` |
+|---|---|---|---|
+| `GC6IPCM3…` | 650 (Silver) | 7500 | 1223133480 |
+| `GDESGH52…` | 850 (Gold) | 8500 | 1386217944 |
+
+The ratio is exactly `8500 / 7500`. Absolute figures drift between reads
+because the price is live; the ratio does not.
 
 Reproduce the reads (no keys needed):
 
 ```bash
 stellar contract invoke --network testnet --send=no \
-  --source-account <ANY_FUNDED_SECRET> \
-  --id CAZ2JITV36BJ5FO3UYM5XS32CISZ3JUCLW4GWYLGDUXHOGNJHELTS3FC \
-  -- ltv_bps_for --user GBV676BNXDPVZDLUAB6O7DHWUIS42OTIWI5MIKCFJOWMJWTVKQNXFWCM
+  --source-account <ANY_FUNDED_ACCOUNT> \
+  --id CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ \
+  -- ltv_bps_for --user GC6IPCM3OO44PW4Y62XD54HLT5Q23E5OFNFMYPMNUDSDRUK37ZFB6ECZ
 # → 7500
 ```
 
