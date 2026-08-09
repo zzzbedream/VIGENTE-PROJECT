@@ -1,5 +1,18 @@
 # Architecture Audit — Blend-oracle dependency removal
 
+> ## 🗄️ HISTORICAL — this audit was acted on; its conclusions are now built
+>
+> A dated snapshot of the analysis that **produced** the current architecture. It correctly
+> concluded that Blend consumes only SEP-40 *price* oracles and can never read a reputation
+> score — the finding that led to the margin-controller design.
+>
+> What changed since: the audit treats the `reference-vault` as the on-chain consumer. That
+> contract is **archived**. The consumer today is the `margin-controller`, running over our
+> own Blend pool with our own SEP-40 aggregator in the pool's immutable oracle slot.
+>
+> **Read instead:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
+> [`audit/08_POOL_ACTIVATION.md`](audit/08_POOL_ACTIVATION.md)
+
 **Branch:** `arch/remove-blend-oracle-dependency`
 **Date:** 2026-06-27
 

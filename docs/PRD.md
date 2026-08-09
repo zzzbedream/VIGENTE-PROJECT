@@ -1,5 +1,20 @@
 # Vigente Protocol — Product Requirements Document
 
+> ## 🗄️ HISTORICAL — superseded, kept for traceability
+>
+> This PRD describes the **pre-pivot** product: Vigente as a credit-signal oracle sold to
+> third parties, which "does not lend". That is no longer what is built. The product today is
+> **non-custodial collateralized credit**: a margin controller that prices each user's LTV
+> from an on-chain reputation badge, in front of our own isolated Blend pool.
+>
+> **Read instead:**
+> - [`../README.md`](../README.md) — what the product is, and how to verify it
+> - [`ARCHITECTURE.md`](ARCHITECTURE.md) — the current technical architecture
+> - [`../audit/08_POOL_ACTIVATION.md`](../audit/08_POOL_ACTIVATION.md) — on-chain evidence
+>
+> Contract IDs and feature claims below are **out of date**. This file is retained because the
+> decision trail is part of the evidence, not because it describes the system.
+
 > **The credit reputation oracle for Stellar.** Vigente sells the credit
 > signal; it does not lend. Asset-light, no fund, no credit risk on our
 > balance sheet. This PRD defines the product, the MVP, and a phase-by-phase

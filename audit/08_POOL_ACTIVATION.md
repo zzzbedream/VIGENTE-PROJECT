@@ -172,6 +172,10 @@ Dos usuarios, **colateral idéntico**, badges con score distinto, mismo bloque:
 
 `1386217944 / 1223133480 = 1,13333…` = exactamente `8500 / 7500`.
 
+**Lo que hay que reproducir es el cociente, no los absolutos.** Los valores en unidades se
+mueven entre lecturas porque el precio del oráculo es vivo — una corrida posterior dio
+`1222484754` para Silver. El cociente entre tiers no se mueve: es el LTV.
+
 Depósitos: Silver [`787a44ad`](https://stellar.expert/explorer/testnet/tx/787a44ad68998cdeca21d0fda19970a70b08c3b594cf0af73b7a246e6b33d0e4) ·
 Gold [`98c0ea45`](https://stellar.expert/explorer/testnet/tx/98c0ea45007a18838640e78064505129477a469b9e2e721340116897aa0c842f).
 Badges minteados con umbral 3-de-5:

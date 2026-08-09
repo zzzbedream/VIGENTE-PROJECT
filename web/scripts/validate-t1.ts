@@ -41,22 +41,27 @@ const __dirname = path.dirname(__filename);
 
 const MARGIN_CONTROLLER_ID =
   process.env.NEXT_PUBLIC_MARGIN_CONTROLLER_ID ||
-  // v1 (non-custodial hardening). v0 CAZ2JITV… deprecated — see crate README.
-  "CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV";
-/** Demo badge holder (score 650 → Silver tier → 7500 bps on the live ladder). */
+  // Active instance: same wasm as v1, wired to our own pool CDYUHA3T… .
+  // v1 CA4SFW73… stays live on the canonical pool as published history.
+  "CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ";
+/** Demo badge holder (score 650 → Silver tier → 7500 bps on the live ladder).
+ *  Holds collateral on the active instance, so max_borrow returns a real
+ *  figure — see the tier comparison in audit/08_POOL_ACTIVATION.md §6.2. */
 const MARGIN_DEMO_USER =
   process.env.NEXT_PUBLIC_MARGIN_DEMO_USER ||
-  "GBV676BNXDPVZDLUAB6O7DHWUIS42OTIWI5MIKCFJOWMJWTVKQNXFWCM";
+  "GC6IPCM3OO44PW4Y62XD54HLT5Q23E5OFNFMYPMNUDSDRUK37ZFB6ECZ";
 // Pool and oracle the controller under test is wired to. Env-overridable so the
 // report never claims a wiring the instance does not have: v1 runs on the
 // canonical Blend pool + Reflector, while the pool-activation instance runs on
 // our own pool + our SEP-40 aggregator.
 const MARGIN_BLEND_POOL =
   process.env.NEXT_PUBLIC_BLEND_POOL_ID ||
-  "CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF";
+  // Our own isolated pool (status 0). Canonical CCEBVDYM… is where v1 runs.
+  "CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI";
 const MARGIN_PRICE_ORACLE =
   process.env.NEXT_PUBLIC_PRICE_ORACLE_ID ||
-  "CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63";
+  // Our SEP-40 aggregator, which routes to Reflector CCYOZJCO… upstream.
+  "CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4";
 const MARGIN_RPC_URL =
   process.env.NEXT_PUBLIC_RPC_URL || "https://soroban-testnet.stellar.org";
 

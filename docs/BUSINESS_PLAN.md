@@ -1,5 +1,14 @@
 # Vigente Protocol — Business Plan
 
+> ## 🗄️ HISTORICAL — superseded, kept for traceability
+>
+> Written for the **pre-pivot** model (selling a credit signal, fintech-adapter go-to-market).
+> The product is now non-custodial collateralized credit over our own Blend pool, which changes
+> the commercial model this document assumes.
+>
+> **Read instead:** [`MARKET_ANALYSIS.md`](MARKET_ANALYSIS.md) for current market positioning,
+> and [`../README.md`](../README.md) for what actually exists.
+
 > Pre-submission business plan per SCF criteria. Addresses Feedback Item 4 from prior submission: *"Business use case and go-to-market plan are not clearly defined."*
 >
 > **Update for this resubmission.** The protocol no longer requires any fintech partnership to operate. The synthetic scoring engine reads only Stellar Horizon and produces verifiable credit profiles independently of Payku, Fintoc, or any third-party API. Payku is preserved in the codebase as an *optional enrichment adapter* — it can add detail to a borrower's profile when commercial agreements exist, but the protocol does not depend on its presence to function. This decoupling resolves the "no confirmed partnerships" criticism by making partnerships an upgrade path rather than a critical dependency.

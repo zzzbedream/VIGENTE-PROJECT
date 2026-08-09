@@ -1,7 +1,7 @@
 # Arquitectura interna — brief de ingeniería
 
 **Para:** Cristian (backend / integración Etherfuse) · **De:** Lucas
-**Actualizado:** 2026-07-26 · **Red:** Stellar testnet
+**Actualizado:** 2026-08-08 · **Red:** Stellar testnet
 
 > Este documento describe el estado **real y verificable** del sistema, no el plan. Cada
 > contrato citado está desplegado y cualquiera puede consultarlo con
@@ -14,15 +14,16 @@
 
 | Componente | Contract ID | Qué hace |
 |---|---|---|
-| **`margin-controller` v1** | `CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV` | **El producto.** Impone el LTV por usuario según su reputación, por delante de un pool de Blend |
+| **`margin-controller` (activo)** | `CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ` | **El producto.** Impone el LTV por usuario según su reputación, por delante del **pool propio**. Binario byte-idéntico a v1 (mismo wasm hash), redesplegado solo para apuntar al pool nuevo |
+| `margin-controller` v1 | `CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV` | Sigue vivo sobre el pool canónico. **Histórico, no el producto**: se mantiene porque es evidencia ya publicada |
 | **`vigente-badge` v3** | `CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD` | SBT de reputación. El `mint` exige umbral **3-de-5** de firmas ed25519 verificadas on-chain |
 | **`oracle-aggregator`** | `CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4` | **Nuestro.** SEP-40: rutas por asset con timelock de 48 h, staleness y deviation guard |
 | **Pool propio "Vigente"** | `CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI` | Pool de Blend desplegado con **nuestro aggregator** como oráculo. USDC (deuda) + XLM (colateral) |
 | Reflector | `CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63` | Fuente de precio, **de terceros** |
-| Pool canónico de Blend | `CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF` | Donde corre hoy el ciclo de crédito completo |
+| Pool canónico de Blend | `CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF` | Donde corría el ciclo **antes** de tener pool propio. Contexto histórico |
 
-**El pool propio está en `on-ice`** (status 2): acepta depósitos pero todavía no presta. No es
-un bug — ver §4.
+**El pool propio está ACTIVO** (`status: 0`): presta. Se activó el 2026-08-08 fondeando el
+backstop — ver §4. El pool canónico ya no es donde corre el ciclo; queda como contexto.
 
 ## 2. El flujo
 
@@ -95,22 +96,46 @@ corresponden al **Tranche 2** de la propuesta del grant. Construirlo ahora signi
 que no se puede imputar al presupuesto (el SCF no financia trabajo ya realizado). **Documentá
 el diseño**: es lo que sostiene la credibilidad del T2 ante el panel.
 
-## 4. Estado del pool propio: por qué está en `on-ice`
+## 4. El pool propio está activo — y cómo se llegó ahí
 
-No es un fallo de configuración. Lo medimos on-chain:
+`get_config` devuelve `status: 0` con `oracle: CCG6EAGO…`. El ciclo completo corre encima:
+supply → borrow → repay → withdraw. Evidencia con tx hashes en `audit/08_POOL_ACTIVATION.md`.
 
-- Pool Comet de testnet: **BLND 3.889.851** · **USDC 291.944** (pesos 80:20).
-- Constante de producto del pool completo: **k ≈ 2.317.000**.
-- El umbral de Blend exige **k = 200.000** ⇒ hace falta **~8,63 % de todo el Comet ≈ $126.000**
-  de valor.
-- **BLND no es minteable por nosotros**: `admin()` del token devuelve un **contrato**
-  (`CC3WJVJI…`, el emitter), no una cuenta que controlemos.
-- Nuestro techo de USDC en testnet: pedir prestado contra nuestro colateral ≈ **$16**.
+Como era una **brecha de capital y no de ingeniería**, el desbloqueo fue una donación de
+testnet del equipo de Blend: **200.000 BLND + 15.000 USDC**. Con eso:
 
-**Conclusión: activar un pool es una brecha de capital, no de ingeniería.** Es exactamente lo
-que justifica que el Tranche 3 sea un piloto capado y que la liquidez del pool no vaya en el
-presupuesto del grant. El desbloqueo es un correo al equipo de Blend, que sí controla el
-emitter en testnet. Detalle completo en `audit/07_OWN_POOL_EVIDENCE.md`.
+- Se mintearon **22.980 tokens LP** de Comet (185.524 BLND + 13.594 USDC).
+- Depositados al backstop ⇒ **k = 110.015**, el **110 %** del umbral.
+- Se reservaron **1.400 USDC** como liquidez prestable: un pool activo sin USDC no origina ni
+  un préstamo.
+
+### Un error nuestro que conviene que sepas, porque explica el número
+
+Durante semanas dijimos que el umbral era **`k ≥ 200.000`**, cifra sacada de documentación.
+**Está mal por un factor de 2.** La constante real vive en la herramienta oficial de Blend:
+
+```ts
+// blend-utils/src/v2/user-scripts/get-backstop-threshold.ts:22
+const K_THRESHOLD = BigInt(100_000);
+```
+
+Con el número equivocado concluimos que la donación cubría solo el 59,6 % y llegamos a
+redactar un pedido de **2,3× más tokens de los necesarios**. No se envió porque medimos con la
+herramienta antes de pedir. De ahí la regla que aplicamos ahora: **si un número viene de
+documentación y existe una herramienta oficial que lo calcula, se usa la herramienta y se cita
+la línea.**
+
+### Dos gotchas de Blend que cuestan horas
+
+1. **`update_status` no levanta un on-ice puesto por el admin.** Corre limpio, devuelve `2` y
+   no cambia nada. Solo `set_status(0)` del admin lo mueve — y esa función verifica el umbral
+   dentro del contrato, así que **que pase es la prueba de que el backstop alcanza**.
+2. **`repay` no respeta `i128::MAX` como "repagar todo"** en esta versión del pool: intenta
+   transferir el literal y revierte. Hay que pasar el monto exacto.
+
+> El contexto histórico de cuando el pool no se podía activar está en
+> `audit/07_OWN_POOL_EVIDENCE.md`. Ese documento describe el estado previo; **`audit/08` es el
+> vigente.**
 
 ## 5. Cuatro cosas de Etherfuse que si no las sabés te comés horas
 
@@ -148,9 +173,9 @@ y las transacciones pre-construidas **expiran en 1–2 minutos** — hay que lla
 
 | Documento | Para qué |
 |---|---|
-| `audit/00_INVENTORY.md` | Qué existe y qué no, sin supuestos, con los 10 invariantes formalizados |
-| `audit/03_BLEND_FEASIBILITY.md` | Qué exige el slot de oráculo de Blend y cómo se despliega un pool |
-| `audit/07_OWN_POOL_EVIDENCE.md` | Pool propio: IDs, tx y comandos de reproducción |
+| `contracts/margin-controller/src/lib.rs` | La lógica de LTV por tier y las guardas de precio, con el porqué en los comentarios |
+| **`audit/08_POOL_ACTIVATION.md`** | **Empieza por acá para el pool.** Activación, ciclo completo, prueba de custodia, y cómo verificarlo tú mismo |
+| `audit/07_OWN_POOL_EVIDENCE.md` | Despliegue del pool. Su §"por qué no activa" quedó superada por `08` |
 | `contracts/margin-controller/README.md` | Inventario de poderes admin: lo que puede y lo que **no** puede |
 | `contracts/oracle-aggregator/src/lib.rs` | El aggregator, con el porqué del timelock en los comentarios |
 

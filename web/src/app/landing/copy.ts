@@ -6,8 +6,10 @@
  * generic until an LOI is signed (see docs/private/partner-roster.md).
  *
  * Honesty rules baked in:
- *  - What is live today = the credit primitive (threshold oracle + badge +
- *    reference vault) on testnet. The Blend-composed pool is "en curso".
+ *  - What is live today = threshold oracle + reputation badge + our SEP-40
+ *    aggregator + our own isolated Blend pool (status 0) with the margin
+ *    controller on top, all on testnet. Evidence: audit/08_POOL_ACTIVATION.md.
+ *    The `reference-vault` is ARCHIVED — never present it as live.
  *  - Demo parameters are labeled as pilot-calibration estimates.
  */
 
@@ -196,11 +198,11 @@ const es = {
     },
     {
       name: "primitivo en vivo",
-      body: "el primitivo de crédito ya corre en testnet de stellar: oráculo de umbral 3-de-5, badge de reputación y vault de referencia. puedes leerlo abajo, ahora.",
+      body: "ya corre en testnet de stellar: oráculo de umbral 3-de-5, badge de reputación, nuestro propio feed de precio sep-40 y un pool de préstamo aislado montado encima. puedes leerlo abajo, ahora.",
     },
     {
       name: "sin token propio",
-      body: "sin token de gobernanza, sin emisiones infladas. el modelo se sostiene con las comisiones del crédito, no con especulación.",
+      body: "sin token de gobernanza, sin emisiones infladas. el plan es vivir del crédito y no de la especulación — el módulo de comisiones es roadmap, todavía no está construido.",
     },
   ],
   liveTitle: "en vivo on-chain",
@@ -286,7 +288,7 @@ const es = {
       phase: "fase 1",
       status: "completado",
       title: "primitivo de crédito en testnet",
-      body: "oráculo de umbral 3-de-5, badge de reputación soulbound y vault de referencia gateado por crédito. contrato verificable en el explorador.",
+      body: "oráculo de umbral 3-de-5, badge de reputación soulbound, nuestro propio feed de precio sep-40 y un pool de préstamo aislado corriendo sobre él. cada contrato verificable en el explorador.",
       accent: "#8BE9B0",
     },
     {
@@ -519,11 +521,11 @@ const en: LandingCopy = {
     },
     {
       name: "live primitive",
-      body: "the credit primitive already runs on stellar testnet: 3-of-5 threshold oracle, reputation badge and reference vault. you can read it below, right now.",
+      body: "it already runs on stellar testnet: 3-of-5 threshold oracle, reputation badge, our own sep-40 price feed and an isolated lending pool built on it. you can read it below, right now.",
     },
     {
       name: "no native token",
-      body: "no governance token, no inflated emissions. the model sustains itself on credit fees, not speculation.",
+      body: "no governance token, no inflated emissions. the plan is to earn from credit, not from speculation — the fee module is roadmap, not shipped.",
     },
   ],
   liveTitle: "live on-chain",
@@ -609,7 +611,7 @@ const en: LandingCopy = {
       phase: "phase 1",
       status: "done",
       title: "credit primitive on testnet",
-      body: "3-of-5 threshold oracle, soulbound reputation badge and credit-gated reference vault. contract verifiable in the explorer.",
+      body: "3-of-5 threshold oracle, soulbound reputation badge, our own sep-40 price feed and an isolated lending pool running on it. every contract verifiable in the explorer.",
       accent: "#8BE9B0",
     },
     {
