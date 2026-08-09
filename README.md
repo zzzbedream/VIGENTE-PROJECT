@@ -206,11 +206,16 @@ of the evidence.
 Three defined roles — protocol/contracts, backend and integrations, partnerships — with
 profiles in [`docs/TEAM.md`](docs/TEAM.md). Contact: zzzbedream@gmail.com
 
-**Being straight about execution risk**, since a reviewer can run `git log` in ten seconds:
-authorship is heavily concentrated. Roughly 178 of 180 commits are the founder's. Contracts,
-oracle and app are effectively one person's work so far; the other roles have contributed in
-design and business, not in code. That concentration is a real risk and we would rather state
-it than have it discovered.
+**Being straight about execution risk**, since anyone can check in ten seconds with
+`git shortlog -sne --all`: this is founder-led. **177 commits are the founder's, 2 a
+contributing engineer's.** Contracts, oracle and app are effectively one person's work so
+far; the other roles have contributed in design and business, not code.
+
+That concentration is a real risk, and it is the one the SCF #41 panel identified. What the
+same history shows is what got shipped anyway: four contracts on testnet, a custom SEP-40
+aggregator, an isolated Blend pool running on it, a security audit with documented
+remediation, and a signed commercial agreement with a tokenized-asset issuer. The plan is to
+hire from the grant rather than claim a team that does not exist yet.
 
 AI assistance is disclosed per SCF Open Track requirements in
 [`docs/AI_DISCLOSURE.md`](docs/AI_DISCLOSURE.md). Contributions welcome via

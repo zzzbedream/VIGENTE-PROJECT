@@ -40,12 +40,22 @@ The team is structured as three seats — CEO (protocol & cryptography), CTO
 (contracts & mainnet path), COO (partnerships & GTM) — each registered on
 the SCF platform with KYC commitment. Profiles: [TEAM.md](TEAM.md).
 
-**On execution risk, plainly:** authorship is concentrated. Roughly 178 of
-180 commits are the founder's; the other seats have contributed in design
-and business rather than code. A reviewer can confirm this with `git log`
-in ten seconds, so we state it rather than let it be discovered. It is the
-honest version of the risk the panel identified, and it is the reason
-Tranche 1 funds contributor onboarding rather than more solo output.
+**On execution risk.** This is a founder-led project and the commit history
+says so honestly: **177 commits by the founder, 2 by a contributing
+engineer**. Verify with `git shortlog -sne --all` — it prints four lines
+because each of us has committed under two name spellings, but there are
+two people in that history, not four.
+
+What the same history also shows is sustained execution: four contracts
+deployed and verifiable on testnet, a custom SEP-40 oracle aggregator, an
+isolated Blend pool activated with our own oracle in its immutable slot, a
+full security audit with documented remediation, and a signed commercial
+agreement with a Mexican tokenized-asset issuer with KYB approved.
+
+The #41 review flagged execution risk for a solo builder. That risk was
+real. The response was to ship verifiable infrastructure instead of arguing
+about it — and to **hire from the grant rather than claim a team that does
+not exist yet**.
 
 ### B. Proof of execution on Soroban — verifiable by anyone
 
@@ -179,13 +189,15 @@ adds a liquidation fee so keepers are economically incentivized
 
 ### F. Partnerships — strictly what is real
 
+- **Signed:** a commercial agreement with **Etherfuse** — a tokenized-asset
+  issuer and fiat on/off-ramp — executed July 2026. Business verification
+  (KYB) approved; sandbox and production API access granted. This is a
+  counterparty that has completed diligence on us, not a letter of intent.
 - **Drafted, not signed:** a non-binding exploratory LOI with Payku exists as
-  a document and is pending signature. We are not counting it as a
-  partnership, because it is not one yet. The protocol is deliberately built
-  so that it does **not** depend on Payku or any fintech: the score comes
-  from public Horizon data, and the adapter is optional enrichment.
-- **Signed commercial agreements: none.** Stating this plainly is more useful
-  to a reviewer than a qualified claim that has to be decoded.
+  a document and is pending signature. We do not count it as a partnership,
+  because it is not one yet. The protocol is deliberately built so it does
+  **not** depend on Payku or any fintech: the score comes from public Horizon
+  data and the adapter is optional enrichment.
 - **In progress (dated, documented):** strategic-partner conversations
   running on the live production app this week; Lobstr Partners
   application and PaltaLabs (DeFindex) outreach are the COO's first-week
