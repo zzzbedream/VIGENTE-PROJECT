@@ -53,11 +53,11 @@ export default function OnePagerPage() {
               Live testnet contract <Mono>{CONTRACT_ID.slice(0, 10)}…</Mono> on
               stellar.expert
             </li>
-            <li>104+ tests across badge, reference-vault, and scoring engine</li>
+            <li>97 Rust tests across badge, margin controller, and oracle aggregator</li>
             <li>3 verified threshold mints with on-chain tx hashes</li>
             <li>
-              Interface v1 published; reference-vault demonstrates the lending
-              integration end-to-end
+              Interface v1 published; our own Blend pool runs the credit cycle
+              end-to-end on our own SEP-40 oracle
             </li>
           </ul>
         </Section>

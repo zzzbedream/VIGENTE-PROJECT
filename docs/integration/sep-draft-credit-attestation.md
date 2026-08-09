@@ -137,7 +137,7 @@ required functions plus `get_default`, with a fixed score range of
 - Interface documentation: [`contracts/vigente-badge/INTERFACE.md`](../../contracts/vigente-badge/INTERFACE.md)
 - Live ABI: [`docs/integration/abi-v3.json`](abi-v3.json)
 - Compilable consumer example: [`examples/integration-snippet/`](../../examples/integration-snippet/)
-- Production consumer (lending vault with slash cascade): [`contracts/reference-vault/`](../../contracts/reference-vault/)
+- Production consumer (lending vault with slash cascade): [`contracts/reference-vault/`](../../archive/reference-vault/)
 
 [SEP-40]: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0040.md
 [SEP-56]: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0056.md

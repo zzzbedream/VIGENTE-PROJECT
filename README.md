@@ -203,8 +203,14 @@ of the evidence.
 
 ## Team, license, disclosure
 
-Three seats, each visible in `git log` under their own authorship — profiles in
-[`docs/TEAM.md`](docs/TEAM.md). Contact: zzzbedream@gmail.com
+Three defined roles — protocol/contracts, backend and integrations, partnerships — with
+profiles in [`docs/TEAM.md`](docs/TEAM.md). Contact: zzzbedream@gmail.com
+
+**Being straight about execution risk**, since a reviewer can run `git log` in ten seconds:
+authorship is heavily concentrated. Roughly 178 of 180 commits are the founder's. Contracts,
+oracle and app are effectively one person's work so far; the other roles have contributed in
+design and business, not in code. That concentration is a real risk and we would rather state
+it than have it discovered.
 
 AI assistance is disclosed per SCF Open Track requirements in
 [`docs/AI_DISCLOSURE.md`](docs/AI_DISCLOSURE.md). Contributions welcome via

@@ -120,7 +120,7 @@ We had no partnership with MoneyGram. Claiming otherwise was the prior submissio
 
 | Source | Coverage | Access Status | Verification |
 |--------|----------|---------------|--------------|
-| **Payku (Chile)** | Microcommerce payment data — primary launch market | Sandbox integration in code (`web/src/services/payku-client.ts`); Letter of Intent in progress | `docs/letters/payku-loi.pdf` (post-meeting) |
+| **Payku (Chile)** | Microcommerce payment data — primary launch market | Sandbox integration in code (`web/src/services/payku-client.ts`). A non-binding LOI is **drafted but unsigned**; we do not count it as a partnership | `web/src/services/payku-client.ts` — the integration is the verifiable part |
 | **Fintoc (Chile)** | Open banking — Tranche 2 expansion | Self-service sandbox; integration adapter in `integrations/fintoc-sandbox/` | Verifiable via Fintoc developer portal |
 | **Prometeo (LatAm)** | Open banking — post-grant expansion | Documented in `docs/BUSINESS_PLAN.md` | Not a Tranche deliverable |
 

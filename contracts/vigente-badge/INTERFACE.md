@@ -11,7 +11,7 @@
 | **Network** | Stellar Testnet (`Test SDF Network ; September 2015`) |
 | **Explorer** | [stellar.expert/explorer/testnet/contract/CDLLO7QE…](https://stellar.expert/explorer/testnet/contract/CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD) |
 | **Interface version** | v1 — see [Versioning policy](#versioning-policy) |
-| **Reference consumer** | [`contracts/reference-vault/src/lib.rs`](../reference-vault/src/lib.rs) (in production use, with integration tests) |
+| **Reference consumer** | [`contracts/reference-vault/src/lib.rs`](../../archive/reference-vault/src/lib.rs) (in production use, with integration tests) |
 
 ---
 

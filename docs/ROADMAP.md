@@ -34,9 +34,9 @@ core es trustless on-chain; Open Finance es enriquecimiento opcional consentido.
 ### H0 — Shipped (verificable on-chain hoy)
 | | |
 |---|---|
-| Logro | Oráculo k-of-n 3-de-5, badge SBT + defaults inmutables, reference-vault, Interface v1 + ABI |
+| Logro | Oráculo k-of-n 3-de-5, badge SBT + defaults inmutables, `oracle-aggregator` SEP-40, pool propio de Blend activo con `margin-controller` encima, Interface v1 + ABI |
 | Owner | CEO |
-| Evidencia | Contrato testnet `CDLLO7QE…`, 104+ tests, mints con tx en stellar.expert |
+| Evidencia | `CDLLO7QE…` (badge), `CCG6EAGO…` (aggregator), `CDYUHA3T…` (pool, `status: 0`), `CCZNOV65…` (controller). 97 tests Rust en 3 crates. Ciclo completo con tx en [audit/08](../audit/08_POOL_ACTIVATION.md) |
 | Gate | Gate 1+2 de [qms/RELEASE_QUALITY_GATES.md](qms/RELEASE_QUALITY_GATES.md) |
 
 ### H1 — Tramo 1 · hardening + Capa 1 (primer protocolo)

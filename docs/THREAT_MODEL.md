@@ -79,10 +79,10 @@ allowed = min(cap, per_pool_cap)   // per_pool_cap = available_liquidity / 10
 **Worked example.** A Gold borrower with score 900 has `score_anchored = $1,800`. Their first loan is bounded at `$180`. To reach $1,800 they must close their first loan honestly — which costs them at least the interest payment and surrenders the option of defaulting on a higher amount.
 
 **Code:**
-- [contracts/reference-vault/src/lib.rs](contracts/reference-vault/src/lib.rs) — `tier_ceiling_for_score`, the ladder in `borrow()`, and `RepayCount(borrower)` incremented in `repay()`.
+- [archive/reference-vault/src/lib.rs](archive/reference-vault/src/lib.rs) — `tier_ceiling_for_score`, the ladder in `borrow()`, and `RepayCount(borrower)` incremented in `repay()`.
 
 **Proof:**
-- 5 tests in [contracts/reference-vault/src/test.rs](contracts/reference-vault/src/test.rs): `test_first_loan_throttled_to_10pct_of_ceiling`, `test_ladder_lifts_to_full_ceiling_after_first_repay`, `test_max_loan_for_borrower_applies_first_loan_throttle`, `test_below_bronze_floor_rejected`, plus the integration tests that prove existing happy-path / default-path tests still work under the ladder.
+- 5 tests in [archive/reference-vault/src/test.rs](archive/reference-vault/src/test.rs): `test_first_loan_throttled_to_10pct_of_ceiling`, `test_ladder_lifts_to_full_ceiling_after_first_repay`, `test_max_loan_for_borrower_applies_first_loan_throttle`, `test_below_bronze_floor_rejected`, plus the integration tests that prove existing happy-path / default-path tests still work under the ladder.
 
 ## 4. Vault drainage and uncapped exposure (Vector V2.E4)
 
@@ -95,7 +95,7 @@ allowed = min(cap, per_pool_cap)   // per_pool_cap = available_liquidity / 10
 3. `MaxUtilizationBps` — default 85%. `borrow()` rejects when `(total_borrowed + amount) × 10_000 > total_deposits × max_utilization_bps`. The remaining 15% of pool liquidity stays available for `claim_withdraw`.
 
 **Code:**
-- [contracts/reference-vault/src/lib.rs](contracts/reference-vault/src/lib.rs) — see `deposit()`, `borrow()`, the `MaxTvlUsdc` and `MaxUtilizationBps` storage keys, and the `pause`/`unpause` admin-only functions.
+- [archive/reference-vault/src/lib.rs](archive/reference-vault/src/lib.rs) — see `deposit()`, `borrow()`, the `MaxTvlUsdc` and `MaxUtilizationBps` storage keys, and the `pause`/`unpause` admin-only functions.
 
 **Proof:**
 - `test_tvl_cap_rejects_overflow` and `test_tvl_cap_allows_at_exactly_limit` validate the boundary.
@@ -142,10 +142,10 @@ borrower.to_xdr()    // 44 bytes
 - The 14-day window combined with the 85% utilization cap means even a coordinated rush leaves enough float for honest withdrawals as outstanding loans repay.
 
 **Code:**
-- [contracts/reference-vault/src/lib.rs](contracts/reference-vault/src/lib.rs) — `request_withdraw`, `claim_withdraw`, `cancel_withdraw`, and the `WithdrawalRequest(Address)` storage key.
+- [archive/reference-vault/src/lib.rs](archive/reference-vault/src/lib.rs) — `request_withdraw`, `claim_withdraw`, `cancel_withdraw`, and the `WithdrawalRequest(Address)` storage key.
 
 **Proof:**
-- 6 tests in [contracts/reference-vault/src/test.rs](contracts/reference-vault/src/test.rs): `test_request_then_claim_withdraw_after_timelock`, `test_claim_before_timelock_fails`, `test_double_withdrawal_request_rejected`, `test_cancel_then_new_request_succeeds`, `test_request_above_balance_rejected`, `test_cancel_without_request_fails`.
+- 6 tests in [archive/reference-vault/src/test.rs](archive/reference-vault/src/test.rs): `test_request_then_claim_withdraw_after_timelock`, `test_claim_before_timelock_fails`, `test_double_withdrawal_request_rejected`, `test_cancel_then_new_request_succeeds`, `test_request_above_balance_rejected`, `test_cancel_without_request_fails`.
 
 ## Threats explicitly out of scope
 

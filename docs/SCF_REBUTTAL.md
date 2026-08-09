@@ -31,24 +31,34 @@ milestone structure**: Tranche #0 $6K (10%) → T1 $12K (20%) → T2 $18K
 [TRANCHE_3](TRANCHE_3_DELIVERABLES.md).
 
 The cut is itself the answer to "significant ask": **the MVP was built
-without grant money** — live contracts, 104+ tests, a production app. The
-grant funds only what is *not* built: mainnet hardening, audit prep, and
-ecosystem integrations.
+without grant money** — live contracts, 97 Rust tests across three crates,
+a production app, and an isolated Blend pool running on our own SEP-40
+oracle. The grant funds only what is *not* built: mainnet hardening, audit
+prep, and ecosystem integrations.
 
-The team is now structured as three seats — CEO (protocol &
-cryptography), CTO (contracts & mainnet path), COO (partnerships & GTM) —
-each registered on the SCF platform with KYC commitment, each visible in
-`git log` under their own authorship. Profiles: [TEAM.md](TEAM.md).
+The team is structured as three seats — CEO (protocol & cryptography), CTO
+(contracts & mainnet path), COO (partnerships & GTM) — each registered on
+the SCF platform with KYC commitment. Profiles: [TEAM.md](TEAM.md).
+
+**On execution risk, plainly:** authorship is concentrated. Roughly 178 of
+180 commits are the founder's; the other seats have contributed in design
+and business rather than code. A reviewer can confirm this with `git log`
+in ten seconds, so we state it rather than let it be discovered. It is the
+honest version of the risk the panel identified, and it is the reason
+Tranche 1 funds contributor onboarding rather than more solo output.
 
 ### B. Proof of execution on Soroban — verifiable by anyone
 
 | Artifact | Where to verify |
 |---|---|
-| 3 contracts live on testnet (badge v3, reference vault, mock USDC) | [stellar.expert contract page](https://stellar.expert/explorer/testnet/contract/CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD) |
+| **Own Blend pool, active, on our own SEP-40 oracle** | `get_config` on `CDYUHA3T…` → `status: 0`, `oracle: CCG6EAGO…`. Full evidence: [audit/08](../audit/08_POOL_ACTIVATION.md) |
+| **Full credit cycle on it** — supply → borrow → repay → withdraw | Tx hashes in [audit/08 §6](../audit/08_POOL_ACTIVATION.md) |
+| **Reputation actually moves credit** — same collateral, score 650 vs 850 → `max_borrow` ratio exactly `8500/7500` | `max_borrow` on `CCZNOV65…` for the two demo accounts |
+| **Non-custodial under adversarial admin** — admin pauses, user still withdraws everything | [`d370b84a…`](https://stellar.expert/explorer/testnet/tx/d370b84aab83cce899a3d944e7f9916520a202bdc4a4258e4a465d6006b6ba32) |
 | Threshold mints with 3-of-5 ed25519 signatures verified **on-chain** | [`8b9fccfc…`](https://stellar.expert/explorer/testnet/tx/8b9fccfc9daaf594e457e19808ef9c0746e8e45f37aab8417b5fe8d59641bc85), [`c5a071e8…`](https://stellar.expert/explorer/testnet/tx/c5a071e88fd021fa8d9b1b9cdf2f53a464ca87762b0a05bfff8c0ee339cdee84), [`5bf78e25…`](https://stellar.expert/explorer/testnet/tx/5bf78e2590cdd83553183aaee17e09c23b032eda224dc6b8b69514ccc3859657) |
-| 104+ tests across both contracts + web | `cargo test` in `contracts/vigente-badge` and `contracts/reference-vault`; `npm run test:web` in `web/` |
+| 97 Rust tests across three crates | `cargo test` in `contracts/{vigente-badge,margin-controller,oracle-aggregator}`; `npm run test:web` in `web/` |
 | Production deployment any reviewer can use | [vigente-project.vercel.app/v3](https://vigente-project.vercel.app/v3) — connect any wallet, score, mint |
-| Versioned consumer interface + live ABI | [INTERFACE.md](../contracts/vigente-badge/INTERFACE.md) · [abi-v3.json](integration/abi-v3.json) (exported from the deployed contract, WASM sha256 `60fe64dc…`) |
+| Versioned consumer interface + live ABI | [INTERFACE.md](../contracts/vigente-badge/INTERFACE.md) · [abi-v3.json](integration/abi-v3.json) |
 | Threat model with code-level mitigations | [THREAT_MODEL.md](THREAT_MODEL.md) — 6 STRIDE vectors, each mapped to a contract function and a named test |
 
 ---
@@ -70,33 +80,42 @@ documentation:
    per-borrower gating
    ([docs.blend.capital/users/general-faq](https://docs.blend.capital/users/general-faq)).
 
-So we do **not** modify Blend's core contracts, and we do not plug a
-credit score into a price-oracle slot. Blend cannot do
-under-collateralized lending — **Vigente is the missing credit layer, not
-a competing pool**. The integration that works is permissionless and runs
-in the other direction:
+The panel was right about the constraint and we did not argue with it. We
+built around it — and then went further than the point required.
+
+**We deployed our own isolated Blend pool whose oracle slot holds our own
+SEP-40 aggregator, and ran the full credit cycle on it.** That slot is
+immutable after pool creation, so the pool is permanently bound to a price
+feed we operate. The score never enters Blend at any point:
 
 ```
-borrowers ──► VIGENTE reference-vault ──► idle reserve (≥15% util cap)
-              (badge-gated,                      │ supplied permissionlessly
-               under-collateralized)             ▼
-                                          BLEND USDC pool (earns yield)
+user ──► VIGENTE margin-controller ──► BLEND pool (ours, isolated)
+         reads badge, derives            receives Request{address,
+         tier LTV, prices via            amount, request_type}
+         our aggregator                  — no reputation field exists
+                    │                              ▲
+                    └── oracle-aggregator ─────────┘
+                        (SEP-40, ours) ──► Reflector (third party)
 ```
 
-**The working mock the question asks for already exists, compiled and
-tested:**
+| Claim | Verification |
+|---|---|
+| The pool is ours and active | `get_config` on `CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI` → `status: 0` |
+| Its oracle is ours | same call → `oracle: CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4` |
+| Credit runs on it | supply → borrow → repay → withdraw, tx hashes in [audit/08](../audit/08_POOL_ACTIVATION.md) |
+| Reputation changes the outcome | identical collateral, score 650 vs 850, `max_borrow` ratio exactly `8500/7500` |
 
-- [`examples/integration-snippet/`](../examples/integration-snippet/) —
-  an `ExampleLender` contract consuming the Vigente oracle cross-contract
-  via `#[contractclient]`. `cargo test`: 2/2 green (score-scaled approval
-  + hard rejection on default).
-- [`contracts/reference-vault/`](../contracts/reference-vault/) — the
-  production-grade "intermediate contract" pattern: score-tiered limits,
-  first-loan throttling, cross-contract slash cascade, 23+ tests.
-- Supply-side PoC against a Blend testnet pool via
-  `@blend-capital/blend-sdk` is the next deliverable
-  (Tranche 1), with its tx hash published in
-  [docs/integration/BLEND.md] when it lands.
+So the honest answer to *"Blend does not support third-party oracles"* is:
+**it supports exactly one, chosen at pool creation and immutable — and on
+our pool, that one is ours.** What Blend does not support is reading a
+reputation score, which is why the controller sits in front and never asks
+it to.
+
+Also compiled and tested, for integrators who want the badge without the
+controller:
+[`examples/integration-snippet/`](../examples/integration-snippet/) — an
+`ExampleLender` consuming the oracle cross-contract via
+`#[contractclient]`, 2/2 green.
 
 ---
 
@@ -137,7 +156,7 @@ interface: [SEP draft — Credit Attestation Oracle Interface](integration/sep-d
 Two layers, both already in code:
 
 1. **`liquidate()` is permissionless** —
-   [`reference-vault/src/lib.rs:645`](../contracts/reference-vault/src/lib.rs):
+   [`reference-vault/src/lib.rs:645`](../archive/reference-vault/src/lib.rs):
    *"Anyone can trigger liquidation of an overdue loan."* Any keeper or
    incentivized liquidator calls `liquidate(liquidator, borrower)` once
    `due_at` passes. No privileged actor is required for defaults to be
@@ -160,9 +179,13 @@ adds a liquidation fee so keepers are economically incentivized
 
 ### F. Partnerships — strictly what is real
 
-- **Signed:** one exploratory, non-binding LOI with Payku
-  ([letters/payku-loi-final.md](letters/payku-loi-final.md)) —
-  deliberately framed so the protocol does **not** depend on it.
+- **Drafted, not signed:** a non-binding exploratory LOI with Payku exists as
+  a document and is pending signature. We are not counting it as a
+  partnership, because it is not one yet. The protocol is deliberately built
+  so that it does **not** depend on Payku or any fintech: the score comes
+  from public Horizon data, and the adapter is optional enrichment.
+- **Signed commercial agreements: none.** Stating this plainly is more useful
+  to a reviewer than a qualified claim that has to be decoded.
 - **In progress (dated, documented):** strategic-partner conversations
   running on the live production app this week; Lobstr Partners
   application and PaltaLabs (DeFindex) outreach are the COO's first-week
