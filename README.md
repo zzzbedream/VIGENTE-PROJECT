@@ -123,6 +123,7 @@ Both columns are equally true. Reviewers and partners deserve the second one.
 | Non-custodial guarantee proven under `pause()` | Fiat on/off ramp — integration not built |
 | 3-of-5 threshold mint, ed25519 verified on-chain | Stablebond / RWA collateral — XLM only today |
 | 48h timelock + deviation guard on oracle route changes | External users — all accounts so far are ours or labeled synthetics |
+| **Signed commercial agreement** with Etherfuse (tokenized-asset issuer and fiat ramp), KYB approved, production API access granted | The ramp integration itself — access exists, the client does not |
 | 97 Rust tests across three crates | Security audit — SCF audit credits apply at T3 |
 
 **Two limits worth stating plainly.** First, **the reputation layer is not trustless**: the

@@ -11,7 +11,7 @@ Three-person team building Vigente Protocol. All members hold equity in the proj
 **Role:** Architecture, Soroban smart contracts, oracle integration, technical product direction.
 
 **Responsibilities in this grant:**
-- Lead developer on `vigente-badge` and `reference-vault` Soroban contracts.
+- Lead developer on the `margin-controller`, `oracle-aggregator` and `vigente-badge` Soroban contracts.
 - Owner of testnet and mainnet deployments.
 - Final technical authority on architectural decisions.
 - Primary contact for SCF reviewers on technical questions.

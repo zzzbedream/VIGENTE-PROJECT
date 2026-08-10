@@ -230,7 +230,8 @@ We considered B2B subscriptions for protocol integrations but rejected the model
 | Aggregate origination volume | $0 | $0 (testnet only) | $50K+ USDC |
 | Default rate | n/a | n/a (testnet) | <5% (target) |
 | LP partners | 0 | 0 | 1+ |
-| LOI documents | 1 (Payku) | 3+ (pilot users) | 5+ (pilots + LP) |
+| Signed commercial agreements | 1 (Etherfuse, KYB approved) | 2+ | 3+ |
+| LOI documents | 1 drafted, unsigned (Payku) | 3+ (pilot users) | 5+ (pilots + LP) |
 
 ### 8.2 Qualitative Success Signals
 

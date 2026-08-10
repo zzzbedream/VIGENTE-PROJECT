@@ -129,10 +129,11 @@ block (crate tests + live on-chain reads of ltv/max_borrow/debt/health).
 
 - `soroban-sdk 21.2.0` (repo-wide). The RedStone Rust SDK requires sdk 23.x —
   deliberately NOT embedded; we consume SEP-40 cross-contract instead (same
-  pattern Blend uses). RedStone's adapter is the mainnet path (LOI); Reflector
-  is the live testnet feed. BENJI enters as a second collateral via
-  `add_collateral_asset` once a pool with a BENJI reserve exists (own pool —
-  stretch; requires the RedStone BENJI feed).
+  pattern Blend uses). RedStone is a **candidate** mainnet feed — no agreement
+  exists — while Reflector is the live testnet source behind our aggregator.
+  BENJI would enter as a second collateral via `add_collateral_asset` once a
+  pool with a BENJI reserve exists; that depends on a price feed we do not
+  have yet. Both are roadmap, not commitments.
 - Blend interface verified against the deployed TestnetV2 wasm
   (`stellar contract info interface`): `submit(from, spender, to, requests)`,
   `Request{address, amount, request_type}` (2/3/4/5), `Positions{collateral,
