@@ -69,26 +69,48 @@ The full inventory of what the admin can and cannot do is in
 
 ## Verify it yourself
 
-No keys needed — every call below is a read. Substitute any funded testnet account for
-`<YOUR_ACCOUNT>`.
+### The evidence — immutable
+
+A transaction hash says the same thing in a year that it says today. **This is the primary
+record**, and it needs no tooling: every link opens in a browser.
+
+| What it proves | Transaction |
+|---|---|
+| Silver deposits 1,000 XLM | [`787a44ad`](https://stellar.expert/explorer/testnet/tx/787a44ad68998cdeca21d0fda19970a70b08c3b594cf0af73b7a246e6b33d0e4) |
+| Gold deposits **the same** 1,000 XLM | [`98c0ea45`](https://stellar.expert/explorer/testnet/tx/98c0ea45007a18838640e78064505129477a469b9e2e721340116897aa0c842f) |
+| Borrow through the controller | [`e85cb1a6`](https://stellar.expert/explorer/testnet/tx/e85cb1a6f9786ff95068c80acb9ca56da3a70670f371c0167b09526f68d78692) |
+| Repay → debt reaches zero | [`a1436a2d`](https://stellar.expert/explorer/testnet/tx/a1436a2dc0a48948aee5a36179366af27e835d475fcf44f90a2f389ecc7c5305) |
+| Withdraw collateral | [`c07ed1a2`](https://stellar.expert/explorer/testnet/tx/c07ed1a2bad54897ba3cd5d057eb0fa2e6c07f49b4b2aa727255e7a9b8668e2f) |
+| **Admin pauses the contract** | [`e8803f60`](https://stellar.expert/explorer/testnet/tx/e8803f60719d78e29dfcc4b593b8e687e4c93d2c49092701d132ef3dc9d12a82) |
+| **User withdraws everything anyway, while paused** | [`d370b84a`](https://stellar.expert/explorer/testnet/tx/d370b84aab83cce899a3d944e7f9916520a202bdc4a4258e4a465d6006b6ba32) |
+| Pool activated — `status: 2 → 0` | [`00130c83`](https://stellar.expert/explorer/testnet/tx/00130c8361571de6c0d7fdd57633bd4e3698c0a1b7103d5f6425518d813c3bab) |
+
+Against those two deposits, the recorded `max_borrow` was **1223133480** (Silver) and
+**1386217944** (Gold) — a ratio of exactly `8500/7500`.
+
+### Live queries — optional, and they read current state
+
+These need the Stellar CLI and no keys. **They read state as it is now, which is not
+necessarily the state at the time of the demonstration**: positions get opened and closed, and
+the oracle price moves. If a figure looks different from the table above, that is the system
+working, not the record being wrong.
 
 ```bash
 POOL=CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI
 CTRL=CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ
 
-# 1. The pool is active AND runs on our oracle → status 0, oracle CCG6EAGO…
+# The pool is active AND runs on our oracle → status 0, oracle CCG6EAGO…
 stellar contract invoke --id $POOL --network testnet \
   --source-account <YOUR_ACCOUNT> --send=no -- get_config
 
-# 2. Reputation moves credit: same collateral, different score, different capacity
-stellar contract invoke --id $CTRL --network testnet --source-account <YOUR_ACCOUNT> \
-  --send=no -- max_borrow --user GC6IPCM3OO44PW4Y62XD54HLT5Q23E5OFNFMYPMNUDSDRUK37ZFB6ECZ
-stellar contract invoke --id $CTRL --network testnet --source-account <YOUR_ACCOUNT> \
-  --send=no -- max_borrow --user GDESGH52DW7PYVRTYR43POJ7QHHLZ337SLKSAVMQ4OKFKNS2RPT3YJYF
-
-# 3. The tier ladder is on-chain, not in a config file
+# The tier ladder is on-chain, not in a config file
 stellar contract invoke --id $CTRL --network testnet \
   --source-account <YOUR_ACCOUNT> --send=no -- get_tier_ltv
+
+# Capacity for a given account. Returns 0 if that account currently holds no
+# collateral — deposit first if you want to reproduce the comparison live.
+stellar contract invoke --id $CTRL --network testnet --source-account <YOUR_ACCOUNT> \
+  --send=no -- max_borrow --user GC6IPCM3OO44PW4Y62XD54HLT5Q23E5OFNFMYPMNUDSDRUK37ZFB6ECZ
 ```
 
 Tests — run them rather than trusting a badge:

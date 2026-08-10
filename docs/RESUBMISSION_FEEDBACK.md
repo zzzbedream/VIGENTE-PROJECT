@@ -13,7 +13,7 @@
 
 Vigente Protocol was submitted to the Stellar Community Fund in early 2026 and was not selected. We received six specific feedback items from Delegate Panelists. This document maps each item to the concrete changes we made in the repository — every claim below is verifiable by inspecting the code, running the tests, or querying the testnet contracts.
 
-We did not rewrite the proposal cosmetically. We restructured the architecture, the team, the budget, and the deliverables so that this resubmission addresses the substance of each concern.
+We did not rewrite the proposal cosmetically. We restructured the architecture, the budget, and the deliverables so that this resubmission addresses the substance of each concern.
 
 ---
 
@@ -23,17 +23,26 @@ We did not rewrite the proposal cosmetically. We restructured the architecture, 
 
 **What changed:**
 
-The original submission was effectively solo. We have since formed a three-person team with complementary roles:
+**The project is still founder-led, and we are not going to dress that up.** Two other people
+contribute — one in engineering, one in commercial work — but the code is overwhelmingly one
+person's. Verify it in ten seconds:
 
-| Role | Name | Responsibility | Verification |
+```bash
+git shortlog -sne --all
+```
+
+| Role | Name | Responsibility | What the record actually shows |
 |------|------|----------------|--------------|
-| Founder / Tech Lead | zzzbedream | Architecture, Soroban contracts, integration | Primary Git author (verifiable via `git log`) |
-| Full-stack Engineer | Cristian Pérez Arce | Frontend, oracle adapters, testing | Profile in `docs/TEAM.md`; commits to be visible in `git log` before submission |
-| Commercial Lead | Mauricio Urra | Business development, partnerships, LOIs | Profile in `docs/TEAM.md`; LOIs in `docs/letters/` |
+| Founder / Tech Lead | zzzbedream | Architecture, Soroban contracts, integration | Essentially all commits; the deployed contracts and [audit/08](../audit/08_POOL_ACTIVATION.md) are the substantive record |
+| Full-stack Engineer | Cristian Pérez Arce | Frontend, integrations, testing | Two commits, plus design and review input that does not appear as authorship |
+| Commercial Lead | Mauricio Urra | Business development, partnerships | No commits — the work is commercial. The signed Etherfuse agreement is where it shows up |
 
-We did not inflate team size for appearances. The three roles are functional, with the Founder remaining accountable for technical delivery. The codebase is the proof of execution — it is auditable in this repository.
+The honest answer to the execution-risk concern is not an org chart. It is that the risk is
+real, the response so far has been to ship verifiable infrastructure rather than argue about
+it, and **the grant funds contributor hours rather than backfilling a team that does not yet
+exist at full capacity**. Profiles: [TEAM.md](TEAM.md).
 
-**Budget reduction:** Original ask was $123,000 USD. Current ask is **$60,000 USD** — a 51% reduction. This reflects the realistic cost of three engineers shipping a scoped MVP → Testnet → Mainnet trajectory in six months, not an aspirational team of ten.
+**Budget reduction:** Original ask was $123,000 USD. Current ask is **$60,000 USD** — a 51% reduction. It reflects a scoped MVP → Testnet → Mainnet trajectory over six months with the hours actually available, not an aspirational team of ten.
 
 ---
 
@@ -71,7 +80,7 @@ The previous submission described Vigente as a credit oracle for Blend Protocol.
 
 1. **No Blend SDK in any `Cargo.toml`** — verifiable via `git grep -i blend contracts/`.
 2. **No Blend imports in Rust code** — same grep returns zero hits.
-3. **Tranche 2 delivers a `reference-vault` contract** that demonstrates credit-gated lending end-to-end on Soroban with no third-party protocol dependency. This is the integration reference that production protocols (Blend, Lulo, others) can adopt when they choose to support external credit oracles. The reference vault is a complete working example, not a placeholder.
+3. **This was superseded by something stronger.** Rather than avoid Blend, we deployed our own isolated Blend pool whose immutable oracle slot holds our own SEP-40 aggregator, and ran the full credit cycle on it — with a margin controller in front that reads reputation and hands Blend an ordinary request. Blend never sees the score. Evidence with transaction hashes: [audit/08](../audit/08_POOL_ACTIVATION.md). The `reference-vault` mentioned in the original plan is archived.
 
 ### Default logic: implemented as immutable on-chain enforcement
 
@@ -83,7 +92,7 @@ The `vigente-badge` contract (`contracts/vigente-badge/src/lib.rs`) implements a
 - `mint()` calls `is_defaulted()` before issuing a new badge. A defaulted address can never receive a new badge from this contract.
 - A `slash` event is emitted to the Stellar ledger, providing a permanent audit trail even after the storage entry eventually expires.
 
-The test suite (`contracts/vigente-badge/src/test.rs`) contains 30 tests covering the slash lifecycle, including the cases where a defaulted borrower cannot re-mint and where double-slashing is prevented.
+The test suite (`contracts/vigente-badge/src/test.rs`) covers the slash lifecycle, including the cases where a defaulted borrower cannot re-mint and where double-slashing is prevented.
 
 ### Centralized oracle: SHIPPED as k-of-n threshold ed25519 on-chain (Phase B, pre-submission)
 
@@ -131,7 +140,7 @@ Payku is the right launch partner because (a) they already serve our target cust
 `docs/BUSINESS_PLAN.md` documents:
 - **Primary segment**: Chilean microcommerces (≈1M businesses) processing payments through fintech rails like Payku.
 - **Pain point**: consistent monthly cash flow with zero access to DeFi credit because no on-chain reputation exists.
-- **Initial wedge**: 100 PyME pilot via Payku partnership (Tranche 3).
+- **Initial wedge**: 100 PyME pilot via Payku, contingent on that LOI being signed (Tranche 3).
 - **Expansion**: Latam-wide via Prometeo integration post-grant.
 
 ### Go-to-market plan

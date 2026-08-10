@@ -1,126 +1,110 @@
 # Team
 
-Three-person team building Vigente Protocol. All members hold equity in the project and are committed full-time or on a substantial part-time basis through the SCF Build Award timeline.
+**Vigente is founder-led.** One person has written essentially all of the code; two others
+contribute in engineering support and commercial work. The founder is the sole shareholder —
+no other member holds equity in the project.
+
+That is a smaller claim than this document used to make, and it is the accurate one. The SCF
+#41 review flagged execution risk for a solo builder, and the temptation is to answer it with
+an org chart. A reviewer can check the real distribution in ten seconds:
+
+```bash
+git shortlog -sne --all
+```
+
+It prints four lines, because each contributor has committed under two name spellings — but
+there are two people in that history, not four.
 
 ---
 
 ## Founder / Tech Lead
 
-**zzzbedream** (GitHub handle; full name available on request to SCF reviewers under confidentiality)
+**zzzbedream** (GitHub handle; full name available on request to SCF reviewers under
+confidentiality)
 
-**Role:** Architecture, Soroban smart contracts, oracle integration, technical product direction.
+**Role:** Architecture, Soroban smart contracts, oracle integration, technical product
+direction.
 
 **Responsibilities in this grant:**
-- Lead developer on the `margin-controller`, `oracle-aggregator` and `vigente-badge` Soroban contracts.
+- Lead developer on the `margin-controller`, `oracle-aggregator` and `vigente-badge` contracts.
 - Owner of testnet and mainnet deployments.
 - Final technical authority on architectural decisions.
 - Primary contact for SCF reviewers on technical questions.
 
 **Background:**
-- Self-taught full-stack engineer with focus on Rust, TypeScript, and blockchain.
-- Built Vigente Protocol from inception (hackathon MVP through current SCF resubmission).
-- Active contributor to the Stellar Soroban ecosystem.
+- Self-taught full-stack engineer focused on Rust, TypeScript and blockchain.
+- Built Vigente from inception — hackathon MVP through the current resubmission.
 
-**Verifiable contributions to Vigente:**
-- Primary git author across all `contracts/`, `web/`, and `integrations/` directories.
-- Verifiable via: `git log --pretty='%an' | sort -u`.
-
-**Contact:** Available via GitHub or email through the SCF application.
+**Verifiable:** primary git author across `contracts/`, `web/` and `docs/`. The deployed
+contracts, the isolated Blend pool and the credit cycle in
+[`../audit/08_POOL_ACTIVATION.md`](../audit/08_POOL_ACTIVATION.md) are the substantive record.
 
 ---
 
-## Full-stack Engineer
+## Full-stack Engineer — Cristian Pérez Arce
 
-**Cristian Pérez Arce**
+**Role:** Frontend development, integration work, testing, UX engineering.
 
-**Role:** Frontend development, oracle adapter implementation, integration testing, UX engineering.
+**Contribution to date:** two commits in the repository history, plus design and review input
+that does not appear as authorship. We are not going to describe that as co-development of the
+protocol, because it isn't.
 
-**Responsibilities in this grant:**
-- Co-developer on Payku and Fintoc oracle adapters.
-- Lead developer on the vault UI (Tranche 2 deliverable).
-- Test suite expansion (unit and integration).
-- Frontend performance, responsiveness, and accessibility.
+**Scope in this grant:** frontend and integration surfaces, test-suite expansion, and the fiat
+ramp client — which is designed but not built.
 
-**Background:**
-- Professional full-stack engineer with experience in React, Next.js, and TypeScript.
-- Experience with API integration patterns and OAuth flows (relevant to future Fintoc widget integration).
-- Bilingual (Spanish/English) for documentation and partner communication.
-
-**Verifiable contributions to Vigente:**
-- Commits to the repository will be visible in `git log` prior to SCF submission.
-- LinkedIn profile and CV available to SCF reviewers under confidentiality.
-
-**Compensation model:** Founder equity + grant disbursement (Tranches 1-3 budget allocates ~$8,000 to Full-stack Engineer hours per tranche document budget tables).
+**Compensation:** grant disbursement for hours worked. No equity.
 
 ---
 
-## Commercial Lead
+## Commercial Lead — Mauricio Urra
 
-**Mauricio Urra**
+**Role:** Business development, commercial partnerships, pilot user acquisition.
 
-**Role:** Business development, commercial partnerships, pilot user acquisition, market validation.
+**Contribution to date:** no commits — the work is commercial, not code. The signed commercial
+agreement with Etherfuse and the partner pipeline are where this role shows up.
 
-**Responsibilities in this grant:**
-- Owner of the Payku partnership and Letter of Intent (Tranche 1 deliverable).
-- Pilot user recruitment for Chilean PyMEs (Tranche 3, target: 100 active users).
-- LP partner outreach for $50K+ liquidity provision (Tranche 3).
-- Spanish-language commercial materials and pilot user training.
+**Scope in this grant:** partner conversations, pilot recruitment in the Chilean PyME segment,
+LP outreach, and Spanish-language commercial material.
 
-**Background:**
-- Commercial executive with experience in Chilean fintech and SME segments.
-- Existing relationships in the Chilean microcommerce ecosystem.
-- Native Spanish speaker; bilingual communication with international partners.
-
-**Verifiable contributions to Vigente:**
-- LinkedIn profile and CV available to SCF reviewers under confidentiality.
-- Partnership communications documented in `docs/letters/` post-LOI signature.
-
-**Compensation model:** Founder equity + grant disbursement (Tranche 3 allocates $2,400 specifically to Commercial Lead hours for pilot onboarding).
+**Compensation:** grant disbursement for hours worked. No equity.
 
 ---
 
-## Team Practices
+## What the grant actually funds on the team side
 
-### Communication
-- Async-first via shared repository (issues, PRs) and project chat.
-- Weekly sync meeting (45 min) for cross-functional alignment.
-- Founder + Full-stack Engineer pair-program on critical security code.
+Not a team that already exists at full capacity — **the hours to build one**. The honest
+version of the response to "solo-developer execution risk" is: the risk is real, the answer so
+far has been to ship verifiable infrastructure rather than argue about it, and the grant pays
+for contributor hours rather than backfilling an org chart.
 
-### Decision Making
-- Technical decisions: Founder has final authority, with Full-stack Engineer review.
-- Commercial decisions: Commercial Lead has final authority, with Founder + Full-stack input.
-- Financial decisions (grant disbursement, contractor hiring): unanimous.
+## Practices
 
-### Conflict Resolution
-- Disagreements escalate to documented discussion in repository issues.
-- No external arbitrator currently — small team, high trust. May add advisor in Tranche 2.
+- **Communication:** async-first through the repository (issues, PRs) plus project chat, with a
+  weekly sync.
+- **Technical decisions:** the founder has final authority.
+- **Commercial decisions:** the Commercial Lead leads, with founder input.
+- **Financial decisions** (grant disbursement, contractor hiring): founder, as sole
+  shareholder.
+- **Conflict resolution:** documented discussion in repository issues. There is no external
+  arbitrator; the team is small enough that adding one now would be theatre.
 
----
+## Advisors
 
-## Advisors (Future)
-
-The team plans to add 1-2 technical advisors during Tranche 2 to:
-- Provide independent review of Soroban contracts pre-mainnet.
-- Connect the team to the broader Stellar ecosystem (other builders, SDF stakeholders).
-- Serve as a sanity check on architectural decisions.
-
-Advisors will be compensated with non-grant equity. They are not part of the budget submitted to SCF.
+None today. The intent is to add one or two technical advisors for independent contract review
+before mainnet. **No advisor arrangement — compensation or otherwise — currently exists**, and
+none is included in the SCF budget.
 
 ---
 
-## Why We're Honest About Team Size
+## How to verify any of this
 
-The previous SCF submission's reviewer feedback flagged "solo student developer" as an execution risk. Inflating the team to mitigate that concern would have been the easy path. We chose instead to build a real three-person team with complementary roles and have each person publicly accountable for their domain.
+- `git shortlog -sne --all` — the real authorship distribution.
+- LinkedIn profiles and CVs available to SCF reviewers under confidentiality.
+- A video call with the team, on request.
 
-This is verifiable. Reviewers can:
-- Check `git log` to see actual contributors.
-- Request linkedin profiles of all three members.
-- Schedule a video call with the team for live verification.
-- Verify Commercial Lead's existing fintech contacts via reference checks.
-
-We invite scrutiny. Our credibility is the most expensive asset on the line.
+If something in this document does not match what you can check, the checkable thing is right
+and we want to hear about it.
 
 ---
 
-*Document Version: 1.0.0*
-*Last updated: 2026-05-24*
+*Last updated: 2026-08-09*

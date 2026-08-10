@@ -246,7 +246,25 @@ Validación final, `cd web && npm run validate-t1` → **`"status": "complete"`*
 
 ## 8. Cómo verificar esto tú mismo
 
-Requiere solo el CLI de Stellar. Ninguna llave.
+### 8.1 La evidencia — inmutable, y es la que manda
+
+Todas las tablas de la §6 son tx hashes. **Un hash dice lo mismo dentro de un año**, no
+requiere herramientas y se abre en el navegador. Esa es la evidencia primaria de este
+documento.
+
+> **Por qué esto importa y no es un detalle de formato.** La prueba de custodia (§6.4)
+> **destruyó el estado que probaba la reputación**: el usuario Gold retiró todo su colateral
+> estando el contrato pausado, que es exactamente lo que había que demostrar. Después de eso,
+> `max_borrow` de Gold devuelve `0`. Los dos hechos son ciertos y las dos transacciones están
+> en la cadena; lo que no se sostiene es una consulta de estado como prueba permanente.
+> Cualquiera que corra la demo mueve el estado otra vez.
+
+### 8.2 Consultas en vivo — opcionales
+
+Requiere solo el CLI de Stellar, ninguna llave. **Leen el estado actual**, que puede haber
+cambiado desde la demostración. Para reproducir la comparación por tier hay que depositar
+colateral primero: `max_borrow` de una cuenta sin colateral es `0` por definición, no por
+fallo.
 
 ```bash
 POOL=CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI

@@ -191,7 +191,7 @@ We considered B2B subscriptions for protocol integrations but rejected the model
 
 ### 7.1 Phase 1: Tranche 1 MVP (Weeks 1-6)
 - Public testnet badge contract live
-- Payku LOI signed (commercial validation)
+- Payku LOI signed (commercial validation) - *goal; drafted and unsigned today*
 - Working demo: any reviewer can mint a badge in 5 minutes
 - Public README walkthrough generates ecosystem awareness
 
@@ -271,7 +271,7 @@ These are conservative projections assuming Chile-only operations through Month 
 | Stellar ecosystem doesn't adopt the SDK | Vigente queries are free and permissionless. Adoption is organic. Even without protocol adoption, the reference vault provides a working lending product. |
 | Regulatory pushback in Chile | Chile has fintech regulation (Ley Fintec 21.521) explicitly allowing this kind of model. Vigente operates on public open banking standards. |
 | Audit reveals critical vulnerability | Circuit breaker (`pause()`) tested. Migration plan in `docs/MAINNET_OPERATIONS.md`. Audit funded separately via SCF Audit Bank. |
-| Founder unavailability | Full-stack Engineer (Cristian) has deep knowledge of code; Commercial Lead (Mauricio) maintains commercial continuity. Bus factor > 1. |
+| Founder unavailability | **A real, unmitigated risk.** The bus factor is 1: contracts, oracle and app are one person's work. Reducing it is what contributor hours in T1-T2 are for. |
 
 ---
 

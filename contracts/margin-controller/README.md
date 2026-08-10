@@ -113,7 +113,7 @@ Manual settlement runbook (T2 automates this):
 ## Build / test / deploy
 
 ```bash
-cargo test                                            # 26 tests + fuzz
+cargo test -j 1                                       # unit + property tests
 cargo build --target wasm32-unknown-unknown --release
 stellar contract optimize --wasm target/wasm32-unknown-unknown/release/margin_controller.wasm
 stellar contract deploy --wasm target/wasm32-unknown-unknown/release/margin_controller.optimized.wasm \
