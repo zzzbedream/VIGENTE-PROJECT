@@ -119,11 +119,14 @@ Durante semanas dijimos que el umbral era **`k ≥ 200.000`**, cifra sacada de d
 const K_THRESHOLD = BigInt(100_000);
 ```
 
-Con el número equivocado concluimos que la donación cubría solo el 59,6 % y llegamos a
-redactar un pedido de **2,3× más tokens de los necesarios**. No se envió porque medimos con la
-herramienta antes de pedir. De ahí la regla que aplicamos ahora: **si un número viene de
+Con el número equivocado concluimos que la donación cubría solo el 59,6 % y **enviamos a Blend
+un pedido de 2,3× más tokens de los necesarios** (3-ago). Nos corrigió la contraparte: `mootz12`
+respondió el 4-ago *"The threshold is 100k!"*, y recién ahí verificamos contra su propio código.
+
+**No lo detectamos nosotros.** Lo que sí hicimos fue verificar la corrección en la fuente en
+vez de aceptarla de palabra, y de ahí sale la regla que aplicamos ahora: **si un número viene de
 documentación y existe una herramienta oficial que lo calcula, se usa la herramienta y se cita
-la línea.**
+la línea.** Secuencia completa en `audit/08_POOL_ACTIVATION.md` §2.
 
 ### Dos gotchas de Blend que cuestan horas
 

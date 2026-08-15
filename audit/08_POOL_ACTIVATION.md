@@ -38,12 +38,30 @@ Durante semanas sostuvimos que el umbral era `k ≥ 200.000`, cifra tomada de do
 const K_THRESHOLD = BigInt(100_000);
 ```
 
-La consecuencia práctica fue seria: con 200.000 concluimos que la donación de testnet cubría
-solo el 59,6 % y llegamos a redactar un pedido de **2,3× más tokens de los necesarios**. Ese
-pedido nunca se envió porque medimos antes de pedir.
+La consecuencia fue concreta y conviene contarla completa, porque el ciclo de corrección es más
+informativo que el error:
+
+| Fecha | Qué pasó |
+|---|---|
+| — | Con el umbral equivocado (200.000) concluimos que la donación cubría solo el 59,6 % |
+| **3-ago** | **Enviamos el pedido a Blend con números inflados**: ~48.000 LP, o ~388.000 BLND + ~28.400 USDC — **2,3× más de lo necesario** |
+| **4-ago** | **Blend nos corrigió.** `mootz12`, en su canal público: *"The threshold is 100k!"* |
+| **4-ago** | Verificamos su corrección contra su propio código: `get-backstop-threshold.ts:22` |
+| **6-ago** | `berry` envía los activos: *"sent you enough for a pool!"* — 200.000 BLND + 15.000 USDC, que con el umbral real **sobran un 19 %** |
+
+**No detectamos el error nosotros: nos lo corrigió la contraparte.** Lo que sí hicimos fue
+verificar la corrección contra la fuente en vez de aceptarla de palabra — y esa verificación es
+la que produjo la medición reproducible de la sección siguiente.
 
 **Regla que adoptamos a partir de esto:** cuando un número venga de documentación y exista una
-herramienta oficial que lo calcule, se usa la herramienta y se cita la línea de código.
+herramienta oficial que lo calcule, se usa la herramienta y se cita la línea de código. La
+documentación describe intenciones; el código describe la realidad.
+
+> Como nota de reciprocidad: en el mismo intercambio reportamos una inconsistencia en la
+> documentación de Blend —el tutorial de creación de pools listaba `collateral_cap` en
+> `ReserveConfig` cuando el contrato desplegado espera `supply_cap`, que fue lo que hizo fallar
+> nuestro `queue_set_reserve`. `berry` confirmó la corrección el 27-jul:
+> *"It has been changed to supply_cap with the respective definition"*.
 
 ### Salida literal de la medición
 
