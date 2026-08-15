@@ -122,9 +122,57 @@ sandbox); el USDC tiene el suyo propio.
 `/lookup/stablebonds` complementa con precio, moneda y supply: CETES figura con
 `bondCurrency: "MXN"` y `tokenPriceDecimal: 1.141052` al momento de la consulta.
 
+## 4b. Intento de onramp completo — bloqueado, y el bloqueo es la información
+
+Se intentó el ciclo `quote → order → fiat_received → claim`. **No se completó**, y la razón es
+estructural, no un error nuestro.
+
+**Lo que sí funcionó:**
+
+```json
+POST /ramp/wallet  →  200
+{"walletId":"62f6706e-ffd9-43d6-adb7-a2a152647c15",
+ "customerId":"2a64da05-63f7-4502-aa2e-750a19e679b1",
+ "publicKey":"GC5PQMUM226EBHVYT54Y…"}
+```
+
+La wallet externa queda registrada y aparece en `GET /ramp/wallets`. Nótese que el
+`customerId` es el mismo `org_id`: para wallets institucionales, la organización actúa como
+cliente.
+
+**Dónde se detiene, y por qué importa para el diseño:**
+
+| Endpoint | Cuerpo `{}` devuelve | Lectura |
+|---|---|---|
+| `POST /ramp/quote` | `missing field 'quoteId'` | **Consume** una cotización, no la crea |
+| `POST /ramp/order` | `missing field 'orderId'` | Ídem: consume una orden preexistente |
+| `POST /ramp/order/fiat_received` | `missing field 'orderId'` | Simula el depósito de una orden ya creada |
+| `POST /ramp/onboarding-url` | `missing field 'bankAccountId'` | Requiere cuenta bancaria previa |
+| `POST /ramp/bank-account` | `missing field 'presignedUrl'` | Requiere una URL prefirmada |
+| `GET /ramp/bank-accounts` | `{"items":[],"totalItems":0}` | No hay ninguna registrada |
+
+Enviar un cuerpo de cotización completo —`walletAddress`, `blockchain`, `currency`, monto e
+`identifier`— sigue devolviendo `missing field 'quoteId'`. El endpoint no acepta esa forma.
+
+**Conclusión: la cotización no se origina desde la API de partner.** Nace en el flujo de
+onboarding alojado, que a su vez exige una cuenta bancaria registrada mediante una URL
+prefirmada que no encontramos forma de generar con la clave de partner sola. Los tres endpoints
+del ciclo (`quote`, `order`, `fiat_received`) operan sobre identificadores producidos por ese
+flujo.
+
+**Qué implica para nosotros:** el onramp **no es headless**. Hay un paso alojado por el
+proveedor en el medio, y eso condiciona el diseño del producto —dónde vive la sesión del
+usuario, cómo se retoma un flujo interrumpido, qué se puede automatizar y qué no—. Es
+presupuestable y es Tranche 2, pero había que descubrirlo probando: la documentación describe
+el ciclo como si fuera una secuencia de tres llamadas.
+
+**Primera pregunta para la sesión técnica:** ¿cómo se origina un `quoteId` desde una
+integración de partner? ¿Existe una ruta headless para clientes institucionales, o el paso de
+onboarding alojado es obligatorio también en ese caso?
+
 ## 5. Alcance — qué NO se probó
 
-**No se ejecutó ninguna operación con fondos.** Sin onramp, sin órdenes, sin webhooks, sin
+**No se ejecutó ninguna operación con fondos.** Sin onramp completado, sin órdenes, sin webhooks, sin
 registro de wallet institucional, sin verificación de firma HMAC, sin swap. Tampoco se probó
 producción: la credencial es de sandbox y los dos entornos no son intercambiables.
 
