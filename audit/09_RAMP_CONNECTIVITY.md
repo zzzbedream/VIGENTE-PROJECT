@@ -11,33 +11,61 @@ que es distinto y está menos avanzado.
 
 ## 1. Resultado en una línea
 
-**Los endpoints públicos responden y entregan datos utilizables. Los autenticados devuelven
-401 por un problema de formato de nuestra credencial, no de permisos.** La integración
-funcional queda pendiente.
+**Acceso autenticado funcionando.** La organización está aprobada, el descubrimiento de
+activos responde, y el catálogo público entrega datos que sirven para calibrar nuestro
+oráculo. No se ejecutó ninguna operación con fondos.
 
 | Endpoint | Auth | HTTP | Resultado |
 |---|---|---|---|
-| `GET /ramp/verify-api-key` | sí | **401** | formato de credencial inválido |
-| `GET /ramp/me` | sí | **401** | ídem |
-| `GET /ramp/assets?blockchain=stellar` | sí | **401** | ídem |
-| `GET /lookup/stablebonds` | no | **200** | 11.008 bytes, catálogo completo |
-| `GET /lookup/bonds/cost` | no | **200** | 19.017 bytes, 19 bonos con precios por proveedor |
+| `GET /ramp` | sí | **200** | `org_id` |
+| `GET /ramp/me` | sí | **200** | organización, fecha de aprobación, fee por defecto |
+| `GET /ramp/assets?blockchain=…&currency=…&wallet=…` | sí | **200** | 9 activos en Stellar |
+| `GET /lookup/stablebonds` | no | **200** | 11.008 bytes, catálogo |
+| `GET /lookup/bonds/cost` | no | **200** | 19.017 bytes, 19 bonos con precio por proveedor |
 
-## 2. El 401, con su causa exacta
-
-La respuesta del servidor es explícita y **no ambigua**:
+### Identidad de la organización
 
 ```json
-{"error":"Invalid API key format. Expected: api_<environment>:<api_key>:<organization_id> (no Bearer prefix)"}
+{"id":"2a64da05-63f7-4502-aa2e-750a19e679b1",
+ "displayName":"Vigente Protocol",
+ "approvedAt":"2026-08-03 23:32:28.713840 +00:00",
+ "partnerFeeDefaultBps":0}
 ```
 
-La credencial que teníamos es una cadena única de 73 caracteres. El proveedor espera **tres
-partes separadas por dos puntos**: entorno, clave y organization ID. No es un problema de
-permisos ni de cabecera —el `Authorization` sin prefijo `Bearer` es correcto— sino de que
-tenemos un fragmento y no la credencial completa.
+`approvedAt` es **la fecha de aprobación de KYB reportada por el propio proveedor**, no una
+declaración nuestra: 3 de agosto de 2026. `partnerFeeDefaultBps: 0` significa que no hay fee de
+partner configurado por defecto.
 
-**Acción pendiente:** obtener la credencial en el formato completo desde el panel del
-proveedor. Es un trámite, no un desarrollo.
+## 2. Dos obstáculos que costaron tiempo, documentados para el próximo
+
+**a) La credencial lleva tres segmentos y el placeholder no va literal.** El formato es
+`api_{env}:{key_id}:{org_id}`, donde `{env}` es un marcador. Guardarla con las llaves incluidas
+—`api_{sand}:…`— produce `401 {"error":"Invalid API key"}`. Quitándolas, autentica. La cabecera
+va **sin** prefijo `Bearer`; enviarlo es la otra causa habitual de 401.
+
+**b) `/ramp/verify-api-key` no existe** (404). El endpoint que valida credenciales y devuelve
+el `org_id` es **`GET /ramp`**. Y `/ramp/assets` exige **tres** parámetros —`blockchain`,
+`currency` y `wallet`—, no solo `blockchain`: omitir cualquiera devuelve
+`400 Query deserialize error: missing field …`, que es un mensaje útil pero solo revela un
+campo faltante por vez.
+
+## 2b. 🔴 Hallazgo de integración: el USDC de la rampa no es el de nuestro pool
+
+| Origen | Identificador |
+|---|---|
+| Rampa (sandbox) | `USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5` |
+| Reserva de deuda de nuestro pool | `USDC:GATALTGTWIOT6BUDBCZM3Q4OQ4BO2COLOAZ7IYSKPLC2PMSOPPGF5V56` |
+
+**Emisores distintos: son activos distintos.** Un usuario que compre USDC por la rampa **no
+puede repagar directamente** un préstamo denominado en el USDC del pool; hace falta un swap o
+un path payment en el medio. No es un bloqueante del diseño, pero sí un paso obligatorio del
+flujo que hay que construir y presupuestar — y que no aparecería si uno se quedara leyendo la
+documentación.
+
+El identificador de **CETES en sandbox** es
+`CETES:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4`. Los emisores **difieren entre
+sandbox y producción**, así que ninguno de estos valores puede incrustarse en código: se leen
+siempre de `GET /ramp/assets`.
 
 ## 3. 🎯 Dispersión entre proveedores de tipo de cambio
 
@@ -85,36 +113,40 @@ correcta requiere volatilidad de serie temporal, que no medimos acá.
 `CCG6EAGO…` está en el slot inmutable de oráculo del pool y redesplegarlo lo inutilizaría.
 Recalibrar exige un despliegue nuevo, con su migración.
 
-## 4. Catálogo de stablebonds
+## 4. Catálogo de activos
 
-`/lookup/stablebonds` devuelve el catálogo con precio, moneda y supply. CETES aparece con
-`bondCurrency: "MXN"` y `tokenPriceDecimal: 1.141052` al momento de la consulta. Los
-identificadores concretos que usaríamos como colateral salen de
-`GET /ramp/assets?blockchain=stellar`, **que requiere la credencial correcta** — y que además
-difieren entre sandbox y producción, por lo que nunca deben incrustarse en código.
+`GET /ramp/assets` devuelve **9 activos** en Stellar sandbox: CETES, MEXe, CZERO, CARN, USTRY,
+TESOURO, KTB y USDC entre ellos. Los bonos de Etherfuse comparten emisor (`GC3CW7ED…` en
+sandbox); el USDC tiene el suyo propio.
+
+`/lookup/stablebonds` complementa con precio, moneda y supply: CETES figura con
+`bondCurrency: "MXN"` y `tokenPriceDecimal: 1.141052` al momento de la consulta.
 
 ## 5. Alcance — qué NO se probó
 
-No se ejecutó ningún onramp, ninguna orden, ningún webhook y ninguna operación con fondos.
-No se registró wallet institucional. No se verificó firma HMAC.
+**No se ejecutó ninguna operación con fondos.** Sin onramp, sin órdenes, sin webhooks, sin
+registro de wallet institucional, sin verificación de firma HMAC, sin swap. Tampoco se probó
+producción: la credencial es de sandbox y los dos entornos no son intercambiables.
 
-> This demonstrates that the provider's public catalogue and pricing surface are reachable and
-> usable, and it surfaced a concrete calibration input for our oracle's deviation guard.
-> Authenticated access is **not** yet working: our credential is in the wrong format and the
-> provider returns an explicit error to that effect. The production integration — webhooks,
-> idempotency, trustline pre-checks and reconciliation — is Tranche 2 work and is not claimed
-> here.
+> This demonstrates authenticated access, organization identity with a provider-reported KYB
+> approval date, and asset discovery against the provider's sandbox — plus a concrete
+> calibration input for our oracle's deviation guard and one integration gap: the ramp's USDC
+> is a different asset from our pool's debt reserve. The production integration — webhooks,
+> idempotency, trustline pre-checks, the swap leg and reconciliation — is Tranche 2 work and is
+> not claimed here.
 
 ## 6. Cómo reproducir
 
 ```bash
-# Sin credencial — funcionan tal cual
-curl -s https://api.sand.etherfuse.com/lookup/bonds/cost | head -c 400
+# Públicos, sin credencial
+curl -s https://api.sand.etherfuse.com/lookup/bonds/cost  | head -c 400
 curl -s https://api.sand.etherfuse.com/lookup/stablebonds | head -c 400
 
-# Con credencial, una vez obtenida en el formato api_<env>:<key>:<org_id>
-curl -s -H "Authorization: $ETHERFUSE_API_KEY" \
-  https://api.sand.etherfuse.com/ramp/verify-api-key
+# Autenticados. La clave va cruda, sin prefijo Bearer, y con los tres segmentos
+# REALES: api_sand:… — no api_{sand}:…, las llaves son un placeholder de la doc.
+curl -s -H "Authorization: $ETHERFUSE_API_KEY" https://api.sand.etherfuse.com/ramp
+curl -s -H "Authorization: $ETHERFUSE_API_KEY" https://api.sand.etherfuse.com/ramp/me
+curl -s -H "Authorization: $ETHERFUSE_API_KEY"   "https://api.sand.etherfuse.com/ramp/assets?blockchain=stellar&currency=MXN&wallet=<G...>"
 ```
 
 La credencial se lee de `ETHERFUSE_API_KEY` en el entorno y **no está en el repositorio**.
