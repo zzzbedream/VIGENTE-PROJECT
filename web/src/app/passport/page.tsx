@@ -20,6 +20,7 @@ import {
   type HeatmapDay,
 } from "@/components/CreditHistoryHeatmap";
 import { VigenteWordmark } from "@/components/VigenteLogo";
+import { useWalletKit } from "@/contexts/WalletKitContext";
 import { verifyBadge } from "@/lib/stellar/vigente-contract";
 import type { BadgeState } from "@/lib/integrations/eligibility-adapter";
 
@@ -57,21 +58,37 @@ export default function PassportPage() {
   const [badge, setBadge] = useState<BadgeState | null>(null);
 
   const isValid = PUBKEY_RE.test(pubkey.trim());
+  const { address: walletAddress, connect, connecting } = useWalletKit();
 
-  // Deep-link support: /passport?pubkey=G… fills the field and loads on its own.
-  // Without this the page is a dead end — you cannot share a passport, and anyone
-  // arriving from the wallet flow is asked to paste an address they just used.
+  // The passport should open itself. Three ways in, in priority order:
+  //   1. ?pubkey=G…      — shareable deep link
+  //   2. connected wallet — including one restored from a previous session
+  //   3. manual paste     — the "look at any address" case the page is for
+  // Asking someone to paste an address they just connected with is friction with
+  // no purpose, so anything we can resolve on our own, we load without a click.
   const autoloaded = useRef(false);
   useEffect(() => {
     if (autoloaded.current) return;
     const fromUrl = new URLSearchParams(window.location.search).get("pubkey")?.trim();
-    if (!fromUrl || !PUBKEY_RE.test(fromUrl)) return;
+    const addr = fromUrl && PUBKEY_RE.test(fromUrl) ? fromUrl : walletAddress;
+    if (!addr || !PUBKEY_RE.test(addr)) return;
     autoloaded.current = true;
-    setPubkey(fromUrl);
-    void loadPassport(fromUrl);
-    // Runs once on mount; loadPassport reads its argument, not state.
+    setPubkey(addr);
+    void loadPassport(addr);
+    // Re-runs only until the first successful autoload; loadPassport takes its
+    // address as an argument rather than reading state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [walletAddress]);
+
+  /** Connect, then go straight to the passport — no second step. */
+  async function connectAndLoad() {
+    const addr = await connect();
+    if (addr && PUBKEY_RE.test(addr)) {
+      autoloaded.current = true;
+      setPubkey(addr);
+      void loadPassport(addr);
+    }
+  }
 
   async function loadPassport(override?: string) {
     const addr = (override ?? pubkey).trim();
@@ -244,6 +261,25 @@ export default function PassportPage() {
           users.
         </p>
 
+        <div className="mb-6">
+          <button
+            type="button"
+            onClick={() => void connectAndLoad()}
+            disabled={connecting || loading}
+            className="w-full sm:w-auto bg-[#22c55e] hover:bg-[#4ade80] disabled:opacity-40 disabled:cursor-not-allowed text-[#050505] font-medium text-sm rounded-lg px-6 py-3 transition-colors"
+          >
+            {connecting
+              ? "connecting…"
+              : walletAddress
+                ? `view my passport (${walletAddress.slice(0, 4)}…${walletAddress.slice(-4)})`
+                : "connect wallet"}
+          </button>
+          <p className="text-white/40 text-xs mt-3">
+            or look up any address below — this page is read-only and never asks
+            for a signature.
+          </p>
+        </div>
+
         <div className="flex flex-col sm:flex-row gap-3 mb-10">
           <input
             value={pubkey}
@@ -257,7 +293,7 @@ export default function PassportPage() {
             type="button"
             onClick={() => loadPassport()}
             disabled={loading || !isValid}
-            className="bg-[#22c55e] hover:bg-[#4ade80] disabled:opacity-40 disabled:cursor-not-allowed text-[#050505] font-medium text-sm rounded-lg px-6 py-3 transition-colors"
+            className="border border-white/15 hover:border-[#22c55e]/60 hover:text-[#22c55e] disabled:opacity-30 disabled:cursor-not-allowed text-white/80 text-sm rounded-lg px-6 py-3 transition-colors"
           >
             {loading ? "reading…" : "load passport"}
           </button>
