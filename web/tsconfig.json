@@ -30,5 +30,14 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    // Scaffold for the CTO: not wired into runtime and imported by nothing
+    // (see src/db/schema.ts header). Its dependencies -- drizzle-orm, postgres,
+    // drizzle-kit -- are deliberately not installed, so type-checking it breaks
+    // the production build. Add the deps and remove this exclusion when the
+    // score cache actually moves to Postgres.
+    "src/db/**",
+    "drizzle.config.ts"
+  ]
 }
