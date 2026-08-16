@@ -14,7 +14,7 @@
  */
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CreditHistoryHeatmap,
   type HeatmapDay,
@@ -58,8 +58,23 @@ export default function PassportPage() {
 
   const isValid = PUBKEY_RE.test(pubkey.trim());
 
-  async function loadPassport() {
-    const addr = pubkey.trim();
+  // Deep-link support: /passport?pubkey=G… fills the field and loads on its own.
+  // Without this the page is a dead end — you cannot share a passport, and anyone
+  // arriving from the wallet flow is asked to paste an address they just used.
+  const autoloaded = useRef(false);
+  useEffect(() => {
+    if (autoloaded.current) return;
+    const fromUrl = new URLSearchParams(window.location.search).get("pubkey")?.trim();
+    if (!fromUrl || !PUBKEY_RE.test(fromUrl)) return;
+    autoloaded.current = true;
+    setPubkey(fromUrl);
+    void loadPassport(fromUrl);
+    // Runs once on mount; loadPassport reads its argument, not state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadPassport(override?: string) {
+    const addr = (override ?? pubkey).trim();
     if (!PUBKEY_RE.test(addr)) {
       setError("enter a valid stellar public key (G…, 56 chars)");
       return;
@@ -119,7 +134,7 @@ export default function PassportPage() {
           />
           <button
             type="button"
-            onClick={loadPassport}
+            onClick={() => loadPassport()}
             disabled={loading || !isValid}
             className="bg-[#22c55e] hover:bg-[#4ade80] disabled:opacity-40 disabled:cursor-not-allowed text-[#050505] font-medium text-sm rounded-lg px-6 py-3 transition-colors"
           >
