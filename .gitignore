@@ -24,3 +24,7 @@ Vigente Protocol Landing.html
 
 # Comunicación comercial sobre terceros — no debe quedar en un repo público.
 docs/letters/demo-script-payku.md
+
+# Config de Drizzle: importa drizzle-kit, que no esta en dependencias.
+# Rompe el build de produccion. Se conserva en disco para el CTO.
+web/drizzle.config.ts
