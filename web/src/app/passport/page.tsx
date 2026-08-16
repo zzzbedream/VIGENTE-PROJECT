@@ -105,6 +105,127 @@ export default function PassportPage() {
     }
   }
 
+  /**
+   * A4 credit passport. Mirrors the badge PDF in /v3 so a partner receives the
+   * same artefact from either surface — a portable document, not a text dump.
+   */
+  async function downloadPassportPdf() {
+    if (!profile) return;
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const addr = pubkey.trim();
+    const tier = profile.score.badgeType;
+    const tierColors: Record<string, [number, number, number]> = {
+      Gold: [212, 175, 55],
+      Silver: [192, 192, 192],
+      Bronze: [205, 127, 50],
+      None: [80, 80, 80],
+    };
+    const [r, g, b] = tierColors[tier] ?? [34, 197, 94];
+
+    doc.setFillColor(5, 5, 5);
+    doc.rect(0, 0, 595, 842, "F");
+    doc.setFillColor(r, g, b);
+    doc.rect(0, 0, 595, 8, "F");
+
+    doc.setTextColor(34, 197, 94);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(28);
+    doc.text("VIGENTE PROTOCOL", 40, 80);
+    doc.setTextColor(180, 180, 180);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text("credit passport · Stellar Soroban testnet", 40, 100);
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(64);
+    doc.text(tier.toUpperCase(), 40, 200);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(r, g, b);
+    doc.text(`tier · score ${profile.score.totalScore} / 100`, 40, 225);
+
+    const row = (label: string, value: string, y: number) => {
+      doc.setTextColor(130, 130, 130);
+      doc.setFontSize(9);
+      doc.text(label.toUpperCase(), 40, y);
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(12);
+      doc.text(value, 40, y + 16);
+    };
+
+    let y = 285;
+    row("account", addr, y); y += 46;
+    row("account age", `${profile.features.account_age_days} days`, y); y += 46;
+    row("operations evaluated", String(profile.features.ops_evaluated), y); y += 46;
+    row(
+      "score breakdown",
+      `volume ${profile.score.breakdown.volumePoints} · consistency ${profile.score.breakdown.consistencyPoints} · frequency ${profile.score.breakdown.frequencyPoints}`,
+      y,
+    );
+    y += 46;
+    row(
+      "on-chain badge",
+      badge
+        ? `score ${badge.score}${badge.isDefaulted ? " · DEFAULTED" : ""}`
+        : "not minted",
+      y,
+    );
+    y += 46;
+    row("issued", new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC", y);
+
+    // The limits below are what makes this a credit document rather than a score
+    // sheet, so they are stated with their source and their caveat.
+    y += 60;
+    doc.setDrawColor(40, 40, 40);
+    doc.line(40, y, 555, y);
+    y += 24;
+    doc.setTextColor(130, 130, 130);
+    doc.setFontSize(9);
+    doc.text("HOW THIS IS USED", 40, y);
+    y += 18;
+    doc.setTextColor(200, 200, 200);
+    doc.setFontSize(10);
+    for (const line of [
+      "A margin controller reads the ON-CHAIN badge score and sets the borrower's",
+      "loan-to-value from it. On the 0-1000 badge scale: >=800 borrows at 85% of",
+      "collateral, >=550 at 75%, >=300 at 60%. Below 300 the protocol does not lend.",
+      "",
+      "Note the two scales. The profile score above is 0-100 and is the preview",
+      "computed from public Stellar Horizon activity; the badge score is 0-1000 and is",
+      "what the contract actually reads.",
+      "",
+      "The score is computed off-chain and signed by 3 of 5 independent keys, verified",
+      "on-chain at mint. The chain verifies the signatures, not the methodology - this",
+      "document is an attestation, not a credit rating.",
+    ]) {
+      doc.text(line, 40, y);
+      y += 14;
+    }
+
+    y += 20;
+    doc.setTextColor(110, 110, 110);
+    doc.setFontSize(9);
+    doc.text("VERIFY", 40, y);
+    y += 16;
+    doc.setTextColor(160, 160, 160);
+    doc.setFontSize(8);
+    doc.text("badge      CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD", 40, y);
+    y += 12;
+    doc.text("controller CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ", 40, y);
+    y += 12;
+    doc.text("pool       CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI", 40, y);
+    y += 12;
+    doc.text("github.com/zzzbedream/VIGENTE-PROJECT", 40, y);
+
+    doc.setTextColor(90, 90, 90);
+    doc.setFontSize(8);
+    doc.text("Testnet. Not a credit report under any regulatory framework.", 40, 812);
+
+    doc.save(`vigente-passport-${addr.slice(0, 8)}.pdf`);
+  }
+
   return (
     <main
       style={{ fontFamily: "var(--font-readex-pro), system-ui, sans-serif" }}
@@ -149,7 +270,18 @@ export default function PassportPage() {
         )}
 
         {profile && (
-          <PassportCard pubkey={pubkey.trim()} profile={profile} badge={badge} />
+          <>
+            <div className="flex justify-end mb-3">
+              <button
+                type="button"
+                onClick={() => void downloadPassportPdf()}
+                className="text-xs border border-white/15 hover:border-[#22c55e]/60 hover:text-[#22c55e] rounded-md px-3 py-1.5 transition-colors"
+              >
+                download PDF
+              </button>
+            </div>
+            <PassportCard pubkey={pubkey.trim()} profile={profile} badge={badge} />
+          </>
         )}
       </div>
     </main>
