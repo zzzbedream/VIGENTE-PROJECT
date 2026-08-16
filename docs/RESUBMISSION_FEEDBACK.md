@@ -34,7 +34,7 @@ git shortlog -sne --all
 | Role | Name | Responsibility | What the record actually shows |
 |------|------|----------------|--------------|
 | Founder / Tech Lead | zzzbedream | Architecture, Soroban contracts, integration | Essentially all commits; the deployed contracts and [audit/08](../audit/08_POOL_ACTIVATION.md) are the substantive record |
-| Full-stack Engineer | Cristian Pérez Arce | Frontend, integrations, testing | Two commits, plus design and review input that does not appear as authorship |
+| CTO (appointed Aug 2026) | Christian Pérez de Arce | Backend, integrations, testing | Two commits, plus design and review input that does not appear as authorship |
 | Commercial Lead | Mauricio Urra | Business development, partnerships | No commits — the work is commercial. The signed Etherfuse agreement is where it shows up |
 
 The honest answer to the execution-risk concern is not an org chart. It is that the risk is
@@ -42,7 +42,7 @@ real, the response so far has been to ship verifiable infrastructure rather than
 it, and **the grant funds contributor hours rather than backfilling a team that does not yet
 exist at full capacity**. Profiles: [TEAM.md](TEAM.md).
 
-**Budget reduction:** Original ask was $123,000 USD. Current ask is **$60,000 USD** — a 51% reduction. It reflects a scoped MVP → Testnet → Mainnet trajectory over six months with the hours actually available, not an aspirational team of ten.
+**Budget reduction:** Original ask was $123,900 USD. Current ask is **$80,000 USD**, and its structure is the answer: more than half funds engineering headcount, including hiring a senior Soroban engineer. It reflects a scoped MVP → Testnet → Mainnet trajectory over six months with the hours actually available, not an aspirational team of ten.
 
 ---
 
@@ -56,11 +56,11 @@ The budget now follows the SCF handbook exactly: **three tranches** (MVP / Testn
 
 | Payment | Trigger | Amount | % |
 |---------|---------|--------|---|
-| #0 | Award acceptance | $6,000 | 10% |
-| #1 | Tranche 1 — MVP complete | $12,000 | 20% |
-| #2 | Tranche 2 — Testnet expansion complete | $18,000 | 30% |
-| #3 | Tranche 3 — Mainnet launch complete | $24,000 | 40% |
-| **Total** | | **$60,000** | **100%** |
+| #0 | Award acceptance | $8,000 | 10% |
+| #1 | Tranche 1 — core hardening | $16,000 | 20% |
+| #2 | Tranche 2 — RWA collateral, ramp, observability | $24,000 | 30% |
+| #3 | Tranche 3 — capped mainnet | $32,000 | 40% |
+| **Total** | | **$80,000** | **100%** |
 
 Each tranche has explicit deliverables, validation criteria, and a verifiable success signal documented in `docs/TRANCHE_1_DELIVERABLES.md`, `docs/TRANCHE_2_DELIVERABLES.md`, and `docs/TRANCHE_3_DELIVERABLES.md`.
 

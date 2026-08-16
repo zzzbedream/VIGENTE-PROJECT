@@ -1,5 +1,16 @@
 # Tranche 3 — Mainnet Launch: Production Deployment, SDK & First Pilot
 
+> ## Presupuesto superseded — ver `docs/private/scf-45/SUBMISSION_FORM.md` §8
+>
+> Las cifras de este archivo corresponden al plan de **$60.000** y a un alcance de 6 meses.
+> La postulación vigente pide **$80.000 sobre ~4 meses**, con una estructura distinta: la línea
+> de Commercial Lead desaparece (operaciones se financian fuera del award) y entra la
+> contratación de un ingeniero Soroban senior.
+>
+> **Los entregables y sus criterios de verificación vigentes están en el formulario.** Este
+> archivo se conserva como traza del plan anterior.
+
+
 **Project:** Vigente Protocol
 **Track:** Stellar Community Fund — Open Track / Build Award
 **Payment:** 40% of total grant = **$24,000 USD**

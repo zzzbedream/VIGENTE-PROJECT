@@ -12,7 +12,7 @@
 | **Live app** | https://vigente-project.vercel.app |
 | **Badge contract (testnet)** | `CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD` |
 | **Latest verified threshold mint** | [`5bf78e25…`](https://stellar.expert/explorer/testnet/tx/5bf78e2590cdd83553183aaee17e09c23b032eda224dc6b8b69514ccc3859657) |
-| **Ask** | **$60,000** across 4 tranches (10/20/30/40) |
+| **Ask** | **$80,000** across 4 payments (10/20/30/40) — 75% engineering headcount |
 
 ---
 
@@ -21,16 +21,18 @@
 > *SCF: "The team is a solo student developer with hackathon experience…
 > this is a significant ask ($123K)… execution risk is high."*
 
-### A. Budget: confirmed at $60,000 — a 51% cut
+### A. Budget: $80,000, and its structure is the answer
 
-The ask is restructured to **$60K following the exact SCF handbook
-milestone structure**: Tranche #0 $6K (10%) → T1 $12K (20%) → T2 $18K
-(30%) → T3 $24K (40%). Breakdown per tranche:
+The ask is **$80K following the exact SCF handbook milestone structure**:
+#0 $8K (10%) → T1 $16K (20%) → T2 $24K (30%) → T3 $32K (40%). Breakdown per tranche:
 [TRANCHE_1](TRANCHE_1_DELIVERABLES.md) ·
 [TRANCHE_2](TRANCHE_2_DELIVERABLES.md) ·
 [TRANCHE_3](TRANCHE_3_DELIVERABLES.md).
 
-The cut is itself the answer to "significant ask": **the MVP was built
+**More than half of it funds engineering headcount, including hiring a
+senior Soroban engineer** — the direct answer to the execution-risk
+concern. No marketing, no promotion, no audit costs; operations and
+partnerships are funded outside this award. And **the MVP was built
 without grant money** — live contracts, 97 Rust tests across three crates,
 a production app, and an isolated Blend pool running on our own SEP-40
 oracle. The grant funds only what is *not* built: mainnet hardening, audit

@@ -41,9 +41,9 @@ contracts, the isolated Blend pool and the credit cycle in
 
 ---
 
-## Full-stack Engineer — Cristian Pérez Arce
+## CTO — Christian Pérez de Arce
 
-**Role:** Frontend development, integration work, testing, UX engineering.
+**Role:** Backend and integrations, testing, UX engineering. Appointed CTO in August 2026.
 
 **Contribution to date:** two commits in the repository history, plus design and review input
 that does not appear as authorship. We are not going to describe that as co-development of the
