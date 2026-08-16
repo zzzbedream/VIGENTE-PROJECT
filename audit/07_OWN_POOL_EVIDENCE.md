@@ -70,7 +70,7 @@ creación del pool, y el nuestro está funcionando.**
 préstamos. La causa es que el backstop no alcanza el umbral mínimo (`pool_data` →
 `{"shares":"0","tokens":"0"}`).
 
-Esto **confirma empíricamente** lo que la auditoría anticipó (`04_GAP_ROADMAP.md`): activar un
+Esto **confirma empíricamente** lo anticipado: activar un
 pool es una **brecha de capital, no de ingeniería**. El backstop se compra con tokens LP
 BLND:USDC de Comet, no se programa. Es la justificación cuantificable de por qué el Tranche 3
 se define como piloto **capado y whitelisted** y por qué la liquidez del pool **no** va en el

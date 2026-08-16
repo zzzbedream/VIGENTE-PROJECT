@@ -9,7 +9,7 @@
 ## Por qué está archivado
 
 Archivado el **2026-07-18** por decisión de producto, tras la auditoría interna
-(`audit/00_INVENTORY.md`): el repositorio mezclaba producto, prueba de concepto y legacy, lo
+: el repositorio mezclaba producto, prueba de concepto y legacy, lo
 que confunde a revisores externos y multiplica el costo de una auditoría pagada.
 
 Los manifiestos se renombraron a `Cargo.toml.archived` para que ninguna herramienta los

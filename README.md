@@ -1,81 +1,41 @@
-# Vigente Protocol — non-custodial credit, priced by reputation
+# Reputation-Priced Credit for Tokenized Assets on Soroban
 
 ![Network](https://img.shields.io/badge/stellar-testnet-blue) ![Pool](https://img.shields.io/badge/own%20pool-active-22c55e) ![Oracle](https://img.shields.io/badge/oracle-3--of--5%20threshold-22c55e) ![License](https://img.shields.io/badge/license-MIT-purple)
 
-> **Over-collateralization is a blunt instrument.** Every borrower posts the same 150%
-> regardless of history, because on-chain lending has no memory. Vigente gives it one: a
-> margin controller that sets each user's LTV from an on-chain reputation badge, in front of
-> an isolated Blend pool that runs on **our own SEP-40 oracle**.
->
-> The lending market never reads the score. It doesn't have to — and that's what makes this
-> composable without asking anyone's permission.
+**Borrow against a tokenized asset instead of selling it — with a credit limit set by your
+on-chain history, not by a flat 150% rule that ignores it.**
 
-**The one thing to look at:** two accounts, identical collateral, same block, same contract.
-The only difference is reputation.
+## The problem, in three lines
 
-| Account | Collateral | Score | LTV | `max_borrow` (sample read) |
-|---|---|---|---|---|
-| `GC6IPCM3…` | 1,000 XLM | 650 (Silver) | 7500 bps | 1223133480 |
-| `GDESGH52…` | 1,000 XLM | 850 (Gold) | 8500 bps | 1386217944 |
+Someone holding a tokenized treasury bill who needs cash today has one option: **sell**. They
+lose the yield and they lose the position, permanently, to solve a temporary liquidity need.
 
-**The invariant is the ratio, not the absolutes.** `1386217944 / 1223133480 = 1.1333…` —
-exactly `8500 / 7500`. The absolute figures drift between reads because the oracle price is
-live, so your numbers will differ slightly; the ratio will not. Reproduce it in §*Verify it
-yourself*. Full evidence, with every transaction hash:
-**[`audit/08_POOL_ACTIVATION.md`](audit/08_POOL_ACTIVATION.md)**.
+Lending markets could solve this, but on-chain lending has no memory: every borrower posts the
+same over-collateralization whether they have repaid fifty loans or none. **The information
+that would make credit cheaper exists on the ledger and nothing reads it.**
 
----
+## What is live right now
 
-## Live contracts (Stellar testnet)
+| Contract | ID | What it does | Status |
+|---|---|---|---|
+| **`margin-controller`** | [`CCZNOV65…OCLJ`](https://stellar.expert/explorer/testnet/contract/CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ) | Sets each user's LTV from their reputation, then forwards to the pool | **active** |
+| **`oracle-aggregator`** | [`CCG6EAGO…FQH4`](https://stellar.expert/explorer/testnet/contract/CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4) | Our SEP-40 feed: per-asset routes, 48h timelock, staleness and deviation guards | **active** |
+| **Vigente pool** | [`CDYUHA3T…HNUI`](https://stellar.expert/explorer/testnet/contract/CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI) | Isolated Blend pool wired to our aggregator. XLM collateral / USDC debt | **`status: 0`** |
+| **`vigente-badge` v3** | [`CDLLO7QE…HWVD`](https://stellar.expert/explorer/testnet/contract/CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD) | Soulbound reputation. `mint` needs 3-of-5 ed25519 signatures verified on-chain | **active** |
+| Reflector | `CCYOZJCO…RN63` | Upstream price source — **third party**, not ours | — |
+| `margin-controller` **v1** | [`CA4SFW73…CHDV`](https://stellar.expert/explorer/testnet/contract/CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV) | **History, not the product.** Same binary, but wired to Blend's *canonical* pool — kept so earlier published evidence stays verifiable | historical |
 
-| Component | Contract ID | What it does |
-|---|---|---|
-| **`margin-controller`** | [`CCZNOV65…OCLJ`](https://stellar.expert/explorer/testnet/contract/CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ) | **The product.** Enforces per-user LTV from the badge before forwarding to Blend |
-| **`oracle-aggregator`** | [`CCG6EAGO…FQH4`](https://stellar.expert/explorer/testnet/contract/CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4) | **Ours.** SEP-40 price feed: per-asset routes with a 48h timelock, staleness bound, deviation guard |
-| **Vigente pool** | [`CDYUHA3T…HNUI`](https://stellar.expert/explorer/testnet/contract/CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI) | Isolated Blend pool, **`status: 0` (active)**, wired to our aggregator. XLM collateral / USDC debt |
-| **`vigente-badge` v3** | [`CDLLO7QE…HWVD`](https://stellar.expert/explorer/testnet/contract/CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD) | Soulbound reputation token. `mint` requires **3-of-5** ed25519 signatures verified on-chain |
-| Reflector | `CCYOZJCO…RN63` | Upstream price source — **third party**, not ours |
+> Don't confuse v1 with the product. If you query `CA4SFW73…` you will see it pointing at
+> Blend's canonical pool, because that is where it has always run. The product is `CCZNOV65…`.
 
-`margin-controller` v1 [`CA4SFW73…CHDV`](https://stellar.expert/explorer/testnet/contract/CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV)
-is still live on Blend's canonical pool. It is **published history, not the product** — kept
-because prior evidence should stay verifiable. It runs the identical binary (same wasm hash);
-the new instance exists only to point at our own pool, since `blend_pool` is immutable after
-`init` ([`lib.rs:245`](contracts/margin-controller/src/lib.rs#L245)).
+## The evidence
 
-## How it works
-
-```
-user deposits collateral
-   → controller reads the user's score from vigente-badge
-   → derives the tier LTV        (≥800 → 85% · ≥550 → 75% · ≥300 → 60%)
-   → checks capacity against the oracle (fresh price, or revert)
-   → only then forwards a Request to the Blend pool
-
-price chain:  Blend pool ──lastprice()──▶ OUR aggregator ──▶ Reflector (third party)
-```
-
-**Blend never sees the score.** Its interface takes `Request{address, amount, request_type}` —
-there is no reputation field. All the credit logic lives in our wrapper, which is exactly why
-this composes with an immutable lending market that was never designed for it.
-
-### Non-custodial, as a property of the code
-
-The admin's strongest lever is `pause()`, and it **cannot trap funds**: `withdraw_collateral`,
-`repay` and `liquidate` never consult the pause flag. Demonstrated on-chain — admin pauses,
-deposit reverts, and the user still withdraws their entire collateral
-([tx `d370b84a`](https://stellar.expert/explorer/testnet/tx/d370b84aab83cce899a3d944e7f9916520a202bdc4a4258e4a465d6006b6ba32)).
-The full inventory of what the admin can and cannot do is in
-[`contracts/margin-controller/README.md`](contracts/margin-controller/README.md).
-
-## Verify it yourself
-
-### The evidence — immutable
-
-A transaction hash says the same thing in a year that it says today. **This is the primary
-record**, and it needs no tooling: every link opens in a browser.
+Transaction hashes, not adjectives. Every one opens in a browser and says the same thing in a
+year that it says today.
 
 | What it proves | Transaction |
 |---|---|
+| Pool activated — `status: 2 → 0` | [`00130c83`](https://stellar.expert/explorer/testnet/tx/00130c8361571de6c0d7fdd57633bd4e3698c0a1b7103d5f6425518d813c3bab) |
 | Silver deposits 1,000 XLM | [`787a44ad`](https://stellar.expert/explorer/testnet/tx/787a44ad68998cdeca21d0fda19970a70b08c3b594cf0af73b7a246e6b33d0e4) |
 | Gold deposits **the same** 1,000 XLM | [`98c0ea45`](https://stellar.expert/explorer/testnet/tx/98c0ea45007a18838640e78064505129477a469b9e2e721340116897aa0c842f) |
 | Borrow through the controller | [`e85cb1a6`](https://stellar.expert/explorer/testnet/tx/e85cb1a6f9786ff95068c80acb9ca56da3a70670f371c0167b09526f68d78692) |
@@ -83,37 +43,112 @@ record**, and it needs no tooling: every link opens in a browser.
 | Withdraw collateral | [`c07ed1a2`](https://stellar.expert/explorer/testnet/tx/c07ed1a2bad54897ba3cd5d057eb0fa2e6c07f49b4b2aa727255e7a9b8668e2f) |
 | **Admin pauses the contract** | [`e8803f60`](https://stellar.expert/explorer/testnet/tx/e8803f60719d78e29dfcc4b593b8e687e4c93d2c49092701d132ef3dc9d12a82) |
 | **User withdraws everything anyway, while paused** | [`d370b84a`](https://stellar.expert/explorer/testnet/tx/d370b84aab83cce899a3d944e7f9916520a202bdc4a4258e4a465d6006b6ba32) |
-| Pool activated — `status: 2 → 0` | [`00130c83`](https://stellar.expert/explorer/testnet/tx/00130c8361571de6c0d7fdd57633bd4e3698c0a1b7103d5f6425518d813c3bab) |
 
-Against those two deposits, the recorded `max_borrow` was **1223133480** (Silver) and
-**1386217944** (Gold) — a ratio of exactly `8500/7500`.
+### Reputation actually changes the credit
 
-### Live queries — optional, and they read current state
+Two accounts. **Identical collateral**, deposited in the two transactions above. Same block,
+same contract. The only difference is the score.
 
-These need the Stellar CLI and no keys. **They read state as it is now, which is not
-necessarily the state at the time of the demonstration**: positions get opened and closed, and
-the oracle price moves. If a figure looks different from the table above, that is the system
-working, not the record being wrong.
+| Account | Score | LTV | `max_borrow` (sample read) |
+|---|---|---|---|
+| `GC6IPCM3…` | 650 — Silver | 7500 bps | 1219070589 |
+| `GDESGH52…` | 850 — Gold | 8500 bps | 1381613334 |
+
+`1381613334 / 1219070589 = 1.13333…` — **exactly `8500 / 7500`.**
+
+The ratio is the invariant. The absolute figures drift between reads because the oracle price
+is live, so yours will differ; the ratio will not. **Recompute it yourself** with the commands
+below.
+
+### Non-custodial is a property of the code, not a promise
+
+The admin's strongest lever is `pause()`, and it **cannot trap funds**: `withdraw_collateral`,
+`repay` and `liquidate` never read the pause flag. The two last transactions in the table show
+it under adversarial conditions — the admin pauses, and the user still withdraws their entire
+collateral in the next block.
+
+Full inventory of what the admin can and cannot do:
+[`contracts/margin-controller/README.md`](contracts/margin-controller/README.md).
+
+## Verify it yourself
+
+No keys needed for any of this. Substitute any funded testnet account for `<YOUR_ACCOUNT>`.
 
 ```bash
 POOL=CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI
 CTRL=CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ
 
-# The pool is active AND runs on our oracle → status 0, oracle CCG6EAGO…
+# 1. The pool is active AND runs on our oracle → status 0, oracle CCG6EAGO…
 stellar contract invoke --id $POOL --network testnet \
   --source-account <YOUR_ACCOUNT> --send=no -- get_config
 
-# The tier ladder is on-chain, not in a config file
+# 2. The tier ladder lives on-chain, not in a config file
 stellar contract invoke --id $CTRL --network testnet \
   --source-account <YOUR_ACCOUNT> --send=no -- get_tier_ltv
 
-# Capacity for a given account. Returns 0 if that account currently holds no
-# collateral — deposit first if you want to reproduce the comparison live.
+# 3. Borrowing capacity for each demo account — recompute the ratio
 stellar contract invoke --id $CTRL --network testnet --source-account <YOUR_ACCOUNT> \
   --send=no -- max_borrow --user GC6IPCM3OO44PW4Y62XD54HLT5Q23E5OFNFMYPMNUDSDRUK37ZFB6ECZ
+stellar contract invoke --id $CTRL --network testnet --source-account <YOUR_ACCOUNT> \
+  --send=no -- max_borrow --user GDESGH52DW7PYVRTYR43POJ7QHHLZ337SLKSAVMQ4OKFKNS2RPT3YJYF
 ```
 
-Tests — run them rather than trusting a badge:
+**The transactions above are immutable; these commands read current state.** If an account has
+withdrawn its collateral since, `max_borrow` returns 0 — that is the system working, not the
+record being wrong. Deposit first if you want to reproduce the comparison live.
+
+## Architecture
+
+```
+user ──deposit / borrow / repay / withdraw──▶ margin-controller
+                                                     │
+                          reads score ───────────────┤
+                                 │                   │
+                          vigente-badge      prices both legs
+                          (3-of-5 SBT)              │
+                                                     ▼
+                                            oracle-aggregator (ours, SEP-40)
+                                                     │
+                                                     ├──▶ Reflector (third party)
+                                                     │
+                                            Blend pool ◀── lastprice()
+```
+
+**Blend never sees the score.** Its interface takes `Request{address, amount, request_type}` —
+there is no reputation field, and we never ask it to add one. All the credit policy lives in
+our wrapper, which is precisely why this composes with an immutable lending market that was
+never designed for it.
+
+A Blend pool's oracle slot is **immutable after deployment**, so this pool is permanently bound
+to a feed we operate. Full design, including the off-chain half and the trust boundary:
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## What does not exist yet
+
+This section is what makes the rest of the document credible.
+
+- **Proportional liquidation.** `liquidate` currently seizes *all* collateral, and there is no
+  extraction path for seized funds. A borrower with 1,000 of collateral and 10 of debt would
+  lose everything. First deliverable of Tranche 1.
+- **Per-user exposure cap** — the only cap today is per asset.
+- **Origination fee module** — `borrow` disburses the full amount, no deduction.
+- **Tokenized assets as collateral** — XLM only. Everything about RWA collateral is roadmap.
+- **Fiat ramp integration** — authenticated access to the provider works; the client is not
+  built.
+- **dApp** — contracts and CLI only.
+- **Mainnet** — testnet by design, until an audit.
+- **External users** — every account here is ours or a labelled synthetic. No TVL.
+
+**And the honest limit of the design:** the reputation layer is **not trustless**. Scores are
+computed off-chain and signed 3-of-5; the chain verifies signatures, not methodology. The five
+signers are cryptographically independent but co-located, which removes single-key compromise,
+not single-operator compromise. Both are deliberate trade-offs, and reducing them is funded
+work, not a claim.
+
+## Run the tests
+
+From a fresh clone. These are standalone crates — **there is no cargo workspace**, so
+`--workspace` will not work.
 
 ```bash
 for c in vigente-badge margin-controller oracle-aggregator; do
@@ -121,44 +156,27 @@ for c in vigente-badge margin-controller oracle-aggregator; do
 done
 ```
 
-<details><summary>Expected output (2026-08-08)</summary>
+Use `-j 1` on memory-constrained machines; default parallelism can exhaust the compiler.
 
+```bash
+cd web && npm install && cp .env.local.example .env.local && npm run dev
+npm run validate-t1     # JSON status report for reviewers
 ```
-vigente-badge        test result: ok. 41 passed; 0 failed; ...
-margin-controller    test result: ok. 37 passed; 0 failed; ...
-oracle-aggregator    test result: ok. 19 passed; 0 failed; ...
-```
-</details>
 
-> On a memory-constrained machine use `cargo test -j 1`; the default parallelism can exhaust
-> the compiler.
+## Status and roadmap
 
-## Status — the unvarnished version
+**Stellar testnet.** The credit cycle runs end to end on our own pool with our own oracle;
+evidence above and in [`audit/08_POOL_ACTIVATION.md`](audit/08_POOL_ACTIVATION.md).
 
-Both columns are equally true. Reviewers and partners deserve the second one.
+Grant funding covers, in order: **core hardening** (proportional liquidation, per-user caps,
+fee module, custody property tests) · **RWA collateral and the fiat ramp** (third-party SEP-40
+routing, first tokenized asset listed, ramp client, monitoring plan and threat model) ·
+**capped mainnet** (multisig and timelock, public SDK, and a pilot that publishes repayment
+rate **by reputation band** — the number that validates or refutes the whole thesis).
 
-| ✅ Works today, verifiable | ❌ Does not exist yet |
-|---|---|
-| Own Blend pool, active, on our own SEP-40 oracle | Mainnet — testnet only, by design, until audit |
-| Full credit cycle on it: supply → borrow → repay → withdraw | Fee module — deliberately deferred |
-| Per-user LTV from on-chain reputation, verified across two tiers | Partial liquidation — full-position only |
-| Non-custodial guarantee proven under `pause()` | Fiat on/off ramp — integration not built |
-| 3-of-5 threshold mint, ed25519 verified on-chain | Stablebond / RWA collateral — XLM only today |
-| 48h timelock + deviation guard on oracle route changes | External users — all accounts so far are ours or labeled synthetics |
-| **Signed commercial agreement** with Etherfuse (tokenized-asset issuer and fiat ramp), KYB approved, production API access granted | The ramp integration itself — access exists, the client does not |
-| 97 Rust tests across three crates | Security audit — SCF audit credits apply at T3 |
+## For integrators
 
-**Two limits worth stating plainly.** First, **the reputation layer is not trustless**: the
-score is computed off-chain and signed k-of-n; the chain only verifies signatures. That is a
-deliberate design decision, not an oversight, and reducing that trust — independent signer
-hosts, a methodology a third party can recompute — is explicit Tranche 2 work. Second, this
-runs at **testnet scale**: ~1,400 USDC of lendable liquidity proves the mechanics, not
-behavior under load.
-
-## For integrators — credit oracle interface
-
-The badge is readable by any Soroban contract or off-chain client. No permission, no
-registration, no token.
+The badge is readable by any Soroban contract. No permission, no registration, no token.
 
 ```rust
 #[contractclient(name = "BadgeClient")]
@@ -168,85 +186,21 @@ pub trait VigenteBadge {
 }
 ```
 
-| Resource | Where |
-|---|---|
-| Interface spec — read functions, types, trust model, versioning | [`contracts/vigente-badge/INTERFACE.md`](contracts/vigente-badge/INTERFACE.md) |
-| Machine-readable ABI, exported from the live contract | [`docs/integration/abi-v3.json`](docs/integration/abi-v3.json) |
-| Compilable consumer example + cross-contract tests | [`examples/integration-snippet/`](examples/integration-snippet/) |
-| Proposed ecosystem standard (SEP draft) | [`docs/integration/sep-draft-credit-attestation.md`](docs/integration/sep-draft-credit-attestation.md) |
+Interface spec: [`contracts/vigente-badge/INTERFACE.md`](contracts/vigente-badge/INTERFACE.md) ·
+live ABI: [`docs/integration/abi-v3.json`](docs/integration/abi-v3.json) · compilable example:
+[`examples/integration-snippet/`](examples/integration-snippet/) · proposed ecosystem standard:
+[`docs/integration/sep-draft-credit-attestation.md`](docs/integration/sep-draft-credit-attestation.md).
 
-`margin-controller` is itself the reference consumer: it reads the badge and enforces policy
-without the lending market participating.
-
-## Architecture
-
-On-chain is only half the system. The scoring engine, the threshold signers and the API run
-off-chain, and the split matters for the trust model — see
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-Threat model, 6 STRIDE vectors each mapped to code and a named test:
-[`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
-
-## Install
-
-```bash
-git clone https://github.com/zzzbedream/VIGENTE-PROJECT.git
-cd VIGENTE-PROJECT
-
-# Contracts — standalone crates, no workspace
-cd contracts/margin-controller && cargo test -j 1
-
-# Web app
-cd ../../web
-npm install
-cp .env.local.example .env.local   # required vars documented in the file
-npm run dev                        # http://localhost:3000
-
-npm run validate-t1                # JSON status report for reviewers
-```
-
-| Layer | Technology |
-|---|---|
-| Contracts | Rust + Soroban SDK — margin controller, oracle aggregator, badge SBT, mock USDC |
-| Scoring + oracle | Node.js / TypeScript — Horizon scoring, 3-of-5 threshold signers, fintech adapters |
-| Frontend | Next.js + Tailwind + Stellar Wallets Kit |
-| Network | Stellar testnet — sub-cent fees, ~5s finality |
-
-## Evidence and history
-
-| Document | What it holds |
-|---|---|
-| [`audit/08_POOL_ACTIVATION.md`](audit/08_POOL_ACTIVATION.md) | **Start here.** Pool activation, full cycle, custody proof, reproduction commands |
-| [`audit/07_OWN_POOL_EVIDENCE.md`](audit/07_OWN_POOL_EVIDENCE.md) | Pool deployment. Its "why it can't activate" section is superseded by `08` |
-| [`contracts/margin-controller/README.md`](contracts/margin-controller/README.md) | Admin powers inventory: what the admin can and, more importantly, cannot do |
-| [`docs/SCF_REBUTTAL.md`](docs/SCF_REBUTTAL.md) | SCF #41 rejection points answered with artifacts |
-
-Superseded documents are kept and labeled rather than deleted — the trail of decisions is part
-of the evidence.
+`margin-controller` is itself the reference consumer.
 
 ## Team, license, disclosure
 
-Three defined roles — protocol/contracts, backend and integrations, partnerships — with
-profiles in [`docs/TEAM.md`](docs/TEAM.md). Contact: zzzbedream@gmail.com
+Founder-led. Roles and the honest authorship distribution in [`docs/TEAM.md`](docs/TEAM.md) —
+verify with `git shortlog -sne --all`. Contact: zzzbedream@gmail.com
 
-**Being straight about execution risk:** this is founder-led. Essentially the entire commit
-history is the founder's — a contributing engineer has two commits, and the other roles have
-contributed in design and business rather than code. Don't take the number from us, it moves
-with every push:
-
-```bash
-git shortlog -sne --all   # four lines, two people: each of us commits under two name spellings
-```
-
-That concentration is a real risk, and it is the one the SCF #41 panel identified. What the
-same history shows is what got shipped anyway: four contracts on testnet, a custom SEP-40
-aggregator, an isolated Blend pool running on it, a security audit with documented
-remediation, and a signed commercial agreement with a tokenized-asset issuer. The plan is to
-hire from the grant rather than claim a team that does not exist yet.
-
-AI assistance is disclosed per SCF Open Track requirements in
-[`docs/AI_DISCLOSURE.md`](docs/AI_DISCLOSURE.md). Contributions welcome via
-[issues](https://github.com/zzzbedream/VIGENTE-PROJECT/issues).
+AI assistance disclosed per SCF Open Track requirements in
+[`docs/AI_DISCLOSURE.md`](docs/AI_DISCLOSURE.md). Threat model:
+[`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
 
 MIT — see [LICENSE](./LICENSE).
 
@@ -254,7 +208,7 @@ MIT — see [LICENSE](./LICENSE).
 
 <p align="center">
   <strong>Vigente Protocol</strong><br/>
-  Non-custodial credit, priced by reputation<br/>
+  Reputation-priced credit for tokenized assets on Soroban<br/>
   <a href="audit/08_POOL_ACTIVATION.md">Evidence</a> ·
   <a href="https://stellar.expert/explorer/testnet/contract/CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ">Margin controller</a> ·
   <a href="https://stellar.expert/explorer/testnet/contract/CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI">Pool</a>
