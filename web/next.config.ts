@@ -68,12 +68,19 @@ const securityHeaders = [
   },
 ];
 
+// Worker and Turbopack-memory caps exist to work around a LOCAL constraint: the
+// dev machine reports 23 logical CPUs, and the defaults (one worker each, plus an
+// unbounded Turbopack cache) exhaust Windows commit memory during `next build`.
+//
+// They must NOT apply on CI. Vercel builds on 2 cores, where forcing 4 workers
+// oversubscribes and a 1.5 GB Turbopack cap starves the compiler — which surfaces
+// as intermittent "Can't resolve '@vercel/turbopack-next/internal/font/google/font'"
+// failures while resolving next/font. Let the platform pick its own defaults.
+const isCI = Boolean(process.env.VERCEL || process.env.CI);
+
 const nextConfig: NextConfig = {
   reactCompiler: true,
-  // Cap build workers and Turbopack memory: the defaults (one worker per
-  // logical CPU — 23 on the dev machine — and an unbounded Turbopack cache)
-  // exhaust Windows commit memory during `next build`.
-  experimental: { cpus: 4, turbopackMemoryLimit: 1_610_612_736 },
+  ...(isCI ? {} : { experimental: { cpus: 4, turbopackMemoryLimit: 1_610_612_736 } }),
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
