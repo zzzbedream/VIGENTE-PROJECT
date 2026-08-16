@@ -395,7 +395,13 @@ function WhoItsFor() {
 
 type HistoryKey = "none" | "always" | "sometimes" | "late";
 const HISTORY_BONUS: Record<HistoryKey, number> = { always: 100, sometimes: 30, late: -80, none: 0 };
-const TIER_LTVS = [50, 65, 75];
+// Mirrors the ladder actually deployed on the margin controller, read on-chain:
+//   stellar contract invoke --id CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ \
+//     --network testnet --send=no -- get_tier_ltv
+//   → [{"ltv_bps":8500,"min_score":800},{"ltv_bps":7500,"min_score":550},{"ltv_bps":6000,"min_score":300}]
+// Keep these in sync with `tiers` in copy.ts if the on-chain ladder is ever re-queued.
+const TIER_LTVS = [60, 75, 85];
+const TIER_CUTOFFS = { mid: 550, top: 800 };
 
 interface PassportResult {
   score: number;
@@ -416,7 +422,7 @@ function calcPassport(incRaw: string, remRaw: string, expRaw: string, history: H
   const ratio = Math.max(0, Math.min(1, (flow - exp) / flow));
   const remitBonus = rem > 0 ? 40 : 0;
   const score = Math.round(Math.max(300, Math.min(850, 350 + ratio * 360 + HISTORY_BONUS[history] + remitBonus)));
-  const tierIdx = score >= 700 ? 2 : score >= 550 ? 1 : 0;
+  const tierIdx = score >= TIER_CUTOFFS.top ? 2 : score >= TIER_CUTOFFS.mid ? 1 : 0;
   return { score, tierIdx, ltv: TIER_LTVS[tierIdx], inc, rem, exp, history };
 }
 
@@ -1065,12 +1071,24 @@ function RoadmapSection() {
   return (
     <section id="roadmap" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
       <SectionHeading title={t.roadmapTitle} />
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
         {t.roadmap.map((r) => (
-          <div key={r.phase} className="pt-4" style={{ borderTop: `2px solid ${r.accent}` }}>
+          <div
+            key={r.phase}
+            className="pt-4"
+            style={{ borderTop: `2px solid ${r.accent}`, borderTopWidth: r.here ? 4 : 2 }}
+          >
             <div className={`${mono} mb-2.5 text-xs`} style={{ color: r.accent }}>
               {r.phase} · {r.status}
             </div>
+            {r.here && (
+              <div
+                className={`${mono} mb-2 inline-block rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wider`}
+                style={{ background: `${r.accent}1F`, color: r.accent }}
+              >
+                ◆ {t.roadmapHere}
+              </div>
+            )}
             <div className="mb-2 text-lg font-semibold">{r.title}</div>
             <p className="text-[13.5px] leading-relaxed text-[#9AA3A0]">{r.body}</p>
           </div>

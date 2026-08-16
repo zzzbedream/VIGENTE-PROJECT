@@ -2,8 +2,14 @@
  * Landing copy — bilingual ES/EN, pivot "reputation-powered collateralized
  * credit" (2026-07). Spanish is canonical (pilot corridor is LATAM); English
  * mirrors it. No unconfirmed partner names in public copy — infrastructure we
- * compose on (Blend, RedStone, Stellar) is named; data/RWA/wallet targets are
+ * compose on (Blend, Reflector, Stellar) is named; data/RWA/wallet targets are
  * generic until an LOI is signed (see docs/private/partner-roster.md).
+ *
+ * Audience (2026-08): the buyer is a PLATFORM (wallet, fintech, RWA issuer)
+ * integrating credit for its users — not the borrower directly. Hero, segments
+ * and the primary CTA speak to integrators; the passport calculator and the
+ * whitelist stay, explicitly labeled as a demo of the end-user experience an
+ * integrated platform would ship.
  *
  * Honesty rules baked in:
  *  - What is live today = threshold oracle + reputation badge + our SEP-40
@@ -11,6 +17,11 @@
  *    controller on top, all on testnet. Evidence: audit/08_POOL_ACTIVATION.md.
  *    The `reference-vault` is ARCHIVED — never present it as live.
  *  - Demo parameters are labeled as pilot-calibration estimates.
+ *  - RedStone is NOT in the stack: they have sent nothing. The pool's immutable
+ *    oracle slot holds OUR aggregator, which routes to Reflector. Copy claiming
+ *    a "RedStone oracle" was false and was removed on 2026-08-16 — do not
+ *    reintroduce it without a signed relationship and an on-chain route.
+ *  - Roadmap phase 5 ("the wallet, on chain") is vision, deliberately undated.
  */
 
 export type Lang = "es" | "en";
@@ -31,25 +42,25 @@ const es = {
   navWho: "para quién",
   navTrust: "seguridad",
   navFaq: "faq",
-  navCta: "unirme a la whitelist",
+  navCta: "hablemos de integrar",
 
-  heroCta: "unirme a la whitelist",
+  heroCta: "hablemos de integrar",
   heroCta2: "ver contrato en testnet",
-  heroCta3: "evaluar mi capacidad de pago",
+  heroCta3: "probar la demo de usuario",
   heroFinePrint:
     "primitivo de crédito en vivo en testnet de stellar · sin token propio · custodia en contratos verificables",
   heroVariants: [
     {
-      title: "pide prestado contra tus activos, sin venderlos.",
-      sub: "deposita USDC, XLM o tesoros tokenizados como colateral y recibe stablecoins al instante. cada repago puntual construye una reputación que sube tu límite y baja tu tasa.",
+      title: "infraestructura de crédito para tu plataforma.",
+      sub: "tus usuarios tienen activos tokenizados y necesitan liquidez sin venderlos. vigente pone el límite de préstamo de cada uno según su historial on-chain, sobre contratos que cualquiera puede auditar. tú no construyes un motor de crédito: lo integras.",
     },
     {
-      title: "tu buen historial vale más colateral.",
-      sub: "un pool de crédito colateralizado en stellar donde la reputación — on-chain y, con tu consentimiento, off-chain — aumenta cuánto puedes pedir por cada dólar que depositas.",
+      title: "el mismo colateral no vale lo mismo para todos.",
+      sub: "sobrecolateralizar al 150% trata igual al que nunca falló y al que llega hoy. vigente lee la reputación on-chain del prestatario y ajusta su LTV — 85%, 75% o 60% — sin que el mercado de préstamos tenga que enterarse del score.",
     },
     {
-      title: "liquidez hoy. tus activos siguen siendo tuyos.",
-      sub: "bloquea colateral, pide prestado en stablecoins y recupéralo todo al repagar. sin vender tu posición, sin pedirle permiso a un banco.",
+      title: "reputación de crédito, legible por cualquier contrato.",
+      sub: "un badge soulbound emitido con umbral 3-de-5 verificado en cadena. tu plataforma lo lee sin pedir permiso, sin registrarse y sin token. los impagos quedan grabados de forma inmutable.",
     },
   ] as HeroVariant[],
 
@@ -58,20 +69,20 @@ const es = {
   demoBorrow: "préstamo disponible",
   demoRate: "ajuste de tasa",
   demoNote:
-    "parámetros ilustrativos, sujetos a calibración del piloto. tu tier sube con repagos puntuales y datos verificados que tú decides conectar.",
+    "los LTV y los cortes de score son los que hoy devuelve get_tier_ltv en el margin controller desplegado en testnet. el ajuste de tasa sí es ilustrativo: la tasa la fija la utilización del pool, y calibrarla es parte del piloto.",
   tiers: [
-    { label: "nuevo", ltv: 0.5, rate: "tasa base" },
-    { label: "establecido", ltv: 0.65, rate: "−1.5 pt" },
-    { label: "probado", ltv: 0.75, rate: "−3.0 pt" },
+    { label: "nuevo · score ≥300", ltv: 0.6, rate: "tasa base" },
+    { label: "establecido · ≥550", ltv: 0.75, rate: "−1.5 pt" },
+    { label: "probado · ≥800", ltv: 0.85, rate: "−3.0 pt" },
   ] as TierDef[],
 
   strip1: "contratos verificables · testnet en vivo",
   strip2: "pool: compone sobre blend (auditado)",
-  strip3: "precios: oráculo redstone",
+  strip3: "precios: agregador sep-40 propio",
   strip4: "stellar · soroban",
 
   howTitle: "cómo funciona",
-  howSub: "tres pasos. tu colateral vive en un contrato verificable, no en una empresa.",
+  howSub: "tres pasos para el usuario de tu plataforma. el colateral vive en un contrato verificable, no en tu balance ni en el nuestro.",
   steps: [
     {
       num: "01",
@@ -106,20 +117,25 @@ const es = {
   whoTitle: "para quién es",
   segments: [
     {
-      tag: "día 1",
-      title: "tienes activos y necesitas liquidez",
-      body: "holders de cripto o RWA con rendimiento que no quieren vender su posición para cubrir un gasto. deposita, pide prestado, repaga, recupera. tu posición sigue intacta.",
+      tag: "integrador · foco principal",
+      title: "plataformas con usuarios que ya tienen activos",
+      body: "wallets, fintechs y plataformas de RWA cuyos usuarios necesitan liquidez sin vender. tú tienes la relación con el usuario y el KYC; nosotros ponemos el motor de crédito, el límite por reputación y la custodia en contratos auditables. no hay token que adoptar ni permiso que pedir.",
     },
     {
-      tag: "segmento puente",
-      title: "recibes ingresos verificables",
-      body: "si recibes o envías remesas, o tienes ingreso verificable, puedes conectarlo — con tu consentimiento — para pre-calificar tu reputación y arrancar con mejores condiciones desde el primer préstamo.",
+      tag: "protocolo",
+      title: "mercados de préstamo que quieren precio por riesgo",
+      body: "cualquier contrato en soroban puede leer el badge de reputación y el LTV asociado, y usarlos para diferenciar condiciones. nuestro agregador sep-40 — el mismo que ocupa el slot de oráculo de nuestro pool — se publica como referencia abierta para la red.",
+    },
+    {
+      tag: "usuario final",
+      title: "quien pide el préstamo dentro de esa plataforma",
+      body: "deposita colateral, recibe stablecoins y recupera todo al repagar. cada repago puntual sube su límite y baja su tasa. las secciones de abajo son una demo de esa experiencia — la que verían los usuarios de una plataforma integrada.",
     },
   ],
 
-  ppTag: "pasaporte financiero",
-  ppTitle: "evalúa tu capacidad de pago — sin activos, sin costo",
-  ppSub: "cualquiera puede generar su puntaje crediticio inicial hoy. responde cuatro preguntas, guarda tu pasaporte y, cuando deposites colateral, arrancas con reputación pre-calificada en lugar de empezar de cero.",
+  ppTag: "demo · experiencia del usuario final",
+  ppTitle: "así se ve la evaluación de crédito para tu usuario",
+  ppSub: "esta es la misma evaluación que correría dentro de una plataforma integrada, abierta acá para que la pruebes tú. responde cuatro preguntas y obtén un puntaje inicial; si conectas una wallet, además leemos tu reputación real desde el contrato en vivo.",
   ppIncome: "ingreso mensual (USD)",
   ppRemit: "remesas mensuales recibidas (USD)",
   ppExpenses: "gastos fijos mensuales (USD)",
@@ -185,8 +201,8 @@ const es = {
       body: "la infraestructura de pools de préstamo, auditada y en producción en stellar. el pool del piloto se compone sobre ella (patrón orbit) en lugar de reescribirla.",
     },
     {
-      name: "redstone",
-      body: "oráculo de precios para el colateral. los precios que disparan liquidaciones no dependen de una sola parte.",
+      name: "agregador sep-40 propio",
+      body: "el slot de oráculo de nuestro pool es inmutable y lo ocupa nuestro agregador, que hoy rutea a reflector y admite añadir más fuentes sin redesplegar el pool. incluye guarda de desviación contra saltos de precio anómalos.",
     },
     {
       name: "stellar · soroban",
@@ -217,8 +233,8 @@ const es = {
   liveContract: "contrato",
   liveContractSub: "testnet · soroban",
 
-  wlTitle: "entra a la whitelist del piloto",
-  wlSub: "cupos limitados para el primer pool. te avisamos cuando tu acceso esté listo — y si conectas tus datos, arrancas con reputación pre-calificada.",
+  wlTitle: "integra vigente o entra al piloto",
+  wlSub: "si construyes una plataforma y quieres ofrecer crédito a tus usuarios, escríbenos: el piloto en mainnet parte capado y con pocos integradores. si eres usuario final, deja tu correo y te avisamos cuando haya cupo en el primer pool.",
   wlPlaceholder: "tu@correo.com",
   wlCheckbox:
     "quiero pre-calificar mi reputación conectando datos de ingreso o remesas (opcional, con consentimiento, revocable).",
@@ -283,33 +299,46 @@ const es = {
   ],
 
   roadmapTitle: "roadmap",
+  roadmapHere: "estamos aquí",
   roadmap: [
     {
       phase: "fase 1",
       status: "completado",
+      here: false,
       title: "primitivo de crédito en testnet",
-      body: "oráculo de umbral 3-de-5, badge de reputación soulbound, nuestro propio feed de precio sep-40 y un pool de préstamo aislado corriendo sobre él. cada contrato verificable en el explorador.",
+      body: "oráculo de umbral 3-de-5, badge de reputación soulbound y nuestro propio feed de precio sep-40. cada contrato verificable en el explorador.",
       accent: "#8BE9B0",
     },
     {
       phase: "fase 2",
-      status: "en curso",
-      title: "pool colateralizado + whitelist",
-      body: "pool de crédito compuesto sobre blend con oráculo redstone, capa reputación→LTV y piloto whitelisted (~50 usuarios).",
-      accent: "#E9C98B",
+      status: "completado",
+      here: true,
+      title: "pool colateralizado activo",
+      body: "nuestro propio pool aislado sobre blend, con nuestro agregador sep-40 en el slot de oráculo — inmutable — ruteando a reflector. ciclo completo verificado en cadena: depósito, préstamo, repago y retiro, más la custodia probada bajo pausa adversarial. evidencia en audit/08.",
+      accent: "#8BE9B0",
     },
     {
       phase: "fase 3",
       status: "siguiente",
-      title: "mainnet capado",
-      body: "lanzamiento capado y whitelisted del primer pool en mainnet + conexión de datos verificados de ingreso/remesas.",
-      accent: "#9AA3A0",
+      here: false,
+      title: "endurecimiento + activos tokenizados + rampa",
+      body: "liquidación proporcional, cap de exposición por usuario y fees on-chain; primer activo de renta fija tokenizado como colateral; rampa fiat conectada extremo a extremo.",
+      accent: "#E9C98B",
     },
     {
       phase: "fase 4",
-      status: "visión",
-      title: "glide-path",
-      body: "reducción progresiva del colateral exigido para reputaciones consolidadas.",
+      status: "después",
+      here: false,
+      title: "mainnet capado + sdk público",
+      body: "lanzamiento capado y whitelisted en mainnet bajo multifirma y timelock, con sdk e integración documentada para terceros.",
+      accent: "#9AA3A0",
+    },
+    {
+      phase: "fase 5",
+      status: "visión · sin fecha",
+      here: false,
+      title: "la wallet, on chain",
+      body: "que el usuario opere su crédito desde su propia wallet, sin intermediario custodio, con glide-path: menos colateral exigido a medida que la reputación se consolida. es la dirección del producto, no un compromiso con fecha.",
       accent: "#6B7370",
     },
   ],
@@ -318,7 +347,7 @@ const es = {
   faqs: [
     {
       q: "¿es seguro?",
-      a: "el pool se construye sobre blend, infraestructura auditada y en producción en stellar, con precios del oráculo redstone. todos los contratos son públicos y verificables. dicho con honestidad: hoy el MVP está en testnet, todo préstamo colateralizado tiene riesgos (volatilidad, contratos), y nunca deposites más de lo que puedes permitirte bloquear.",
+      a: "el pool se compone sobre blend, infraestructura auditada y en producción en stellar, y los precios llegan por nuestro agregador sep-40 que rutea a reflector. todos los contratos son públicos y verificables. dicho con honestidad: hoy el MVP está en testnet, todo préstamo colateralizado tiene riesgos (volatilidad, contratos), y nunca deposites más de lo que puedes permitirte bloquear.",
     },
     {
       q: "¿qué colateral aceptan?",
@@ -354,25 +383,25 @@ const en: LandingCopy = {
   navWho: "who it's for",
   navTrust: "security",
   navFaq: "faq",
-  navCta: "join the whitelist",
+  navCta: "let's talk integration",
 
-  heroCta: "join the whitelist",
+  heroCta: "let's talk integration",
   heroCta2: "view testnet contract",
-  heroCta3: "check my payment capacity",
+  heroCta3: "try the end-user demo",
   heroFinePrint:
     "credit primitive live on stellar testnet · no native token · custody in verifiable contracts",
   heroVariants: [
     {
-      title: "borrow against your assets, without selling them.",
-      sub: "deposit USDC, XLM or tokenized treasuries as collateral and receive stablecoins instantly. every on-time repayment builds a reputation that raises your limit and lowers your rate.",
+      title: "credit infrastructure for your platform.",
+      sub: "your users hold tokenized assets and need liquidity without selling them. vigente prices each borrower's limit from their on-chain history, on contracts anyone can audit. you don't build a credit engine — you integrate one.",
     },
     {
-      title: "a good track record is worth more collateral.",
-      sub: "a collateralized credit pool on stellar where reputation — on-chain and, with your consent, off-chain — increases how much you can borrow per dollar you deposit.",
+      title: "the same collateral isn't worth the same for everyone.",
+      sub: "flat 150% over-collateralization treats a borrower who never defaulted like one who showed up today. vigente reads on-chain reputation and sets the LTV — 85%, 75% or 60% — without the lending market ever seeing the score.",
     },
     {
-      title: "liquidity today. your assets stay yours.",
-      sub: "lock collateral, borrow stablecoins, and get everything back when you repay. without selling your position, without asking a bank for permission.",
+      title: "credit reputation any contract can read.",
+      sub: "a soulbound badge issued under a 3-of-5 threshold verified on-chain. your platform reads it without permission, without registration and without a token. defaults are recorded immutably.",
     },
   ],
 
@@ -381,20 +410,20 @@ const en: LandingCopy = {
   demoBorrow: "available to borrow",
   demoRate: "rate adjustment",
   demoNote:
-    "illustrative parameters, subject to pilot calibration. your tier rises with on-time repayments and verified data you choose to connect.",
+    "the LTVs and score cutoffs are what get_tier_ltv returns today on the margin controller deployed to testnet. the rate adjustment is illustrative: the rate comes from pool utilization, and calibrating it is part of the pilot.",
   tiers: [
-    { label: "new", ltv: 0.5, rate: "base rate" },
-    { label: "established", ltv: 0.65, rate: "−1.5 pt" },
-    { label: "proven", ltv: 0.75, rate: "−3.0 pt" },
+    { label: "new · score ≥300", ltv: 0.6, rate: "base rate" },
+    { label: "established · ≥550", ltv: 0.75, rate: "−1.5 pt" },
+    { label: "proven · ≥800", ltv: 0.85, rate: "−3.0 pt" },
   ],
 
   strip1: "verifiable contracts · live testnet",
   strip2: "pool: composes on blend (audited)",
-  strip3: "prices: redstone oracle",
+  strip3: "prices: our own sep-40 aggregator",
   strip4: "stellar · soroban",
 
   howTitle: "how it works",
-  howSub: "three steps. your collateral lives in a verifiable contract, not inside a company.",
+  howSub: "three steps for your platform's user. collateral lives in a verifiable contract — not on your balance sheet, and not on ours.",
   steps: [
     {
       num: "01",
@@ -429,20 +458,25 @@ const en: LandingCopy = {
   whoTitle: "who it's for",
   segments: [
     {
-      tag: "day 1",
-      title: "you hold assets and need liquidity",
-      body: "crypto or yield-bearing RWA holders who don't want to sell their position to cover an expense. deposit, borrow, repay, reclaim. your position stays intact.",
+      tag: "integrator · primary focus",
+      title: "platforms whose users already hold assets",
+      body: "wallets, fintechs and RWA platforms whose users need liquidity without selling. you own the user relationship and the KYC; we provide the credit engine, the reputation-priced limit and custody in auditable contracts. no token to adopt, no permission to ask for.",
     },
     {
-      tag: "bridge segment",
-      title: "you have verifiable income",
-      body: "if you receive or send remittances, or have verifiable income, you can connect it — with your consent — to pre-qualify your reputation and start with better terms from your first loan.",
+      tag: "protocol",
+      title: "lending markets that want risk-priced terms",
+      body: "any soroban contract can read the reputation badge and its associated LTV, and use them to differentiate terms. our sep-40 aggregator — the same one occupying our pool's oracle slot — is published as an open reference for the network.",
+    },
+    {
+      tag: "end user",
+      title: "whoever borrows inside that platform",
+      body: "deposit collateral, receive stablecoins, reclaim everything on repayment. every on-time repayment raises the limit and lowers the rate. the sections below are a demo of that experience — what users of an integrated platform would see.",
     },
   ],
 
-  ppTag: "financial passport",
-  ppTitle: "check your payment capacity — no assets, no cost",
-  ppSub: "anyone can generate their initial credit score today. answer four questions, save your passport, and when you deposit collateral you start with pre-qualified reputation instead of from zero.",
+  ppTag: "demo · end-user experience",
+  ppTitle: "this is what credit assessment looks like for your user",
+  ppSub: "this is the same assessment that would run inside an integrated platform, opened up here so you can try it yourself. answer four questions for an initial score; connect a wallet and we also read your real reputation from the live contract.",
   ppIncome: "monthly income (USD)",
   ppRemit: "monthly remittances received (USD)",
   ppExpenses: "fixed monthly expenses (USD)",
@@ -508,8 +542,8 @@ const en: LandingCopy = {
       body: "the lending-pool infrastructure, audited and in production on stellar. the pilot pool composes on top of it (orbit pattern) instead of rewriting it.",
     },
     {
-      name: "redstone",
-      body: "price oracle for collateral. the prices that trigger liquidations don't depend on a single party.",
+      name: "our own sep-40 aggregator",
+      body: "our pool's oracle slot is immutable and holds our aggregator, which today routes to reflector and can take on more sources without redeploying the pool. includes a deviation guard against anomalous price jumps.",
     },
     {
       name: "stellar · soroban",
@@ -540,8 +574,8 @@ const en: LandingCopy = {
   liveContract: "contract",
   liveContractSub: "testnet · soroban",
 
-  wlTitle: "join the pilot whitelist",
-  wlSub: "limited spots for the first pool. we'll notify you when your access is ready — and if you connect your data, you start with pre-qualified reputation.",
+  wlTitle: "integrate vigente or join the pilot",
+  wlSub: "if you're building a platform and want to offer credit to your users, get in touch: the mainnet pilot starts capped and with few integrators. if you're an end user, leave your email and we'll tell you when there's room in the first pool.",
   wlPlaceholder: "you@email.com",
   wlCheckbox:
     "i want to pre-qualify my reputation by connecting income or remittance data (optional, consented, revocable).",
@@ -606,33 +640,46 @@ const en: LandingCopy = {
   ],
 
   roadmapTitle: "roadmap",
+  roadmapHere: "we are here",
   roadmap: [
     {
       phase: "phase 1",
       status: "done",
+      here: false,
       title: "credit primitive on testnet",
-      body: "3-of-5 threshold oracle, soulbound reputation badge, our own sep-40 price feed and an isolated lending pool running on it. every contract verifiable in the explorer.",
+      body: "3-of-5 threshold oracle, soulbound reputation badge and our own sep-40 price feed. every contract verifiable in the explorer.",
       accent: "#8BE9B0",
     },
     {
       phase: "phase 2",
-      status: "in progress",
-      title: "collateralized pool + whitelist",
-      body: "credit pool composed on blend with the redstone oracle, reputation→LTV layer and whitelisted pilot (~50 users).",
-      accent: "#E9C98B",
+      status: "done",
+      here: true,
+      title: "collateralized pool live",
+      body: "our own isolated pool on blend, with our sep-40 aggregator in the oracle slot — immutable — routing to reflector. full cycle verified on-chain: deposit, borrow, repay and withdraw, plus custody proven under an adversarial pause. evidence in audit/08.",
+      accent: "#8BE9B0",
     },
     {
       phase: "phase 3",
       status: "next",
-      title: "capped mainnet",
-      body: "capped, whitelisted launch of the first pool on mainnet + verified income/remittance data connections.",
-      accent: "#9AA3A0",
+      here: false,
+      title: "hardening + tokenized assets + ramp",
+      body: "proportional liquidation, per-user exposure cap and on-chain fees; first tokenized fixed-income asset as collateral; fiat ramp connected end to end.",
+      accent: "#E9C98B",
     },
     {
       phase: "phase 4",
-      status: "vision",
-      title: "glide-path",
-      body: "progressive reduction of required collateral for consolidated reputations.",
+      status: "after that",
+      here: false,
+      title: "capped mainnet + public sdk",
+      body: "capped, whitelisted mainnet launch under multisig and timelock, with an sdk and integration docs for third parties.",
+      accent: "#9AA3A0",
+    },
+    {
+      phase: "phase 5",
+      status: "vision · no date",
+      here: false,
+      title: "the wallet, on chain",
+      body: "users operating their own credit from their own wallet, with no custodial intermediary, on a glide-path: less collateral required as reputation consolidates. this is the product direction, not a dated commitment.",
       accent: "#6B7370",
     },
   ],
@@ -641,7 +688,7 @@ const en: LandingCopy = {
   faqs: [
     {
       q: "is it safe?",
-      a: "the pool is being built on blend, audited infrastructure in production on stellar, with prices from the redstone oracle. all contracts are public and verifiable. honestly stated: the MVP is on testnet today, every collateralized loan carries risk (volatility, smart contracts), and you should never deposit more than you can afford to lock.",
+      a: "the pool composes on blend, audited infrastructure in production on stellar, and prices arrive through our own sep-40 aggregator routing to reflector. all contracts are public and verifiable. honestly stated: the MVP is on testnet today, every collateralized loan carries risk (volatility, smart contracts), and you should never deposit more than you can afford to lock.",
     },
     {
       q: "what collateral do you accept?",
