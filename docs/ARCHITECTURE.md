@@ -286,12 +286,16 @@ serialization mismatch would silently break verification.
 
 ### 4.2 Data sources
 
-The scoring engine reads **only public Stellar Horizon data**. Fintech adapters (Payku,
-Fintoc) exist in the codebase as *enrichment*, never as a requirement: a user with no fintech
-relationship still gets a score. **They are also not on the current product path** — they are
-leftovers from the pre-pivot model, kept because the score API still imports them; reputation
-today comes from on-chain repayment history. This matters for the trust model — the base score depends on
-data anyone can independently recompute.
+The scoring engine reads **only public Stellar Horizon data** — a 180-day window, with P2P
+churn discounted against an ecosystem whitelist. The base score depends on data anyone can
+independently recompute, which is what makes the off-chain half auditable at all.
+
+> **Out of scope: fintech adapters.** `web/src/services/payku-*.ts` are inert artifacts of the
+> pre-pivot model, when the score was derived from a payment processor's transaction history.
+> They are **not part of this architecture**: no contract calls them, the credit path never
+> reads them, and no deliverable depends on them. They remain in the tree only because the
+> legacy `/v3` demo route still imports them, and removing that route is unrelated cleanup.
+> Reputation today comes from public chain data and on-chain repayment behaviour.
 
 ### 4.3 Remaining decentralization work
 
@@ -311,18 +315,47 @@ single-operator compromise. Separating them is Tranche 2 work and is not claimed
 
 ## 5. Scoring Engine
 
-Deterministic three-dimensional algorithm operating on 6-month transaction history:
+A deterministic function of public Horizon history over a 180-day window. It is a pure
+function — no side effects, same inputs give the same output — implemented in
+`web/src/services/horizon-scoring.ts`, which derives three components:
 
 ```
-Volume score (0–40):     based on total transactional USD equivalent
-Consistency score (0–30): inverse coefficient of variation across monthly volumes
-Frequency score (0–30):  transactions per month over the 6-month window
-
-Total: 0–100 → mapped to Tier (Gold ≥80, Silver ≥55, Bronze ≥30, None < 30)
-Max loan amount: tier-dependent (Gold: 10M CLP, Silver: 5M CLP, Bronze: 2M CLP, None: 0)
+Volume       — total transactional value in the window
+Consistency  — inverse coefficient of variation across monthly volumes
+Frequency    — transactions per month, with P2P churn discounted
 ```
 
-Implementation: `web/src/services/scoring-engine.ts`. Pure function, no side effects, deterministic for fixed inputs. Same algorithm runs server-side today and will move client-side post-TLSNotary integration.
+### 5.1 The two scales, and which one prices credit
+
+This is the detail most likely to confuse a reader, so it is stated plainly:
+
+| Scale | Where it lives | What it does |
+|---|---|---|
+| **0–1000** | the `vigente-badge` contract | **This is the credit path.** The score signed into the badge and read on-chain by the margin controller |
+| 0–100 | `scoring-engine.ts` internals | An intermediate aggregate of the three components above |
+
+The controller reads the badge's 0–1000 score and maps it to an LTV through an on-chain ladder
+it does not hardcode — the ladder is contract state, readable by anyone:
+
+```
+$ stellar contract invoke --id CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ     --network testnet --send=no -- get_tier_ltv
+[{"ltv_bps":8500,"min_score":800},{"ltv_bps":7500,"min_score":550},{"ltv_bps":6000,"min_score":300}]
+```
+
+So a borrower at score 650 — a value any reader can confirm with
+`get_score --borrower <G...>` against `CDLLO7QE…` — borrows at 75% LTV. Nothing else about the
+borrower reaches the lending market.
+
+> **Out of scope: the CLP loan ceilings and the 0–100 tier cut-offs** still present in
+> `scoring-engine.ts` (`Gold ≥80`, `Silver ≥55`, `Bronze ≥30`, with a `maxLoanAmount` in Chilean
+> pesos). They belong to the pre-pivot model, in which Vigente proposed loan *amounts* rather
+> than pricing collateral. **No contract reads them.** The margin controller's only badge calls
+> are `get_score` and `is_defaulted` (`contracts/margin-controller/src/lib.rs:48`), and the
+> cut-offs that actually price credit are the 0–1000 ones above. The CLP figures survive on the
+> legacy `/v3` demo page and nowhere else.
+>
+> The tier *names* Gold / Silver / Bronze in §3.2 are documentation labels for the on-chain
+> ladder; the contract itself stores only `{min_score, ltv_bps}` pairs.
 
 ---
 
@@ -437,7 +470,6 @@ that chooses to look, without asking anyone's permission.
 | Margin controller has a logic bug | Tests, audit, post-mortem | Contracts are immutable: deploy a new instance and users migrate voluntarily. **Users can always exit the old one** — `withdraw_collateral` ignores pause. Badges survive; they live in a separate contract |
 | Blend pool degraded or frozen by its own admin | `get_config` status ≠ 0 | Outside our control. Borrowing stops; withdrawal paths remain per Blend's status semantics. This is the cost of composing rather than reimplementing |
 | Soroban RPC outage | RPC unreachable | UI errors and retries; operations deferred. No state corruption |
-| Enrichment adapter down (Payku / Fintoc) | Adapter retry exhausted | Base score is unaffected — enrichment is optional by design |
 
 ---
 

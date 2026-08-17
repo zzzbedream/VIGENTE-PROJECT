@@ -87,11 +87,12 @@ sigue funcionando y demostrado sobre el **pool canónico de Blend**, con el `mar
 v1 `CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV`.
 
 **No se usa CETES como colateral en testnet**, por decisión deliberada: no existe feed de
-precio de terceros para CETES en testnet (Reflector no lo cotiza; RedStone publica en
-mainnet). Valuar nuestro propio colateral con un oráculo que operamos habría **confirmado** la
-objeción sobre centralización del oráculo en lugar de refutarla. CETES entra en Tranche 1,
-ruteado al feed de RedStone en mainnet — un cambio de ruta que este aggregator ya soporta por
-diseño, con timelock.
+precio de terceros para CETES en testnet — Reflector no lo cotiza. Valuar nuestro propio
+colateral con un oráculo que operamos habría **confirmado** la objeción sobre centralización
+del oráculo en lugar de refutarla. La incorporación de un activo tokenizado como colateral
+queda para un tramo posterior, ruteado a un proveedor SEP-40 independiente — un cambio de ruta
+que este aggregator ya soporta por diseño, con timelock. No nombramos aquí a ningún proveedor
+concreto: no hay acuerdo firmado con ninguno.
 
 ## Reproducción por un tercero
 

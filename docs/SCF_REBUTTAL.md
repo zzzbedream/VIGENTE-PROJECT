@@ -25,8 +25,9 @@
 
 The ask is **$80K following the exact SCF handbook milestone structure**:
 #0 $8K (10%) → T1 $16K (20%) → T2 $24K (30%) → T3 $32K (40%). Breakdown per tranche:
-the deliverable specifications in the submission form (not public — the tranche
-files in this repository described the earlier $60K/6-month plan and were retired).
+the deliverable specifications in the submission form. The tranche files that
+used to sit in this repository described a superseded plan and were retired to avoid
+contradicting it.
 
 **More than half of it funds engineering headcount, including hiring a
 senior Soroban engineer** — the direct answer to the execution-risk
