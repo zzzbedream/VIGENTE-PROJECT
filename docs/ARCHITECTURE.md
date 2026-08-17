@@ -117,7 +117,7 @@ Per SCF criteria, Stellar must be used to meaningfully improve core features, no
 | **Permissionless contract calls** | Any protocol can query `is_defaulted()` and `get_score()` without permission from Vigente | Off-chain credit bureaus require contracts; Soroban makes reputation a public good |
 | **Immutable storage with TTL** | `DefaultBadge` records persist for ~2 years with no delete function | Off-chain DBs can erase records; Soroban storage is enforced at protocol level |
 | **Cross-contract atomic calls** | `margin-controller.liquidate()` atomically slashes the badge; the controller also composes with an immutable third-party lending market it cannot modify | Without atomicity, defaults could be evaded by reordering tx |
-| **Sub-cent transaction fees** | Mint cost is fractional cents | Critical for microcommerce target where margins are thin |
+| **Sub-cent transaction fees** | Mint cost is fractional cents | Critical for the platforms we serve, where per-user margins are thin |
 | **5-second finality** | Borrow approval happens in real-time | Web2 credit checks take days; Soroban finality enables real-time UX |
 | **Native cryptographic primitives** | `env.crypto().sha256()`, `ed25519_verify()` | Future TLSNotary attestation requires these as gas-efficient operations |
 
@@ -288,7 +288,9 @@ serialization mismatch would silently break verification.
 
 The scoring engine reads **only public Stellar Horizon data**. Fintech adapters (Payku,
 Fintoc) exist in the codebase as *enrichment*, never as a requirement: a user with no fintech
-relationship still gets a score. This matters for the trust model — the base score depends on
+relationship still gets a score. **They are also not on the current product path** — they are
+leftovers from the pre-pivot model, kept because the score API still imports them; reputation
+today comes from on-chain repayment history. This matters for the trust model — the base score depends on
 data anyone can independently recompute.
 
 ### 4.3 Remaining decentralization work

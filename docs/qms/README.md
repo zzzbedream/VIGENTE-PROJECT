@@ -33,4 +33,4 @@ el producto sea legítimo y sostenible más allá del grant.
 - **Algorithmic fairness** — equal opportunity, demographic parity, disparate impact.
 - **ODS** 1 / 5 / 8 / 10.
 
-Ver el roadmap de gestión en [../ROADMAP.md](../ROADMAP.md).
+Ver el roadmap vigente en [../../README.md](../../README.md), sección *Status and roadmap*.

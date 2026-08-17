@@ -4,7 +4,7 @@
 > in any contract. The Rust below is an *interface sketch* for review — it is
 > not wired into `vigente-badge` or `reference-vault` and does not compile as
 > part of the build. Target: Tranche 4 (post-grant). See the roadmap in
-> [`../../README.md`](../../README.md) and [`../ROADMAP.md`](../ROADMAP.md).
+> [`../../README.md`](../../README.md), section *Status and roadmap*.
 
 ## Why this exists
 

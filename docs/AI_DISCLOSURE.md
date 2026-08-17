@@ -29,10 +29,10 @@ No other AI services were used in code generation or documentation drafting.
 The following documentation was drafted with significant Claude assistance:
 
 - `README.md` — initial outlines and section drafting
-- `docs/RESUBMISSION_FEEDBACK.md` — structure and prose
-- `docs/TRANCHE_1_DELIVERABLES.md`, `TRANCHE_2_DELIVERABLES.md`, `TRANCHE_3_DELIVERABLES.md`
+- `RESUBMISSION_FEEDBACK.md` — structure and prose *(since superseded and moved out of the public tree)*
+- `TRANCHE_1_DELIVERABLES.md`, `TRANCHE_2_DELIVERABLES.md`, `TRANCHE_3_DELIVERABLES.md` *(superseded by the current submission; moved out of the public tree)*
 - `docs/ARCHITECTURE.md` — diagrams and prose
-- `docs/BUSINESS_PLAN.md`
+- `BUSINESS_PLAN.md` *(pre-pivot; moved out of the public tree)*
 - This document (`AI_DISCLOSURE.md`)
 
 **Author review for documentation:** every claim, number, timeline, and verification step in these documents was reviewed by the Founder against the codebase. AI-drafted claims that could not be verified were either corrected or removed before commit.

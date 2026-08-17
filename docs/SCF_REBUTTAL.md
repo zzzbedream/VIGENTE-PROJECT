@@ -25,9 +25,8 @@
 
 The ask is **$80K following the exact SCF handbook milestone structure**:
 #0 $8K (10%) → T1 $16K (20%) → T2 $24K (30%) → T3 $32K (40%). Breakdown per tranche:
-[TRANCHE_1](TRANCHE_1_DELIVERABLES.md) ·
-[TRANCHE_2](TRANCHE_2_DELIVERABLES.md) ·
-[TRANCHE_3](TRANCHE_3_DELIVERABLES.md).
+the deliverable specifications in the submission form (not public — the tranche
+files in this repository described the earlier $60K/6-month plan and were retired).
 
 **More than half of it funds engineering headcount, including hiring a
 senior Soroban engineer** — the direct answer to the execution-risk
@@ -253,7 +252,7 @@ with 9 wallets** (Lobstr included) for onboarding.
 ---
 
 *Questions: zzzbedream@gmail.com · This document supersedes the
-item-by-item map in [RESUBMISSION_FEEDBACK.md](RESUBMISSION_FEEDBACK.md)
+item-by-item map (retired: this document supersedes it)
 for the upcoming submission.*
 
 [SEP-40]: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0040.md

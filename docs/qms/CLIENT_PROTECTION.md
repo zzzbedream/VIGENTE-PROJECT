@@ -84,4 +84,4 @@ puede empujarlos a deuda impagable (patrón de las crisis de microfinanzas).
 4. **CP4/CP5** — cláusulas de conducta en los acuerdos de integración.
 
 Estas brechas alimentan el [RELEASE_QUALITY_GATES.md](RELEASE_QUALITY_GATES.md) y el
-[../ROADMAP.md](../ROADMAP.md).
+[../../README.md](../../README.md) (sección *Status and roadmap*).
