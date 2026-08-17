@@ -1,5 +1,12 @@
 # Phase B Hardening — API Route Migration Plan
 
+> ## 🗄️ HISTORICAL — completed and superseded
+>
+> This was a **May 2026 migration plan**. It is kept for traceability only. The legacy routes it
+> discusses (`api/mint`, `api/evaluate-and-fund`, `services/mint-service.ts`) were **deleted** from
+> the codebase in July 2026 — they no longer exist and cannot be called. The live API surface today
+> is `api/mint-v3`, `api/oracle`, `api/score` and `api/waitlist`.
+
 **Status:** Bug 2 ack'd, simulator delivered, legacy routes intentionally left intact.
 **Owner:** Founder (zzzbedream)
 **Target completion:** Phase C (Day 8-9, ~Jun 4-5)
@@ -10,8 +17,8 @@
 
 Two API routes currently call the **V1 legacy contract** (`CATE7NUICQNBSUKF3RMA2HQAJK2RWCHCYH4NCPTQDLFNWNUNSFTTUH4W`) via the `mint_badge(user, tier, score, data_hash)` interface:
 
-- [web/src/app/api/mint/route.ts](web/src/app/api/mint/route.ts)
-- [web/src/app/api/evaluate-and-fund/route.ts](web/src/app/api/evaluate-and-fund/route.ts)
+- `web/src/app/api/mint/route.ts` (eliminado)
+- `web/src/app/api/evaluate-and-fund/route.ts` (eliminado)
 
 These power the **currently-live Vercel demo** at https://vigente-hackathon-final.vercel.app. Replacing them before Phase B.7 (testnet deploy of `vigente-badge` v2) would break the demo and the existing tracking story.
 
@@ -48,7 +55,7 @@ The full migration to the threshold flow is **5 concrete steps**:
    - Internally: call `buildSignedMintRequest`, assemble a `Contract(CONTRACT_ID_V2).call("mint", ...)` operation with the threshold signature vector, sign with a relayer keypair (covers gas only), submit via Soroban RPC.
    - The signature vector is passed as `ScVal::Vec` of `ScVal::Tuple(u32, BytesN<64>)`.
 
-3. **Update frontend** ([web/src/app/page.tsx](web/src/app/page.tsx)) to call `mint-v2` instead of `mint`. UI shows "3 oracles signed" badge in the success state.
+3. **Update frontend** ([web/src/app/page.tsx](../../web/src/app/page.tsx)) to call `mint-v2` instead of `mint`. UI shows "3 oracles signed" badge in the success state.
 
 4. **Keep the legacy routes alive as deprecated** for two business days post-migration. Add `@deprecated` JSDoc and a console warning. After observing zero usage, delete in a single commit.
 

@@ -37,7 +37,7 @@ versioning policy): [`contracts/vigente-badge/INTERFACE.md`](../../contracts/vig
 
 For a production-grade consumer — score-tiered limits, first-loan
 throttling, slash cascade on liquidation — read
-[`contracts/reference-vault/`](../../contracts/reference-vault/), which runs
+[`contracts/reference-vault/`](../../archive/reference-vault/), which runs
 this exact pattern with full integration tests.
 
 No permission, registration, or token is needed to read the oracle. That is

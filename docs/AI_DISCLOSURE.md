@@ -4,6 +4,11 @@
 
 This document provides a complete and honest accounting of AI tool usage in the development of Vigente Protocol. Transparency on this topic is non-negotiable for our submission.
 
+> **Scope note (updated 2026-08-16).** Sections 1–6 below were written on 2026-05-24 and describe
+> the project as it stood then. Between May and August 2026 the project pivoted and the volume of
+> AI-assisted work **increased substantially**. Rather than silently restate the old percentages,
+> §8 records what changed. Read §8 alongside §5 — §5 alone understates current AI involvement.
+
 ---
 
 ## 1. AI Tools Used
@@ -118,6 +123,39 @@ If the SCF reviewer wants more detail on AI involvement in any specific file or 
 
 ---
 
-*Document Version: 1.0.0*
-*Last reviewed: 2026-05-24*
+## 8. Amendment — May to August 2026
+
+The original disclosure predates the pivot from "credit-signal oracle" to non-custodial
+collateralized credit. In that period AI assistance (Claude, via Claude Code) went from
+*drafting help* to a substantially larger share of the work. Stating it plainly:
+
+**Documentation — higher than the ~70% in §5.** Drafted with heavy AI assistance:
+`audit/07_OWN_POOL_EVIDENCE.md`, `audit/08_POOL_ACTIVATION.md`, `audit/09_RAMP_CONNECTIVITY.md`,
+the current `README.md`, `docs/ARQUITECTURA_INTERNA.md`, the tranche deliverables in their present
+form, and the landing copy in `web/src/app/landing/copy.ts`.
+
+**Code — comparable to or above the ~50% in §5.** AI-assisted work includes the non-custodial
+hardening of `contracts/margin-controller` (pause semantics, LTV floor, grace window, two-step
+admin), the `oracle-aggregator`, and the operational scripts used to activate the pool.
+
+**Operations.** Deployments, contract initialisation and every on-chain transaction were executed
+against live testnet with AI assistance in composing the commands. The transactions themselves are
+real and their hashes are published; a human authorised each one.
+
+**What did not change.** The review discipline in §3 still applies, and the working rule tightened:
+*no claim ships without an on-chain read with its command cited, code with file:line, or command
+output.* That rule exists because AI-drafted claims in this repository were found to be wrong more
+than once — an inflated backstop threshold, a miscounted contributor distribution, an
+unsigned LOI described as signed, and a false account of a partner exchange. Each was corrected in
+git history. **The rule is the mitigation; §4 still holds — nothing was fabricated to look better.**
+
+**Estimating honestly.** We are not restating §5's percentages with invented precision. The
+directional statement is what we can defend: **AI involvement in this repository is high and has
+grown**, the author remains accountable for every commit, and the commit history is the
+authoritative record.
+
+---
+
+*Document Version: 1.1.0*
+*Originally written: 2026-05-24 · Amended: 2026-08-16 (§8, scope note)*
 *Author accountable: Founder (zzzbedream)*

@@ -29,12 +29,12 @@ proves it works.
 **Mitigation.** `horizon-scoring.ts` classifies every payment by its counterparty against an explicit allowlist of ecosystem service addresses. Volume from outside that list is multiplied by `ECOSYSTEM_P2P_FACTOR = 0.3` (a 70% penalty). The penalty is applied to all three dimensions the scoring engine reads — raw volume, monthly volume bins, and effective transaction count — so an attacker who maintains perfect uniformity to keep consistency/frequency points still cannot reclaim the volume lost to the penalty.
 
 **Code:**
-- [web/src/services/ecosystem-whitelist.ts](web/src/services/ecosystem-whitelist.ts) — the seed list and the `isEcosystemCounterparty` lookup.
-- [web/src/services/horizon-scoring.ts](web/src/services/horizon-scoring.ts) — `computeFeatures` does the split into `contract_volume_usd_equiv`, `p2p_volume_usd_equiv`, `adjusted_volume_usd_equiv`, plus the parallel split on transaction counts (`contract_tx_count`, `p2p_tx_count`, `effective_tx_count`).
+- [web/src/services/ecosystem-whitelist.ts](../web/src/services/ecosystem-whitelist.ts) — the seed list and the `isEcosystemCounterparty` lookup.
+- [web/src/services/horizon-scoring.ts](../web/src/services/horizon-scoring.ts) — `computeFeatures` does the split into `contract_volume_usd_equiv`, `p2p_volume_usd_equiv`, `adjusted_volume_usd_equiv`, plus the parallel split on transaction counts (`contract_tx_count`, `p2p_tx_count`, `effective_tx_count`).
 - `featuresToMetrics` feeds the adjusted basis into the scoring engine.
 
 **Proof:**
-- [web/tests/horizon-scoring.test.ts](web/tests/horizon-scoring.test.ts) — test *"pure P2P volume is discounted by ECOSYSTEM_P2P_FACTOR (Carousel mitigation)"* builds a $18k-equivalent attacker scenario and asserts the resulting tier is not Gold.
+- [web/tests/horizon-scoring.test.ts](../web/tests/horizon-scoring.test.ts) — test *"pure P2P volume is discounted by ECOSYSTEM_P2P_FACTOR (Carousel mitigation)"* builds a $18k-equivalent attacker scenario and asserts the resulting tier is not Gold.
 - Test *"same volume via ecosystem counterparty gets full weight"* confirms a real merchant earning $18k via a whitelisted hub keeps Gold.
 
 **Out-of-scope nuance.** The whitelist is currently a hardcoded seed of ~3 well-known testnet addresses, plus an `VIGENTE_ECOSYSTEM_EXTRA_ADDRESSES` env override for experiments. Post-grant the curator list moves to LP-DAO governance — documented as the explicit next step, not promised as part of this submission.
@@ -48,12 +48,12 @@ proves it works.
 2. The on-chain contract independently rejects mint calls where the signed `account_age_days` argument is below `MinWalletAgeDays`. The age value is part of the canonical message every oracle signs, so a compromised oracle cannot pass an inflated age to the contract on its own — the other k-1 oracles refuse to co-sign.
 
 **Code:**
-- [contracts/vigente-badge/src/lib.rs](contracts/vigente-badge/src/lib.rs) — `DataKey::MinWalletAgeDays` (default 30), `set_min_wallet_age` admin-only setter, `mint()` rejects when `account_age_days < min_age`.
+- [contracts/vigente-badge/src/lib.rs](../contracts/vigente-badge/src/lib.rs) — `DataKey::MinWalletAgeDays` (default 30), `set_min_wallet_age` admin-only setter, `mint()` rejects when `account_age_days < min_age`.
 - `build_mint_message()` includes `account_age_days_be` between `expiration_be` and `nonce` in the canonical signed bytes.
 
 **Proof:**
-- 4 unit tests in [contracts/vigente-badge/src/test.rs](contracts/vigente-badge/src/test.rs): below-floor rejection, exact-floor pass, admin lowering the floor, and the tamper test where the relayer submits `age=15` against signatures produced over `age=60` — ed25519_verify fails because the bytes don't match.
-- Live testnet evidence: `npm run mint:onchain -- … --age 10` was trapped at simulation with `HostError(WasmVm, InvalidAction)` against v3 contract `CDLLO7QE…` — recorded in [docs/notes/phase-b-prime-acceptance.md](docs/notes/phase-b-prime-acceptance.md).
+- 4 unit tests in [contracts/vigente-badge/src/test.rs](../contracts/vigente-badge/src/test.rs): below-floor rejection, exact-floor pass, admin lowering the floor, and the tamper test where the relayer submits `age=15` against signatures produced over `age=60` — ed25519_verify fails because the bytes don't match.
+- Live testnet evidence: `npm run mint:onchain -- … --age 10` was trapped at simulation with `HostError(WasmVm, InvalidAction)` against v3 contract `CDLLO7QE…` — recorded in [docs/notes/phase-b-prime-acceptance.md](../docs/notes/phase-b-prime-acceptance.md).
 
 **Cost calculus for an attacker.** Creating 1,000 fresh wallets, waiting 30 days, then attempting a Sybil-bulk mint costs the wait time plus the threshold signature requirement on every single mint. Each badge issuance must clear the score floor — i.e. the wallet must show 180 days of activity history with whitelisted counterparties — so the 30-day age floor by itself is not the entire defense; it's the cheapest filter that eliminates the obviously synthetic.
 
@@ -79,10 +79,10 @@ allowed = min(cap, per_pool_cap)   // per_pool_cap = available_liquidity / 10
 **Worked example.** A Gold borrower with score 900 has `score_anchored = $1,800`. Their first loan is bounded at `$180`. To reach $1,800 they must close their first loan honestly — which costs them at least the interest payment and surrenders the option of defaulting on a higher amount.
 
 **Code:**
-- [archive/reference-vault/src/lib.rs](archive/reference-vault/src/lib.rs) — `tier_ceiling_for_score`, the ladder in `borrow()`, and `RepayCount(borrower)` incremented in `repay()`.
+- [archive/reference-vault/src/lib.rs](../archive/reference-vault/src/lib.rs) — `tier_ceiling_for_score`, the ladder in `borrow()`, and `RepayCount(borrower)` incremented in `repay()`.
 
 **Proof:**
-- 5 tests in [archive/reference-vault/src/test.rs](archive/reference-vault/src/test.rs): `test_first_loan_throttled_to_10pct_of_ceiling`, `test_ladder_lifts_to_full_ceiling_after_first_repay`, `test_max_loan_for_borrower_applies_first_loan_throttle`, `test_below_bronze_floor_rejected`, plus the integration tests that prove existing happy-path / default-path tests still work under the ladder.
+- 5 tests in [archive/reference-vault/src/test.rs](../archive/reference-vault/src/test.rs): `test_first_loan_throttled_to_10pct_of_ceiling`, `test_ladder_lifts_to_full_ceiling_after_first_repay`, `test_max_loan_for_borrower_applies_first_loan_throttle`, `test_below_bronze_floor_rejected`, plus the integration tests that prove existing happy-path / default-path tests still work under the ladder.
 
 ## 4. Vault drainage and uncapped exposure (Vector V2.E4)
 
@@ -95,7 +95,7 @@ allowed = min(cap, per_pool_cap)   // per_pool_cap = available_liquidity / 10
 3. `MaxUtilizationBps` — default 85%. `borrow()` rejects when `(total_borrowed + amount) × 10_000 > total_deposits × max_utilization_bps`. The remaining 15% of pool liquidity stays available for `claim_withdraw`.
 
 **Code:**
-- [archive/reference-vault/src/lib.rs](archive/reference-vault/src/lib.rs) — see `deposit()`, `borrow()`, the `MaxTvlUsdc` and `MaxUtilizationBps` storage keys, and the `pause`/`unpause` admin-only functions.
+- [archive/reference-vault/src/lib.rs](../archive/reference-vault/src/lib.rs) — see `deposit()`, `borrow()`, the `MaxTvlUsdc` and `MaxUtilizationBps` storage keys, and the `pause`/`unpause` admin-only functions.
 
 **Proof:**
 - `test_tvl_cap_rejects_overflow` and `test_tvl_cap_allows_at_exactly_limit` validate the boundary.
@@ -121,13 +121,13 @@ borrower.to_xdr()    // 44 bytes
 **Cross-language parity is the load-bearing assumption.** The off-chain signer in TypeScript (`web/src/services/threshold-oracle.ts`) builds these bytes via `Address.fromString(...).toScVal().toXDR()` and `Buffer.concat`. We validate the parity byte-for-byte both in unit tests and against a live Soroban host.
 
 **Code:**
-- [contracts/vigente-badge/src/lib.rs](contracts/vigente-badge/src/lib.rs) — storage keys, `set_oracle_keys` (atomic replacement, rejects duplicates, requires `threshold <= keys.len()`), `mint()` verification loop calling `env.crypto().ed25519_verify` k times.
-- [web/src/services/threshold-oracle.ts](web/src/services/threshold-oracle.ts) — `buildMintMessage`, `signMint`, `buildSignedMintRequest`. Seeds persist in `web/.env.local` under `VIGENTE_ORACLE_SEEDS_HEX` so the pubkeys registered on-chain match the simulator across restarts.
+- [contracts/vigente-badge/src/lib.rs](../contracts/vigente-badge/src/lib.rs) — storage keys, `set_oracle_keys` (atomic replacement, rejects duplicates, requires `threshold <= keys.len()`), `mint()` verification loop calling `env.crypto().ed25519_verify` k times.
+- [web/src/services/threshold-oracle.ts](../web/src/services/threshold-oracle.ts) — `buildMintMessage`, `signMint`, `buildSignedMintRequest`. Seeds persist in `web/.env.local` under `VIGENTE_ORACLE_SEEDS_HEX` so the pubkeys registered on-chain match the simulator across restarts.
 
 **Proof:**
-- Day-1 budget probe: `tests/threshold_smoke.rs::smoke_three_of_five_signatures_under_budget` measured 3× `ed25519_verify` at 1.3% of testnet CPU budget, recorded in [docs/notes/soroban-budget-day1.md](docs/notes/soroban-budget-day1.md).
-- 7 threshold-specific unit tests in [contracts/vigente-badge/src/test.rs](contracts/vigente-badge/src/test.rs): 3-of-5 happy path with non-contiguous indices, insufficient sigs rejection, duplicate index rejection, replayed nonce rejection, invalid signature rejection, out-of-range index rejection, `set_oracle_keys` admin-only.
-- XDR parity unit tests: [web/tests/xdr-parity.test.ts](web/tests/xdr-parity.test.ts) asserts the TS output equals the printed Rust fixture byte-for-byte (92 bytes).
+- Day-1 budget probe: `tests/threshold_smoke.rs::smoke_three_of_five_signatures_under_budget` measured 3× `ed25519_verify` at 1.3% of testnet CPU budget, recorded in [docs/notes/soroban-budget-day1.md](../docs/notes/soroban-budget-day1.md).
+- 7 threshold-specific unit tests in [contracts/vigente-badge/src/test.rs](../contracts/vigente-badge/src/test.rs): 3-of-5 happy path with non-contiguous indices, insufficient sigs rejection, duplicate index rejection, replayed nonce rejection, invalid signature rejection, out-of-range index rejection, `set_oracle_keys` admin-only.
+- XDR parity unit tests: [web/tests/xdr-parity.test.ts](../web/tests/xdr-parity.test.ts) asserts the TS output equals the printed Rust fixture byte-for-byte (92 bytes).
 - Live testnet evidence: tx `8b9fccfc…` minted a Gold badge on `CDLLO7QE…` with 3 simulator-produced signatures and `get_score(borrower)` returned the exact score signed. [stellar.expert](https://stellar.expert/explorer/testnet/tx/8b9fccfc9daaf594e457e19808ef9c0746e8e45f37aab8417b5fe8d59641bc85).
 - Negative live evidence: a tampered `age=10` submission against the same contract was trapped at simulation with `Error(WasmVm, InvalidAction)`. No tx hit the ledger, no gas was spent.
 
@@ -142,10 +142,10 @@ borrower.to_xdr()    // 44 bytes
 - The 14-day window combined with the 85% utilization cap means even a coordinated rush leaves enough float for honest withdrawals as outstanding loans repay.
 
 **Code:**
-- [archive/reference-vault/src/lib.rs](archive/reference-vault/src/lib.rs) — `request_withdraw`, `claim_withdraw`, `cancel_withdraw`, and the `WithdrawalRequest(Address)` storage key.
+- [archive/reference-vault/src/lib.rs](../archive/reference-vault/src/lib.rs) — `request_withdraw`, `claim_withdraw`, `cancel_withdraw`, and the `WithdrawalRequest(Address)` storage key.
 
 **Proof:**
-- 6 tests in [archive/reference-vault/src/test.rs](archive/reference-vault/src/test.rs): `test_request_then_claim_withdraw_after_timelock`, `test_claim_before_timelock_fails`, `test_double_withdrawal_request_rejected`, `test_cancel_then_new_request_succeeds`, `test_request_above_balance_rejected`, `test_cancel_without_request_fails`.
+- 6 tests in [archive/reference-vault/src/test.rs](../archive/reference-vault/src/test.rs): `test_request_then_claim_withdraw_after_timelock`, `test_claim_before_timelock_fails`, `test_double_withdrawal_request_rejected`, `test_cancel_then_new_request_succeeds`, `test_request_above_balance_rejected`, `test_cancel_without_request_fails`.
 
 ## Threats explicitly out of scope
 
