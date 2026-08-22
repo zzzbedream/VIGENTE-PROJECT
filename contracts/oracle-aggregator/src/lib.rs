@@ -8,7 +8,8 @@
 //! of the stack that must be right on the first try.
 //!
 //! What it does: routes each asset to an independent upstream SEP-40 source
-//! (Reflector for XLM/USDC on testnet; RedStone for tokenized bonds on mainnet)
+//! (Reflector for XLM/USDC on testnet; an independent SEP-40 provider for
+//! tokenized bonds on mainnet — not chosen yet, and not agreed with anyone)
 //! and re-exports the SEP-40 surface Blend consumes (`lastprice`, `decimals`).
 //!
 //! Why routing is timelocked rather than free:
@@ -17,8 +18,9 @@
 //!   the same class of attack the margin-controller's LTV timelock closes.
 //!   So: routes are set at init, and ANY later change (including adding a new
 //!   asset) is announced on-chain and only takes effect after `route_grace_secs`.
-//!   The legitimate use case is migrating a bond from our own feed to RedStone
-//!   once they publish it; the illegitimate one is impossible by construction.
+//!   The legitimate use case is migrating a bond from our own feed to a
+//!   third-party one once such a feed exists; the illegitimate one is
+//!   impossible by construction.
 //!
 //! Guards applied to every price, on top of whatever the upstream does:
 //!   - staleness: `now - timestamp <= max_age` (per-asset)

@@ -140,24 +140,42 @@ la línea.** Secuencia completa en `audit/08_POOL_ACTIVATION.md` §2.
 > `audit/07_OWN_POOL_EVIDENCE.md`. Ese documento describe el estado previo; **`audit/08` es el
 > vigente.**
 
-## 5. Cuatro cosas de Etherfuse que si no las sabés te comés horas
+## 5. Cuatro cosas de Etherfuse, separadas por procedencia
 
-**1️⃣ El fee viene contado adentro.** `feeBps` **ya incluye** nuestro partner fee, y
-`destinationAmount` **ya viene neto**. Para sacar la parte de Etherfuse:
-`platformBps = feeBps − partnerFeeBps`. Si lo sumás encima o lo descontás del neto, lo estás
-contando dos veces.
+Dos de estas las verificamos nosotros contra su sandbox. Las otras dos vienen de **su
+documentación** y **todavía no las comprobamos**, porque nunca ejecutamos una operación con
+fondos: sin `quoteId` no hay orden, y sin orden no hay webhook, fee real ni expiración
+observable (alcance declarado en [`../audit/09_RAMP_CONNECTIVITY.md`](../audit/09_RAMP_CONNECTIVITY.md) §5).
+La distinción importa: son las dos que van como pregunta a la sesión técnica.
 
-**2️⃣ Offramps y swaps fallan en silencio.** Si la wallet no está fondeada (~1,5 XLM) o no
-tiene la trustline del asset, Etherfuse no puede armar la transacción → **no devuelve nada y
-no dispara ningún webhook**. Si alguna vez creás una orden y nunca llega la tx para firmar,
-es esto. Hay que hacer pre-check explícito.
+### Verificado por nosotros
 
-**3️⃣ Nunca hardcodear issuers.** Los assets son `CODE:ISSUER` y **el issuer es distinto entre
-sandbox y producción**. Siempre leerlo de `GET /ramp/assets`.
+**1️⃣ Nunca hardcodear issuers.** Los assets son `CODE:ISSUER` y **el issuer difiere entre
+sandbox y producción**. Siempre leerlo de `GET /ramp/assets`. Comprobado: en sandbox, CETES
+es `CETES:GC3CW7ED…` y el USDC de la rampa `GBBD47IF…` — distinto del USDC de la reserva de
+deuda de nuestro pool (`GATALTGT…`), que son activos distintos
+([audit/09 §2b](../audit/09_RAMP_CONNECTIVITY.md)).
 
-**4️⃣ Dos detalles chicos:** el header es `Authorization: <api-key>` **sin prefijo `Bearer`**,
-y las transacciones pre-construidas **expiran en 1–2 minutos** — hay que llamar
-`regenerate_tx` como una vez por minuto mientras el usuario tenga una firma pendiente.
+**2️⃣ El header va sin `Bearer`.** Es `Authorization: <api-key>` crudo, y la credencial lleva
+tres segmentos reales: `api_sand:{key_id}:{org_id}`. Guardarla con las llaves del placeholder
+—`api_{sand}:…`— devuelve `401 Invalid API key`. Comprobado, junto con que
+`/ramp/verify-api-key` no existe: el endpoint que valida y devuelve el `org_id` es `GET /ramp`
+([audit/09 §2](../audit/09_RAMP_CONNECTIVITY.md)).
+
+### Segun su documentacion — pendiente de confirmar con ellos
+
+**3️⃣ El fee vendría contado adentro.** Su documentación indica que `feeBps` **ya incluye** el
+partner fee y que `destinationAmount` **ya viene neto**, de modo que la parte de Etherfuse
+sale de `platformBps = feeBps − partnerFeeBps`. Si esto es así, sumarlo encima o descontarlo
+del neto lo contaría dos veces. **No lo verificamos**: hoy `partnerFeeDefaultBps` es 0 y nunca
+cotizamos una orden.
+
+**4️⃣ Offramps y swaps fallarían en silencio, y las tx expirarían rápido.** Según su
+documentación, si la wallet no está fondeada (~1,5 XLM) o le falta la trustline del asset, no
+se arma la transacción y **no se dispara ningún webhook**; y las transacciones pre-construidas
+expirarían en 1–2 minutos, lo que obligaría a llamar `regenerate_tx` mientras haya una firma
+pendiente. De confirmarse, el pre-check de fondeo y trustline es obligatorio. **No lo
+verificamos**: no creamos órdenes ni recibimos webhooks.
 
 ## 6. Reglas del repo
 

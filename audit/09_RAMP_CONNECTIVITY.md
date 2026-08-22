@@ -95,9 +95,25 @@ Reproducible: `GET /lookup/bonds/cost` (sin autenticación) y, por bono,
 la moneda de CETES, y **47 bps en el peor caso** observado. Ese es el piso de desacuerdo
 esperable entre proveedores honestos.
 
-**La comparación que NO se puede hacer directamente:** el `max_deviation_bps` del
-`oracle-aggregator` está hoy en **2000 bps**, pero guarda otra cosa. Según
-[`lib.rs:26`](../contracts/oracle-aggregator/src/lib.rs#L26), compara
+**La comparación que NO se puede hacer directamente:** el `max_deviation_bps` **no es un valor
+único del contrato — es por asset**, y guarda otra cosa que la dispersión. Lectura on-chain del
+aggregator desplegado `CCG6EAGO…`:
+
+| Asset | `max_deviation_bps` | `max_age` |
+|---|---|---|
+| XLM (`CDLZFC3S…`) | **2000** | 900 s |
+| USDC (`CAQCFVLO…`) | **500** | 900 s |
+
+```bash
+stellar contract invoke --id CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4 \
+  --network testnet --send=no -- get_route \
+  --asset '{"Stellar":"CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"}'
+```
+
+Vive en `Route.max_deviation_bps` — [`lib.rs:84`](../contracts/oracle-aggregator/src/lib.rs#L84) —
+con techo global `MAX_DEVIATION_CEILING_BPS = 5000`
+([`lib.rs:118`](../contracts/oracle-aggregator/src/lib.rs#L118)). Y según
+[`lib.rs:28`](../contracts/oracle-aggregator/src/lib.rs#L28) compara
 `|price − last| / last` — es decir, **el salto contra el último precio que servimos**, una
 medida temporal, no la dispersión transversal entre proveedores. Decir "el guard está 42×
 flojo" sería mezclar dos métricas distintas.

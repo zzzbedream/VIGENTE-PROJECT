@@ -67,7 +67,8 @@ pub struct PriceData {
     pub timestamp: u64,
 }
 
-/// SEP-40 price oracle subset (Reflector / RedStone adapters conform).
+/// SEP-40 price oracle subset. Reflector conforms — verified: it is the upstream
+/// our aggregator routes to on testnet. No claim is made about any other provider.
 #[contractclient(name = "PriceOracleClient")]
 pub trait PriceOracle {
     fn lastprice(env: Env, asset: Asset) -> Option<PriceData>;

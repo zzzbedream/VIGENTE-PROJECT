@@ -247,8 +247,30 @@ sha256sum v1.wasm   # 6e7d3a3d72fe5fab5323cf4281d1ce1715a1452d988fcbe9adc6fe584c
 stellar contract deploy --wasm-hash 6e7d3a3d72fe… --network testnet
 ```
 
-El hash del artefacto local compilado **coincide** con el descargado del ledger, así que el
-código de la instancia nueva es idéntico al auditado en v1 — verificado, no asumido.
+**Lo que se verifica, y cómo.** Las dos instancias son byte-idénticas entre sí: bajando el
+binario de cada una del ledger y hasheando, ambas dan el mismo `6e7d3a3d…`, así que el código
+de la instancia nueva es el mismo que el auditado en v1 — verificado, no asumido.
+
+```bash
+stellar contract fetch --id CCZNOV65… --network testnet --out-file a.wasm
+stellar contract fetch --id CA4SFW73… --network testnet --out-file b.wasm
+sha256sum a.wasm b.wasm   # ambos 6e7d3a3d72fe5fab5323cf4281d1ce1715a1452d988fcbe9adc6fe584ccffe95
+```
+
+> **Corrección (2026-08-22).** Una versión anterior de este párrafo afirmaba que *el hash del
+> artefacto compilado localmente coincide con el descargado del ledger*. **Hoy no reproduce**:
+> compilar el crate da `7215e1d6…` con el target `wasm32v1-none` y `f7076f83…` con
+> `wasm32-unknown-unknown`, contra el `6e7d3a3d…` del ledger. La causa es deriva de toolchain —
+> el repositorio **no fija** `rust-toolchain.toml`, y el CLI local es 27.0.0 mientras el crate
+> compila contra `soroban-sdk 21.2.0`. La reproducción bit a bit desde fuente exigiría fijar la
+> toolchain original, que no quedó registrada.
+>
+> **Ancla de código en su lugar:** el binario desplegado corresponde al fuente en el commit
+> [`511c2f0`](https://github.com/zzzbedream/VIGENTE-PROJECT/commit/511c2f0) *(fix(contracts):
+> non-custodial hardening — audit red flags resolved)*. Desde entonces el único cambio en
+> `src/lib.rs` es un comentario de documentación, y se comprobó que editarlo **no altera el
+> hash del wasm**. Fijar la toolchain para que la compilación sea reproducible es trabajo
+> pendiente, y se declara como tal en vez de darse por hecho.
 
 Deploy [`b439b4f4`](https://stellar.expert/explorer/testnet/tx/b439b4f4a73c882de6dc891f9101d391e2debd4350975febdbf6c913a48031bd) ·
 `init` [`4d38ae5a`](https://stellar.expert/explorer/testnet/tx/4d38ae5a0aaabeb3ef0ae18be7885473d698c3162038ac81e940ce32cafd326f) ·
