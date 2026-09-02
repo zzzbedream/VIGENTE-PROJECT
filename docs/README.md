@@ -7,6 +7,14 @@ contradict the current ones — see *What is not here* at the bottom.
 
 For evidence over explanation, start with the [`audit/`](../audit/) reports, not this folder.
 
+## Security
+
+| Document | What it answers |
+|---|---|
+| [../audit/10_SECURITY_REVIEW_REPORT.md](../audit/10_SECURITY_REVIEW_REPORT.md) | The complete findings register for the isolated pool and the SEP-40 aggregator — and, first, the statement that the review was **internal, not an independent audit** |
+| [../audit/11_POSTMORTEM.md](../audit/11_POSTMORTEM.md) | Post-mortem of the 2026 Blend pool incidents (YieldBlox oracle manipulation, Comet backstop token) and of our own critical findings, with the process changes |
+| [qms/INCIDENT_LOG.md](qms/INCIDENT_LOG.md) | Every incident, ours or upstream, with severity, root cause and status |
+
 ## Architecture
 
 | Document | What it answers |

@@ -136,7 +136,12 @@ This section is what makes the rest of the document credible.
 - **Fiat ramp integration** — authenticated access to the provider works; the client is not
   built.
 - **dApp** — contracts and CLI only.
-- **Mainnet** — testnet by design, until an audit.
+- **An independent audit.** The security review to date was internal — the author's own,
+  AI-assisted — with findings remediated on-chain. The full register, including open items
+  found on 2026-09-02, is in [`audit/10_SECURITY_REVIEW_REPORT.md`](audit/10_SECURITY_REVIEW_REPORT.md);
+  the post-mortem of the 2026 Blend incidents and of our own findings is in
+  [`audit/11_POSTMORTEM.md`](audit/11_POSTMORTEM.md).
+- **Mainnet** — testnet by design, until that independent audit exists.
 - **External users** — every account here is ours or a labelled synthetic. No TVL.
 
 **And the honest limit of the design:** the reputation layer is **not trustless**. Scores are
