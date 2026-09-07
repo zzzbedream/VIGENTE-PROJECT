@@ -169,6 +169,10 @@ pub enum DataKey {
     TierLtv,
     /// Per-asset cap on total collateral (0 = uncapped) — pilot guardrail.
     Cap(Address),
+    /// Per-asset limit applied to EACH user's holding of that asset
+    /// (0 = uncapped). Finding M-04: without it a single user could absorb the
+    /// whole asset cap. Gates entry only — never an exit.
+    UserCap(Address),
     /// Aggregate collateral per asset currently supplied to Blend.
     TotalCollateral(Address),
     Paused,
@@ -352,6 +356,23 @@ impl MarginController {
             .instance()
             .get(&DataKey::Cap(asset.clone()))
             .unwrap_or(0);
+        // M-04: concentration limit. Checked against this user's holding, not
+        // the pool total, so one account cannot take the whole asset cap.
+        let user_cap: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::UserCap(asset.clone()))
+            .unwrap_or(0);
+        if user_cap > 0 {
+            let held: i128 = env
+                .storage()
+                .persistent()
+                .get(&DataKey::Collateral(user.clone(), asset.clone()))
+                .unwrap_or(0);
+            if held + amount > user_cap {
+                panic_with_error!(&env, Error::UserCapExceeded);
+            }
+        }
         if cap > 0 && total + amount > cap {
             panic!("deposit exceeds collateral cap");
         }
@@ -750,6 +771,26 @@ impl MarginController {
         env.events().publish((symbol_short!("cap"), asset), cap);
     }
 
+    /// Per-user limit for `asset` (0 = uncapped).
+    ///
+    /// Immediate, deliberately: like `set_cap`, this gates only NEW deposits.
+    /// It can never block `repay`, `withdraw_collateral` or `liquidate`, so a
+    /// user already above a freshly lowered cap keeps every exit — they simply
+    /// cannot add more. Parameters that CAN make a healthy position
+    /// liquidatable (the tier ladder) are the ones behind the 48 h timelock.
+    pub fn set_user_cap(env: Env, asset: Address, cap: i128) {
+        let admin = Self::require_admin(&env);
+        admin.require_auth();
+        if cap < 0 {
+            panic!("cap must be non-negative");
+        }
+        Self::require_collateral_asset(&env, &asset);
+        env.storage()
+            .instance()
+            .set(&DataKey::UserCap(asset.clone()), &cap);
+        env.events().publish((symbol_short!("ucap"), asset), cap);
+    }
+
     /// Allowlist a new collateral asset with its SEP-40 feed key and cap.
     /// This is how BENJI (or any RWA) drops in post-sprint: config, not code.
     pub fn add_collateral_asset(env: Env, asset: Address, feed: Asset, cap: i128) {
@@ -836,6 +877,13 @@ impl MarginController {
             .instance()
             .get(&DataKey::CollateralAssets)
             .unwrap_or(Vec::new(&env))
+    }
+
+    pub fn get_user_cap(env: Env, asset: Address) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::UserCap(asset))
+            .unwrap_or(0)
     }
 
     pub fn get_seized(env: Env, asset: Address) -> i128 {

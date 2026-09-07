@@ -1167,3 +1167,85 @@ fn aliasing_la_contabilidad_agregada_cuadra_tras_liquidacion() {
     assert_eq!(suma, units(2_000), "nada se pierde ni se duplica en la liquidacion");
     assert_eq!(h.ctrl.get_collateral(&b, &h.xlm_id), units(1_000));
 }
+
+// =============================================================================
+// M-04 — CAP DE EXPOSICION POR USUARIO
+// =============================================================================
+
+#[test]
+fn user_cap_rechaza_deposito_que_lo_excede() {
+    let h = setup();
+    h.ctrl.set_user_cap(&h.xlm_id, &units(500));
+    assert_eq!(h.ctrl.get_user_cap(&h.xlm_id), units(500));
+
+    let err = h
+        .ctrl
+        .try_deposit_collateral(&h.borrower, &h.xlm_id, &units(501))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::UserCapExceeded as u32),
+        "debe revertir con UserCapExceeded"
+    );
+    assert_eq!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id), 0);
+}
+
+#[test]
+fn user_cap_acepta_deposito_exactamente_en_el_limite() {
+    let h = setup();
+    h.ctrl.set_user_cap(&h.xlm_id, &units(500));
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(500));
+    assert_eq!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id), units(500));
+
+    // Un stroop mas ya no entra: el limite es sobre el acumulado, no por deposito.
+    assert!(h.ctrl.try_deposit_collateral(&h.borrower, &h.xlm_id, &1).is_err());
+}
+
+#[test]
+fn user_cap_no_limita_a_otro_usuario() {
+    // El cap es POR usuario: que uno lo agote no bloquea al resto. Ese es
+    // exactamente el problema que M-04 describe con el cap por activo.
+    let h = setup();
+    h.ctrl.set_user_cap(&h.xlm_id, &units(500));
+    let otro = Address::generate(&h.env);
+    MockUsdcClient::new(&h.env, &h.xlm_id).mint(&otro, &units(1_000));
+
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(500));
+    h.ctrl.deposit_collateral(&otro, &h.xlm_id, &units(500));
+    assert_eq!(h.ctrl.get_collateral(&otro, &h.xlm_id), units(500));
+}
+
+#[test]
+fn user_cap_nunca_atrapa_una_posicion_preexistente() {
+    // INVARIANTE DE CUSTODIA. Un cap que atrapa fondos es peor que no tener cap
+    // y reabriria C-02, que ya esta cerrado. Se comprueba el caso hostil: el
+    // admin baja el cap MUY por debajo de una posicion que ya existe.
+    let h = setup();
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 70);
+    let max = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &(max / 2));
+
+    // El admin baja el cap a 1 XLM: la posicion queda 1000x por encima.
+    h.ctrl.set_user_cap(&h.xlm_id, &units(1));
+
+    // No puede AGREGAR riesgo...
+    assert!(h.ctrl.try_deposit_collateral(&h.borrower, &h.xlm_id, &units(1)).is_err());
+
+    // ...pero todas las salidas siguen abiertas.
+    h.ctrl.repay(&h.borrower, &(max / 2));
+    assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
+    h.ctrl.withdraw_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    assert_eq!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id), 0);
+    assert_eq!(h.xlm.balance(&h.borrower), units(10_000), "recupero todo su colateral");
+}
+
+#[test]
+fn user_cap_en_cero_significa_sin_limite() {
+    let h = setup();
+    assert_eq!(h.ctrl.get_user_cap(&h.xlm_id), 0);
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(5_000));
+    assert_eq!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id), units(5_000));
+}
