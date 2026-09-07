@@ -20,7 +20,7 @@
 extern crate std;
 
 use crate::{
-    Asset, InitConfig, MarginController, MarginControllerClient, Positions, PriceData, Request,
+    Asset, Error, InitConfig, MarginController, MarginControllerClient, Positions, PriceData, Request,
     TierLevel, HEALTH_NO_DEBT, REQ_BORROW, REQ_REPAY, REQ_SUPPLY_COLLATERAL,
     REQ_WITHDRAW_COLLATERAL,
 };
@@ -1082,4 +1082,88 @@ fn prop_i8_ninguna_ruta_opera_con_precio_invalido() {
     // (d) Y sin deuda, retirar tampoco lo consulta.
     h.ctrl.withdraw_collateral(&user, &h.xlm_id, &units(1_000));
     assert_eq!(h.ctrl.get_collateral(&user, &h.xlm_id), 0);
+}
+
+// =============================================================================
+// ALIASING AUTOREFERENCIAL (clase de bug de Comet) — P-04(e) del post mortem
+// =============================================================================
+//
+// El barrido de 10_SECURITY_REVIEW_REPORT.md §3.3 concluyo que NO existe la
+// clase de bug de Comet en estos contratos: ninguna funcion carga dos registros
+// que puedan resolver a la misma clave y persiste ambos. Estos tests fijan esa
+// conclusion para que una regresion futura falle aqui y no en produccion.
+//
+// Funciones con dos parametros de identidad, revisadas una por una:
+//   liquidate(liquidator, user)          <- unico caso alcanzable y significativo
+//   deposit_collateral(user, asset)      <- ver test de abajo
+//   withdraw_collateral(user, asset)     <- idem
+//   get_collateral(user, asset)          <- solo lectura
+//   badge::slash(caller, borrower)       <- `caller` solo alimenta require_vault
+
+#[test]
+fn aliasing_liquidate_con_liquidador_igual_al_deudor_revierte() {
+    let h = setup();
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 1);
+    let max = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &max);
+    // Posicion insana: sin la guarda, el deudor podria autoliquidarse.
+    h.price_oracle
+        .set_price(&Asset::Stellar(h.xlm_id.clone()), &(P_XLM / 2), &INITIAL_TIMESTAMP);
+    assert!(h.ctrl.health(&h.borrower) < 100);
+
+    // `liquidate` devuelve (), asi que el cliente entrega un soroban_sdk::Error:
+    // se compara contra el codigo de contrato exacto, no contra "fallo cualquiera".
+    let err = h.ctrl.try_liquidate(&h.borrower, &h.borrower).err().unwrap().unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::SelfLiquidation as u32),
+        "debe revertir con ESE error (SelfLiquidation), no con uno cualquiera"
+    );
+
+    // Un tercero sí puede liquidarla: la guarda no rompe la gestion de riesgo.
+    let keeper = Address::generate(&h.env);
+    h.ctrl.liquidate(&keeper, &h.borrower);
+    assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
+}
+
+#[test]
+fn aliasing_user_igual_a_asset_no_corrompe_contabilidad() {
+    // `deposit_collateral(user, asset)` toma dos Address. Que coincidan no puede
+    // perder una escritura porque las claves son variantes distintas de DataKey
+    // (Collateral(user,asset) vs TotalCollateral(asset)); ademas el asset debe
+    // estar en la allowlist. Se fija el comportamiento: revierte por allowlist.
+    let h = setup();
+    let r = h.ctrl.try_deposit_collateral(&h.borrower, &h.borrower, &units(10));
+    assert!(r.is_err(), "un asset no listado debe rechazarse aunque coincida con el usuario");
+    assert_eq!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id), 0);
+}
+
+#[test]
+fn aliasing_la_contabilidad_agregada_cuadra_tras_liquidacion() {
+    // sum(colateral por usuario) == TotalCollateral, incluido el camino de
+    // liquidacion, que es donde Comet perdio la escritura.
+    let h = setup();
+    let a = Address::generate(&h.env);
+    let b = Address::generate(&h.env);
+    let xlm_admin = MockUsdcClient::new(&h.env, &h.xlm_id);
+    xlm_admin.mint(&a, &units(1_000));
+    xlm_admin.mint(&b, &units(1_000));
+    h.ctrl.deposit_collateral(&a, &h.xlm_id, &units(1_000));
+    h.ctrl.deposit_collateral(&b, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &a, 850, 40);
+    let max = h.ctrl.max_borrow(&a);
+    h.ctrl.borrow(&a, &max);
+
+    h.price_oracle
+        .set_price(&Asset::Stellar(h.xlm_id.clone()), &(P_XLM / 2), &INITIAL_TIMESTAMP);
+    let keeper = Address::generate(&h.env);
+    h.ctrl.liquidate(&keeper, &a);
+
+    // Tras la liquidacion el colateral de `a` pasa a Seized; el de `b` intacto.
+    let suma = h.ctrl.get_collateral(&a, &h.xlm_id)
+        + h.ctrl.get_collateral(&b, &h.xlm_id)
+        + h.ctrl.get_seized(&h.xlm_id);
+    assert_eq!(suma, units(2_000), "nada se pierde ni se duplica en la liquidacion");
+    assert_eq!(h.ctrl.get_collateral(&b, &h.xlm_id), units(1_000));
 }

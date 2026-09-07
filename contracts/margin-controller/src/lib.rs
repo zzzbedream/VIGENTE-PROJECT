@@ -30,12 +30,40 @@
 
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
-    contract, contractclient, contractimpl, contracttype, symbol_short,
-    token::TokenClient, vec, Address, Env, IntoVal, Map, Symbol, Vec,
+    contract, contractclient, contracterror, contractimpl, contracttype, panic_with_error,
+    symbol_short, token::TokenClient, vec, Address, Env, IntoVal, Map, Symbol, Vec,
 };
 
 #[cfg(test)]
 mod test;
+
+// =============================================================================
+// TYPED ERRORS
+// =============================================================================
+
+/// Errors a caller can branch on. Existing string `panic!`s are left as they
+/// are: rewriting them would churn every `should_panic` test for no gain. New
+/// guards use this enum so a test can assert *which* rule fired, not merely
+/// that the call failed.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    /// `liquidate` called with `liquidator == borrower`.
+    ///
+    /// Harmless while liquidation seizes everything and pays no bonus, but the
+    /// proportional model pays the liquidator out of the borrower's own
+    /// collateral: self-liquidation would then let a borrower extract locked
+    /// collateral at a discount and bypass the health check that guards
+    /// `withdraw_collateral`. Blocked before that lands, not after.
+    SelfLiquidation = 1,
+    /// A deposit or borrow would push this user past their per-user cap.
+    UserCapExceeded = 2,
+    /// `settle_seized` was called with an asset that is not the debt asset.
+    SettleAssetNotDebtAsset = 3,
+    /// `settle_seized` was called with nothing to settle.
+    NothingToSettle = 4,
+}
 
 // =============================================================================
 // CROSS-CONTRACT CLIENTS
@@ -572,6 +600,11 @@ impl MarginController {
     pub fn liquidate(env: Env, liquidator: Address, user: Address) {
         // Risk management must keep working while paused. See `pause()`.
         liquidator.require_auth();
+
+        // Self-referential call: see Error::SelfLiquidation.
+        if liquidator == user {
+            panic_with_error!(&env, Error::SelfLiquidation);
+        }
 
         let debt: i128 = Self::get_debt(env.clone(), user.clone());
         if debt <= 0 {
