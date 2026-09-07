@@ -12,15 +12,18 @@
   ],
   "toolchain": "1.92.0",
   "target": "wasm32-unknown-unknown",
-  "measured_at": { "date": "2026-09-02", "network": "testnet" },
+  "measured_at": {
+    "date": "2026-09-02",
+    "network": "testnet"
+  },
   "contracts": {
     "margin-controller": {
-      "address": "CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ",
-      "deployed": "6e7d3a3d72fe5fab5323cf4281d1ce1715a1452d988fcbe9adc6fe584ccffe95",
-      "reproducible_raw": "9df962017163833e25cc09f1a8f65bac19fee81f250c926381d7a421ea02d4b2",
-      "reproducible_optimized": "1b8d16e7f1da2c4396bb628643de1bb353cc9f90fcbea98da9f73925fdc4c861",
-      "matches_deployed": false,
-      "note": "Deployed before the pin. Superseded by the M-03/M-04 redeploy, whose hash is recorded on deploy."
+      "address": "CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W",
+      "deployed": "64cb01f427a4e72c61c651e327576dea79777e345355bb0c7b7333cb765a0507",
+      "reproducible_raw": "1b8b3d4f1e019f03fe5866916b1421892daf7a7d448c655afb6f04b7e81ed509",
+      "reproducible_optimized": "64cb01f427a4e72c61c651e327576dea79777e345355bb0c7b7333cb765a0507",
+      "matches_deployed": true,
+      "note": "First deployment built with contracts/scripts/build-reproducible.sh. The ledger hash equals the optimized reproducible hash: anyone can rebuild and compare. Closes M-03, M-04 and M-02."
     },
     "oracle-aggregator": {
       "address": "CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4",
@@ -37,6 +40,14 @@
       "reproducible_optimized": "08e39d75c0a0c9e5c3c1c2a128235be0a730af28c3eafbe15d1aad848182caa9",
       "matches_deployed": false,
       "note": "Deployed 2026-05-31, before the pin."
+    },
+    "margin-controller-v-previous": {
+      "address": "CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ",
+      "deployed": "6e7d3a3d72fe5fab5323cf4281d1ce1715a1452d988fcbe9adc6fe584ccffe95",
+      "reproducible_raw": null,
+      "reproducible_optimized": null,
+      "matches_deployed": false,
+      "note": "Superseded 2026-09-02. Built before the toolchain pin, so not reproducible. Kept live: published evidence links to it, and 10 XLM remain locked in it (see audit/12_FINDINGS_CLOSED.md, finding N-01)."
     }
   }
 }

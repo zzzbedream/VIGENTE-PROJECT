@@ -41,9 +41,12 @@ const __dirname = path.dirname(__filename);
 
 const MARGIN_CONTROLLER_ID =
   process.env.NEXT_PUBLIC_MARGIN_CONTROLLER_ID ||
-  // Active instance: same wasm as v1, wired to our own pool CDYUHA3T… .
-  // v1 CA4SFW73… stays live on the canonical pool as published history.
-  "CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ";
+  // Active instance (2026-09-02): closes M-03 (proportional liquidation +
+  // settle_seized), M-04 (per-user cap) and M-02 (try_slash). Wired to our own
+  // pool CDYUHA3T… and our aggregator CCG6EAGO… . Its ledger hash matches the
+  // reproducible build — see contracts/deployed-wasm-hashes.json.
+  // CCZNOV65… and CA4SFW73… stay live as published history.
+  "CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W";
 /** Demo badge holder (score 650 → Silver tier → 7500 bps on the live ladder).
  *  Holds collateral on the active instance, so max_borrow returns a real
  *  figure — see the tier comparison in audit/08_POOL_ACTIVATION.md §6.2. */

@@ -6,7 +6,8 @@ the pool or the oracle:
 
 | Piece | Contract (Stellar testnet) | Role |
 |---|---|---|
-| **Margin Controller (active)** | `CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ` | Reputation → LTV gate + per-user accounting, over **our own** pool |
+| **Margin Controller (active)** | `CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W` | Reputation → LTV gate + per-user accounting, over **our own** pool. Proportional liquidation (M-03), per-user cap (M-04), `try_slash` (M-02). **Ledger hash equals the reproducible build.** |
+| Margin Controller (previous) | `CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ` | Superseded 2026-09-02. Kept live: published evidence links to it, and 10 XLM stay locked in it (finding N-01 in `../../audit/12_FINDINGS_CLOSED.md`) |
 | **Price oracle — `oracle-aggregator` (ours)** | `CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4` | SEP-40 feed in the pool's immutable oracle slot; routes upstream to Reflector |
 | **Blend pool "Vigente" (ours)** | `CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI` | Isolated pool, `status: 0`. Liquidity: `submit` SupplyCollateral / Borrow / Repay / WithdrawCollateral |
 | Reputation Registry (`vigente-badge`) | `CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD` | `get_score` / `is_defaulted` / `slash` (3-of-5 threshold ed25519) |
@@ -32,8 +33,8 @@ only the reputation differs.
 
 | Account | Score | `ltv_bps_for` | `max_borrow` |
 |---|---|---|---|
-| `GC6IPCM3…` | 650 (Silver) | 7500 | 1223133480 |
-| `GDESGH52…` | 850 (Gold) | 8500 | 1386217944 |
+| `GC6IPCM3…` | 650 (Silver) | 7500 | 1447596174 |
+| `GDESGH52…` | 850 (Gold) | 8500 | 1640608998 |
 
 The ratio is exactly `8500 / 7500`. Absolute figures drift between reads
 because the price is live; the ratio does not.
@@ -43,7 +44,7 @@ Reproduce the reads (no keys needed):
 ```bash
 stellar contract invoke --network testnet --send=no \
   --source-account <ANY_FUNDED_ACCOUNT> \
-  --id CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ \
+  --id CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W \
   -- ltv_bps_for --user GC6IPCM3OO44PW4Y62XD54HLT5Q23E5OFNFMYPMNUDSDRUK37ZFB6ECZ
 # → 7500
 ```

@@ -140,7 +140,7 @@ This section is what makes the rest of the document credible.
   AI-assisted — with findings remediated on-chain. The full register, including open items
   found on 2026-09-02, is in [`audit/10_SECURITY_REVIEW_REPORT.md`](audit/10_SECURITY_REVIEW_REPORT.md);
   the post-mortem of the 2026 Blend incidents and of our own findings is in
-  [`audit/11_POSTMORTEM.md`](audit/11_POSTMORTEM.md).
+  [`audit/11_POSTMORTEM.md`](audit/11_POSTMORTEM.md) · [`audit/12_FINDINGS_CLOSED.md`](audit/12_FINDINGS_CLOSED.md).
 - **Mainnet** — testnet by design, until that independent audit exists.
 - **External users** — every account here is ours or a labelled synthetic. No TVL.
 
