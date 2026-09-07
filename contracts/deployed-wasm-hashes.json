@@ -1,0 +1,42 @@
+{
+  "_comment": [
+    "Wasm hash manifest — finding M-05 (audit/10_SECURITY_REVIEW_REPORT.md).",
+    "'reproducible' is the sha256 produced by contracts/scripts/build-reproducible.sh with the",
+    "toolchain pinned in rust-toolchain.toml. CI rebuilds and compares against it, so a change in",
+    "source or toolchain that nobody declared fails the build.",
+    "'deployed' is the sha256 fetched from the ledger with `stellar contract fetch`.",
+    "READ THIS: the deployed binaries were built BEFORE the toolchain was pinned and before path",
+    "remapping existed, so they do NOT match the reproducible hashes and cannot be reproduced from",
+    "this tree. That is the honest state of M-05 today, not a defect introduced here. The next",
+    "controller deployment is built with this script and its hash is recorded as matching."
+  ],
+  "toolchain": "1.92.0",
+  "target": "wasm32-unknown-unknown",
+  "measured_at": { "date": "2026-09-02", "network": "testnet" },
+  "contracts": {
+    "margin-controller": {
+      "address": "CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ",
+      "deployed": "6e7d3a3d72fe5fab5323cf4281d1ce1715a1452d988fcbe9adc6fe584ccffe95",
+      "reproducible_raw": "9df962017163833e25cc09f1a8f65bac19fee81f250c926381d7a421ea02d4b2",
+      "reproducible_optimized": "1b8d16e7f1da2c4396bb628643de1bb353cc9f90fcbea98da9f73925fdc4c861",
+      "matches_deployed": false,
+      "note": "Deployed before the pin. Superseded by the M-03/M-04 redeploy, whose hash is recorded on deploy."
+    },
+    "oracle-aggregator": {
+      "address": "CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4",
+      "deployed": "73ec959e036f44dc9ef3e8ef07bac732808e85840aed0acf19949b943469d6a5",
+      "reproducible_raw": "dc7bee4b5d3a3a0e6f0f7a1ceb058009392efe07b69e063dfbf23df41b58f1cc",
+      "reproducible_optimized": "8b66b840faf2b3273b55d5e6a75cb85abf04f463081d39b52192a0dac98b7cb8",
+      "matches_deployed": false,
+      "note": "Sits in the pool's immutable oracle slot: it cannot be replaced without a new pool. The mismatch is permanent for this deployment and is disclosed, not fixed."
+    },
+    "vigente-badge": {
+      "address": "CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD",
+      "deployed": "60fe64dc480893e28a54d35d544bc0344666e5e9f7cda6851f38ec6cc6d66c80",
+      "reproducible_raw": "d7299b17594cb81d496fdd3f17f114d49bcd8c9876f112117c7643abf7fa97bb",
+      "reproducible_optimized": "08e39d75c0a0c9e5c3c1c2a128235be0a730af28c3eafbe15d1aad848182caa9",
+      "matches_deployed": false,
+      "note": "Deployed 2026-05-31, before the pin."
+    }
+  }
+}

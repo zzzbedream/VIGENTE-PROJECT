@@ -1,0 +1,78 @@
+# Finding M-05 — a reviewer must be able to rebuild our wasm and get the same hash.
+#
+# This job rebuilds every contract with the pinned toolchain and the path remapping in
+# contracts/scripts/build-reproducible.sh, then compares the result against the
+# `reproducible_raw` values recorded in contracts/deployed-wasm-hashes.json.
+#
+# A mismatch means one of: source changed, toolchain changed, or the build stopped being
+# deterministic. All three should fail loudly rather than be discovered at deploy time.
+name: wasm reproducibility
+
+on:
+  push:
+    paths: ['contracts/**', 'rust-toolchain.toml', '.github/workflows/wasm-reproducibility.yml']
+  pull_request:
+    paths: ['contracts/**', 'rust-toolchain.toml']
+  workflow_dispatch:
+
+jobs:
+  rebuild-and-compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-toolchain.toml drives the version; installing via rustup honours it.
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - name: Install Stellar CLI
+        run: |
+          curl -sSfL https://github.com/stellar/stellar-cli/releases/download/v23.1.4/stellar-cli-23.1.4-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C /usr/local/bin stellar || cargo install --locked stellar-cli --version 23.1.4
+
+      - name: Reproducible build
+        run: bash contracts/scripts/build-reproducible.sh | tee /tmp/build.txt
+
+      - name: Compare against manifest
+        run: |
+          python3 - <<'PY'
+          import json, re, sys
+          manifest = json.load(open('contracts/deployed-wasm-hashes.json'))
+          built = {}
+          name = None
+          for line in open('/tmp/build.txt'):
+              m = re.match(r'^(\S+)\s+raw=([0-9a-f]{64})', line)
+              if m:
+                  name, h = m.group(1), m.group(2)
+                  built[name] = h
+          failures = []
+          for c, meta in manifest['contracts'].items():
+              want = meta['reproducible_raw']
+              got = built.get(c)
+              if got is None:
+                  failures.append(f'{c}: not built')
+              elif got != want:
+                  failures.append(f'{c}: expected {want}, built {got}')
+              else:
+                  print(f'{c}: reproducible OK ({got[:16]}...)')
+          if failures:
+              print('\nReproducibility check FAILED:')
+              for f in failures:
+                  print('  -', f)
+              print('\nIf this change is intentional, rebuild locally with')
+              print('  bash contracts/scripts/build-reproducible.sh')
+              print('and update contracts/deployed-wasm-hashes.json in the same commit.')
+              sys.exit(1)
+          PY
+
+      # Informational: what is actually on the ledger right now. Deployed binaries predate
+      # the pin, so a mismatch here is expected and documented in the manifest.
+      - name: Report on-chain hashes
+        continue-on-error: true
+        run: |
+          python3 -c "
+          import json
+          m = json.load(open('contracts/deployed-wasm-hashes.json'))
+          for c, v in m['contracts'].items():
+              print(f\"{c}: deployed={v['deployed'][:16]}... matches_reproducible={v['matches_deployed']}\")
+          "

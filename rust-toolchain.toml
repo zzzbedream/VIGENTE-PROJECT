@@ -1,0 +1,14 @@
+# Pinned so a wasm build is reproducible byte-for-byte across machines and CI.
+#
+# Why this exists: finding M-05 in audit/10_SECURITY_REVIEW_REPORT.md — builds were
+# not reproducible, so nobody could confirm that the wasm on the ledger was built
+# from this source. Reviewers must be able to rebuild and compare hashes themselves.
+#
+# The version is the toolchain the contracts are actually built and tested with, not
+# an aspirational one. Changing it changes every wasm hash: treat a bump as a release
+# event, rebuild, and update contracts/deployed-wasm-hashes.json in the same commit.
+[toolchain]
+channel = "1.92.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown", "wasm32v1-none"]
+profile = "minimal"
