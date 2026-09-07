@@ -626,7 +626,9 @@ fn test_liquidate_on_price_drop_seizes_and_slashes() {
     assert!(hp < 100, "expected unhealthy, got {hp}");
 
     let keeper = Address::generate(&h.env);
-    h.ctrl.liquidate(&keeper, &h.borrower);
+    // Colateral $95 < deuda $161: INSOLVENTE. Es la unica ruta que incauta el
+    // 100 %, y la unica que genera colateral en Seized bajo el Modelo A.
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1));
 
     // Debt written off into the settlement bucket; claim seized.
     assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
@@ -636,6 +638,8 @@ fn test_liquidate_on_price_drop_seizes_and_slashes() {
     assert_eq!(h.ctrl.get_seized(&h.xlm_id), amount);
     // Reputation burned atomically, cross-contract.
     assert!(h.badge.is_defaulted(&h.borrower));
+    // Y el faltante queda registrado, no descartado en silencio.
+    assert!(h.ctrl.get_bad_debt() > 0, "la insolvencia debe registrar bad debt");
 }
 
 #[test]
@@ -646,7 +650,7 @@ fn test_liquidate_healthy_position_fails() {
     mint_badge(&h, &h.borrower, 850, 1);
     h.ctrl.borrow(&h.borrower, &units(50));
     let keeper = Address::generate(&h.env);
-    h.ctrl.liquidate(&keeper, &h.borrower);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1));
 }
 
 #[test]
@@ -654,7 +658,7 @@ fn test_liquidate_healthy_position_fails() {
 fn test_liquidate_without_debt_fails() {
     let h = setup();
     let keeper = Address::generate(&h.env);
-    h.ctrl.liquidate(&keeper, &h.borrower);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1));
 }
 
 // =============================================================================
@@ -747,7 +751,7 @@ fn test_pause_does_not_block_liquidate() {
     h.ctrl.pause();
 
     let keeper = Address::generate(&h.env);
-    h.ctrl.liquidate(&keeper, &h.borrower);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1));
     assert!(h.badge.is_defaulted(&h.borrower));
     assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
 }
@@ -770,7 +774,9 @@ fn test_queued_ltv_downgrade_respects_grace_period() {
     assert!(h.ctrl.get_pending_tiers().is_some());
     assert_eq!(h.ctrl.health(&h.borrower), 100);
     let keeper = Address::generate(&h.env);
-    assert!(h.ctrl.try_liquidate(&keeper, &h.borrower).is_err());
+    assert!(h.ctrl
+        .try_liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1))
+        .is_err());
     assert!(h.ctrl.try_apply_tier_ltv().is_err());
 
     // After the grace window anyone applies; the user had N hours to react.
@@ -781,8 +787,18 @@ fn test_queued_ltv_downgrade_respects_grace_period() {
     h.ctrl.apply_tier_ltv();
     assert!(h.ctrl.get_pending_tiers().is_none());
     assert!(h.ctrl.health(&h.borrower) < 100);
-    h.ctrl.liquidate(&keeper, &h.borrower);
-    assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
+    // Solvente pero insana: ruta PARCIAL. El deudor no pierde todo.
+    // Bajo el Modelo A el liquidador PAGA deuda, asi que necesita el activo.
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&keeper, &units(1_000));
+    let deuda_antes = h.ctrl.get_debt(&h.borrower);
+    let colateral_antes = h.ctrl.get_collateral(&h.borrower, &h.xlm_id);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(20));
+    assert_eq!(h.ctrl.get_debt(&h.borrower), deuda_antes - units(20));
+    assert!(
+        h.ctrl.get_collateral(&h.borrower, &h.xlm_id) > 0,
+        "la liquidacion parcial NO puede dejar al deudor en cero"
+    );
+    assert!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id) < colateral_antes);
 }
 
 #[test]
@@ -801,7 +817,9 @@ fn test_slash_grace_protects_healthy_position() {
     // snapshot: still healthy, not liquidatable.
     assert_eq!(h.ctrl.health(&h.borrower), 100);
     let keeper = Address::generate(&h.env);
-    assert!(h.ctrl.try_liquidate(&keeper, &h.borrower).is_err());
+    assert!(h.ctrl
+        .try_liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1))
+        .is_err());
 
     // Past the grace window it drops to the lowest tier and is liquidatable —
     // and liquidate must not double-slash an already-defaulted borrower.
@@ -810,9 +828,11 @@ fn test_slash_grace_protects_healthy_position() {
     h.price_oracle.set_price(&Asset::Stellar(h.xlm_id.clone()), &P_XLM, &now);
     h.price_oracle.set_price(&Asset::Stellar(h.usdc_id.clone()), &P_USDC, &now);
     assert!(h.ctrl.health(&h.borrower) < 100);
-    h.ctrl.liquidate(&keeper, &h.borrower);
-    assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
-    assert_eq!(h.ctrl.get_seized(&h.xlm_id), units(1_000));
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&keeper, &units(1_000));
+    let deuda_antes = h.ctrl.get_debt(&h.borrower);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(20));
+    assert_eq!(h.ctrl.get_debt(&h.borrower), deuda_antes - units(20));
+    assert!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id) > 0);
 }
 
 #[test]
@@ -1063,7 +1083,10 @@ fn prop_i8_ninguna_ruta_opera_con_precio_invalido() {
     assert!(h.ctrl.try_max_borrow(&user).is_err(), "max_borrow operó con precio viejo");
     assert!(h.ctrl.try_borrow(&user, &1).is_err(), "borrow operó con precio viejo");
     assert!(h.ctrl.try_health(&user).is_err(), "health operó con precio viejo");
-    assert!(h.ctrl.try_liquidate(&keeper, &user).is_err(), "liquidate operó con precio viejo");
+    assert!(
+        h.ctrl.try_liquidate(&keeper, &user, &h.xlm_id, &units(1)).is_err(),
+        "liquidate opero con precio viejo"
+    );
     assert!(
         h.ctrl.try_withdraw_collateral(&user, &h.xlm_id, &units(1)).is_err(),
         "withdraw con deuda operó con precio viejo"
@@ -1114,7 +1137,12 @@ fn aliasing_liquidate_con_liquidador_igual_al_deudor_revierte() {
 
     // `liquidate` devuelve (), asi que el cliente entrega un soroban_sdk::Error:
     // se compara contra el codigo de contrato exacto, no contra "fallo cualquiera".
-    let err = h.ctrl.try_liquidate(&h.borrower, &h.borrower).err().unwrap().unwrap();
+    let err = h
+        .ctrl
+        .try_liquidate(&h.borrower, &h.borrower, &h.xlm_id, &units(1))
+        .err()
+        .unwrap()
+        .unwrap();
     assert_eq!(
         err,
         soroban_sdk::Error::from_contract_error(Error::SelfLiquidation as u32),
@@ -1123,7 +1151,7 @@ fn aliasing_liquidate_con_liquidador_igual_al_deudor_revierte() {
 
     // Un tercero sí puede liquidarla: la guarda no rompe la gestion de riesgo.
     let keeper = Address::generate(&h.env);
-    h.ctrl.liquidate(&keeper, &h.borrower);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1));
     assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
 }
 
@@ -1158,7 +1186,7 @@ fn aliasing_la_contabilidad_agregada_cuadra_tras_liquidacion() {
     h.price_oracle
         .set_price(&Asset::Stellar(h.xlm_id.clone()), &(P_XLM / 2), &INITIAL_TIMESTAMP);
     let keeper = Address::generate(&h.env);
-    h.ctrl.liquidate(&keeper, &a);
+    h.ctrl.liquidate(&keeper, &a, &h.xlm_id, &units(1));
 
     // Tras la liquidacion el colateral de `a` pasa a Seized; el de `b` intacto.
     let suma = h.ctrl.get_collateral(&a, &h.xlm_id)
@@ -1248,4 +1276,227 @@ fn user_cap_en_cero_significa_sin_limite() {
     assert_eq!(h.ctrl.get_user_cap(&h.xlm_id), 0);
     h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(5_000));
     assert_eq!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id), units(5_000));
+}
+
+// =============================================================================
+// M-03 — LIQUIDACION PROPORCIONAL (Modelo A) Y RUTA DE SALIDA
+// =============================================================================
+
+/// Deja al deudor insano pero SOLVENTE: colateral por encima de la deuda, salud
+/// bajo 100. Es la unica situacion donde corre la ruta parcial.
+fn posicion_insana_pero_solvente(h: &Harness) -> i128 {
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(h, &h.borrower, 850, 90);
+    h.ctrl.borrow(&h.borrower, &units(100));
+    // 55 % del precio: valor ~105.8 > deuda 100 (solvente), salud ~89 < 100.
+    h.price_oracle.set_price(
+        &Asset::Stellar(h.xlm_id.clone()),
+        &(P_XLM * 55 / 100),
+        &INITIAL_TIMESTAMP,
+    );
+    assert!(h.ctrl.health(&h.borrower) < 100, "debe quedar insana");
+    units(100)
+}
+
+fn liquidador_financiado(h: &Harness) -> Address {
+    let k = Address::generate(&h.env);
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&k, &units(10_000));
+    k
+}
+
+#[test]
+fn m03_liquidacion_parcial_no_incauta_todo() {
+    let h = setup();
+    posicion_insana_pero_solvente(&h);
+    let keeper = liquidador_financiado(&h);
+
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(20));
+
+    // Deuda baja exactamente lo repagado, no a cero.
+    assert_eq!(h.ctrl.get_debt(&h.borrower), units(80));
+    // Y queda excedente: esto es lo que M-03 pedia.
+    let resto = h.ctrl.get_collateral(&h.borrower, &h.xlm_id);
+    assert!(resto > units(700), "el excedente debe seguir siendo del deudor, hay {resto}");
+    // El liquidador cobro colateral con descuento, en su propia wallet.
+    assert!(h.xlm.balance(&keeper) > 0, "el liquidador recibe colateral");
+    // Y el protocolo se quedo con su parte de la penalidad.
+    assert!(h.ctrl.get_seized(&h.xlm_id) > 0, "el corte del protocolo va a Seized");
+}
+
+#[test]
+fn m03_el_excedente_es_retirable_por_el_deudor() {
+    // INVARIANTE CENTRAL DE M-03. Tras una liquidacion parcial el deudor no
+    // queda expropiado: repaga lo que resta y recupera TODO su excedente.
+    let h = setup();
+    posicion_insana_pero_solvente(&h);
+    let keeper = liquidador_financiado(&h);
+    let antes = h.ctrl.get_collateral(&h.borrower, &h.xlm_id);
+
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(20));
+    let excedente = h.ctrl.get_collateral(&h.borrower, &h.xlm_id);
+    assert!(excedente > 0 && excedente < antes);
+
+    // El deudor cancela el resto y retira su excedente completo.
+    h.ctrl.repay(&h.borrower, &units(80));
+    assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
+    h.ctrl.withdraw_collateral(&h.borrower, &h.xlm_id, &excedente);
+    assert_eq!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id), 0);
+}
+
+#[test]
+fn m03_liquidaciones_sucesivas_hasta_recuperar_salud() {
+    // Un solo close factor no siempre restaura la salud.
+    let h = setup();
+    posicion_insana_pero_solvente(&h);
+    let keeper = liquidador_financiado(&h);
+
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(20));
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(20));
+    assert_eq!(h.ctrl.get_debt(&h.borrower), units(60));
+    assert!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id) > 0);
+}
+
+#[test]
+fn m03_close_factor_limita_una_sola_liquidacion() {
+    let h = setup();
+    posicion_insana_pero_solvente(&h);
+    let keeper = liquidador_financiado(&h);
+
+    // 50 % de 100 = 50. Un stroop mas debe rebotar.
+    let err = h
+        .ctrl
+        .try_liquidate(&keeper, &h.borrower, &h.xlm_id, &(units(50) + 1))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::RepayExceedsCloseFactor as u32)
+    );
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(50));
+}
+
+#[test]
+fn m03_settle_seized_rechaza_un_activo_que_no_es_el_de_deuda() {
+    // El colateral incautado que NO es el activo de deuda necesita un swap, y
+    // este contrato no tiene ninguno. Revierte diciendolo, en vez de fingir.
+    let h = setup();
+    let err = h.ctrl.try_settle_seized(&h.xlm_id).err().unwrap().unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::SettleAssetNotDebtAsset as u32)
+    );
+}
+
+#[test]
+fn m03_settle_seized_sin_nada_pendiente_revierte() {
+    let h = setup();
+    let err = h.ctrl.try_settle_seized(&h.usdc_id).err().unwrap().unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::NothingToSettle as u32)
+    );
+}
+
+#[test]
+fn m03_settle_seized_repaga_contra_el_pool() {
+    // Ruta de salida completa: insolvencia -> Seized + PendingSettlement ->
+    // settle_seized los reduce repagando al pool. Sin parametro de destino.
+    //
+    // Ojo con el diseno del escenario: el activo de deuda se lista TAMBIEN como
+    // colateral, pero su precio no sirve para provocar la insolvencia, porque
+    // aparece en el numerador y el denominador del ratio y se cancela. La
+    // insolvencia se provoca con el XLM; el USDC incautado es lo que despues
+    // permite ejercitar el unico caso implementado (asset == borrow_asset).
+    let h = setup();
+    h.ctrl
+        .add_collateral_asset(&h.usdc_id, &Asset::Stellar(h.usdc_id.clone()), &0_i128);
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&h.borrower, &units(1_000));
+
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000)); // ~192
+    h.ctrl.deposit_collateral(&h.borrower, &h.usdc_id, &units(100)); // 100
+    mint_badge(&h, &h.borrower, 850, 91);
+    h.ctrl.borrow(&h.borrower, &units(200));
+
+    // El XLM se desploma: 19 + 100 = 119 < 200 -> insolvente.
+    h.price_oracle.set_price(
+        &Asset::Stellar(h.xlm_id.clone()),
+        &(P_XLM * 10 / 100),
+        &INITIAL_TIMESTAMP,
+    );
+    let keeper = liquidador_financiado(&h);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1));
+
+    let seized_usdc = h.ctrl.get_seized(&h.usdc_id);
+    let pending = h.ctrl.get_pending_settlement();
+    assert_eq!(seized_usdc, units(100), "la insolvencia incauta ambos colaterales");
+    assert_eq!(pending, units(200), "la deuda entera pasa a settlement");
+    assert!(h.ctrl.get_bad_debt() > 0, "el faltante queda registrado, no descartado");
+    assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
+
+    // La ruta restringida: reduce ambos buckets repagando al pool.
+    h.ctrl.settle_seized(&h.usdc_id);
+    assert_eq!(h.ctrl.get_seized(&h.usdc_id), 0);
+    assert_eq!(h.ctrl.get_pending_settlement(), pending - seized_usdc);
+
+    // Y no queda nada mas que liquidar por esa via.
+    let err = h.ctrl.try_settle_seized(&h.usdc_id).err().unwrap().unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::NothingToSettle as u32)
+    );
+}
+
+#[test]
+fn m03_fuzz_la_liquidacion_nunca_incauta_mas_de_lo_que_hay() {
+    // Invariante: seize <= colateral disponible, el excedente nunca es negativo
+    // y la deuda nunca crece. Precios y montos aleatorios.
+    let h = setup();
+    h.env.budget().reset_unlimited();
+    let mut rng = StdRng::seed_from_u64(7);
+    let xlm_admin = MockUsdcClient::new(&h.env, &h.xlm_id);
+    let usdc_admin = MockUsdcClient::new(&h.env, &h.usdc_id);
+
+    for i in 0..25_u32 {
+        let user = Address::generate(&h.env);
+        let keeper = Address::generate(&h.env);
+        let colateral: i128 = units(rng.gen_range(500..=3_000));
+        xlm_admin.mint(&user, &colateral);
+        usdc_admin.mint(&keeper, &units(100_000));
+
+        h.price_oracle
+            .set_price(&Asset::Stellar(h.xlm_id.clone()), &P_XLM, &INITIAL_TIMESTAMP);
+        h.ctrl.deposit_collateral(&user, &h.xlm_id, &colateral);
+        mint_badge(&h, &user, 850, 2_000 + i);
+
+        let max = h.ctrl.max_borrow(&user);
+        if max <= units(10) {
+            continue;
+        }
+        let deuda = max / 2;
+        h.ctrl.borrow(&user, &deuda);
+
+        // Caida aleatoria que deja la posicion insana.
+        let factor: i128 = rng.gen_range(30..=60);
+        h.price_oracle.set_price(
+            &Asset::Stellar(h.xlm_id.clone()),
+            &(P_XLM * factor / 100),
+            &INITIAL_TIMESTAMP,
+        );
+        if h.ctrl.health(&user) >= 100 {
+            continue;
+        }
+
+        let repay = deuda / 4;
+        let antes = h.ctrl.get_collateral(&user, &h.xlm_id);
+        let _ = h.ctrl.try_liquidate(&keeper, &user, &h.xlm_id, &repay);
+
+        let despues = h.ctrl.get_collateral(&user, &h.xlm_id);
+        assert!(despues >= 0, "iter {i}: el excedente no puede ser negativo");
+        assert!(despues <= antes, "iter {i}: la liquidacion no puede aumentar colateral");
+        assert!(
+            h.ctrl.get_debt(&user) <= deuda,
+            "iter {i}: la deuda nunca crece al liquidar"
+        );
+    }
 }

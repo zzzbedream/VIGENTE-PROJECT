@@ -63,6 +63,12 @@ pub enum Error {
     SettleAssetNotDebtAsset = 3,
     /// `settle_seized` was called with nothing to settle.
     NothingToSettle = 4,
+    /// `repay_amount` exceeds `CLOSE_FACTOR_BPS` of the outstanding debt.
+    RepayExceedsCloseFactor = 5,
+    /// The requested repay would seize more collateral than the borrower holds
+    /// in that asset, yet the position as a whole is not insolvent. The
+    /// liquidator should lower `repay_amount` or pick another asset.
+    SeizeExceedsCollateral = 6,
 }
 
 // =============================================================================
@@ -186,6 +192,9 @@ pub enum DataKey {
     Seized(Address),
     /// Debt written off at liquidation, pending Blend-side settlement.
     PendingSettlement,
+    /// Debt that collateral could not cover at liquidation (insolvency).
+    /// Recorded, never silently dropped.
+    BadDebt,
     /// IMMUTABLE floor for any tier LTV — set once at init, no setter exists.
     /// Prevents the admin from making positions liquidatable by crushing LTVs.
     MinLtvFloor,
@@ -253,6 +262,17 @@ pub struct InitConfig {
 /// reserve c_factor (90% on the canonical testnet pool) so the aggregate
 /// position can never be liquidated by Blend at a user's limit.
 pub const MAX_LTV_BPS: u32 = 9_000;
+
+/// Liquidation parameters. Deliberately constants, not admin-settable: a lever
+/// the admin can move is a lever the admin can abuse, and these do not need to
+/// change during a capped pilot. Fewer admin powers is the point (see M-07).
+///
+/// Fraction of the debt a single liquidation may repay.
+pub const CLOSE_FACTOR_BPS: u32 = 5_000; // 50 %
+/// Discount the liquidator gets on the seized collateral.
+pub const LIQUIDATION_PENALTY_BPS: u32 = 800; // 8 %
+/// Share of that penalty routed to the protocol instead of the liquidator.
+pub const PROTOCOL_PENALTY_SHARE_BPS: u32 = 2_000; // 20 % of 8 pts = 1.6 pts
 
 /// `health()` sentinel for a user with zero debt.
 pub const HEALTH_NO_DEBT: u32 = u32::MAX;
@@ -618,14 +638,40 @@ impl MarginController {
     /// Blend-side settlement (swap seized collateral → borrow asset → repay)
     /// is a manual keeper runbook in this sprint; automated in T2. The event
     /// payload carries everything a keeper (or a future OEV solver) needs.
-    pub fn liquidate(env: Env, liquidator: Address, user: Address) {
-        // Risk management must keep working while paused. See `pause()`.
+    /// Partial liquidation, Model A: the liquidator repays part of the debt in
+    /// the borrow asset and receives collateral at a discount. No swap, so no
+    /// slippage and no dependency on a DEX.
+    ///
+    /// Closes M-03. Before this, `liquidate` seized 100 % of the collateral into
+    /// a bucket with no way out. Now it seizes only what the repayment plus the
+    /// penalty is worth; the remainder stays with the borrower and withdrawable.
+    ///
+    ///   penalty_value    = repay_amount x LIQUIDATION_PENALTY_BPS
+    ///   protocol_cut     = penalty_value x PROTOCOL_PENALTY_SHARE_BPS
+    ///   liquidator_bonus = penalty_value - protocol_cut   (split, not charged twice)
+    ///   seize_value      = repay_amount + penalty_value
+    ///   surplus          = collateral_held - seize_amount (stays with the borrower)
+    ///
+    /// Successive calls are allowed until `health >= 100`: one close factor does
+    /// not always restore health.
+    ///
+    /// Never reads the pause flag - risk management must work while paused.
+    pub fn liquidate(
+        env: Env,
+        liquidator: Address,
+        user: Address,
+        collateral_asset: Address,
+        repay_amount: i128,
+    ) {
         liquidator.require_auth();
 
-        // Self-referential call: see Error::SelfLiquidation.
         if liquidator == user {
             panic_with_error!(&env, Error::SelfLiquidation);
         }
+        if repay_amount <= 0 {
+            panic!("repay_amount must be positive");
+        }
+        Self::require_collateral_asset(&env, &collateral_asset);
 
         let debt: i128 = Self::get_debt(env.clone(), user.clone());
         if debt <= 0 {
@@ -636,13 +682,114 @@ impl MarginController {
             panic!("position is healthy");
         }
 
-        // Seize every collateral claim into the protocol bucket.
+        let borrow_asset: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::BorrowAsset)
+            .expect("not initialized");
+        let me = env.current_contract_address();
+        let now = env.ledger().timestamp();
+
+        let collateral_value = Self::raw_collateral_value(&env, &user);
+        if collateral_value < debt {
+            Self::liquidate_insolvent(&env, &user, debt, collateral_value, now);
+            return;
+        }
+
+        if repay_amount > debt * CLOSE_FACTOR_BPS as i128 / 10_000 {
+            panic_with_error!(&env, Error::RepayExceedsCloseFactor);
+        }
+
+        let penalty_value = repay_amount * LIQUIDATION_PENALTY_BPS as i128 / 10_000;
+        let protocol_cut_value = penalty_value * PROTOCOL_PENALTY_SHARE_BPS as i128 / 10_000;
+        let liquidator_value = repay_amount + (penalty_value - protocol_cut_value);
+
+        // Ceiling on both legs, then summed, so the two cannot disagree and the
+        // rounding error can never be charged twice to the surplus.
+        let to_liquidator = Self::value_to_collateral(&env, &collateral_asset, liquidator_value);
+        let to_protocol = Self::value_to_collateral(&env, &collateral_asset, protocol_cut_value);
+        let seize_amount = to_liquidator + to_protocol;
+
+        let key = DataKey::Collateral(user.clone(), collateral_asset.clone());
+        let held: i128 = env.storage().persistent().get(&key).unwrap_or(0);
+        if seize_amount > held {
+            // Solvent overall but not in this asset: the liquidator must lower
+            // the amount or pick another collateral. Never silently over-seize.
+            panic_with_error!(&env, Error::SeizeExceedsCollateral);
+        }
+
+        // 1. The liquidator funds the repayment.
+        TokenClient::new(&env, &borrow_asset).transfer(&liquidator, &me, &repay_amount);
+        Self::authorize_pool_pull(&env, &borrow_asset, repay_amount);
+        let mut reqs: Vec<Request> = Vec::new(&env);
+        reqs.push_back(Request {
+            address: borrow_asset.clone(),
+            amount: repay_amount,
+            request_type: REQ_REPAY,
+        });
+        Self::pool_client(&env).submit(&me, &me, &me, &reqs);
+
+        // 2. Books first, transfer after.
+        env.storage().persistent().set(&key, &(held - seize_amount));
+        let total_coll: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalCollateral(collateral_asset.clone()))
+            .unwrap_or(0);
+        env.storage().instance().set(
+            &DataKey::TotalCollateral(collateral_asset.clone()),
+            &(total_coll - to_liquidator),
+        );
+        let debt_key = DataKey::Debt(user.clone());
+        env.storage().persistent().set(&debt_key, &(debt - repay_amount));
+        let total_debt: i128 = env.storage().instance().get(&DataKey::TotalDebt).unwrap_or(0);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalDebt, &(total_debt - repay_amount));
+        let seized: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::Seized(collateral_asset.clone()))
+            .unwrap_or(0);
+        env.storage().instance().set(
+            &DataKey::Seized(collateral_asset.clone()),
+            &(seized + to_protocol),
+        );
+
+        // 3. The liquidator share leaves the pool straight to their wallet. The
+        //    protocol cut stays in the pool, tracked by `Seized`.
+        let mut out: Vec<Request> = Vec::new(&env);
+        out.push_back(Request {
+            address: collateral_asset.clone(),
+            amount: to_liquidator,
+            request_type: REQ_WITHDRAW_COLLATERAL,
+        });
+        Self::pool_client(&env).submit(&me, &me, &liquidator, &out);
+
+        env.events().publish(
+            (symbol_short!("liq"), user.clone()),
+            (repay_amount, to_liquidator, to_protocol, hp, now),
+        );
+    }
+
+    /// Insolvent position: collateral is worth less than the debt. No penalty is
+    /// charged - there is nothing to reward - everything is seized, the
+    /// shortfall is recorded as bad debt rather than quietly dropped, and the
+    /// badge is slashed.
+    ///
+    /// The only path that seizes a whole position under Model A.
+    fn liquidate_insolvent(
+        env: &Env,
+        user: &Address,
+        debt: i128,
+        collateral_value: i128,
+        now: u64,
+    ) {
         let assets: Vec<Address> = env
             .storage()
             .instance()
             .get(&DataKey::CollateralAssets)
-            .unwrap_or(Vec::new(&env));
-        let now = env.ledger().timestamp();
+            .unwrap_or(Vec::new(env));
         for asset in assets.iter() {
             let key = DataKey::Collateral(user.clone(), asset.clone());
             let held: i128 = env.storage().persistent().get(&key).unwrap_or(0);
@@ -653,15 +800,10 @@ impl MarginController {
             let seized_key = DataKey::Seized(asset.clone());
             let seized: i128 = env.storage().instance().get(&seized_key).unwrap_or(0);
             env.storage().instance().set(&seized_key, &(seized + held));
-
-            let price = Self::fresh_price(&env, &asset);
-            env.events().publish(
-                (symbol_short!("seize"), user.clone()),
-                (asset, held, price, now),
-            );
+            env.events()
+                .publish((symbol_short!("seize"), user.clone()), (asset, held, now));
         }
 
-        // Write the debt off the user's books into the settlement bucket.
         env.storage().persistent().set(&DataKey::Debt(user.clone()), &0_i128);
         env.storage().persistent().remove(&DataKey::LtvAtBorrow(user.clone()));
         let total: i128 = env.storage().instance().get(&DataKey::TotalDebt).unwrap_or(0);
@@ -675,19 +817,89 @@ impl MarginController {
             .instance()
             .set(&DataKey::PendingSettlement, &(pending + debt));
 
-        // Cross-contract: burn the reputation. The controller must be in the
-        // badge contract's AuthVaults list (badge.add_vault at deploy).
-        // An already-defaulted borrower (e.g. slashed elsewhere, liquidated
-        // here after the grace window) must still be liquidatable — the badge
-        // rejects double-slashing, so skip it.
+        let shortfall = debt - collateral_value;
+        let bad: i128 = env.storage().instance().get(&DataKey::BadDebt).unwrap_or(0);
+        env.storage().instance().set(&DataKey::BadDebt, &(bad + shortfall));
+
+        // M-02: the badge admin must not be able to block a liquidation. If the
+        // badge is paused the slash is skipped and announced; the seizure still
+        // completes.
         let me = env.current_contract_address();
-        let badge = Self::badge_client(&env);
-        if !badge.is_defaulted(&user) {
-            badge.slash(&me, &user, &3_u32);
+        let badge = Self::badge_client(env);
+        if !badge.is_defaulted(user) && badge.try_slash(&me, user, &3_u32).is_err() {
+            env.events()
+                .publish((symbol_short!("noslash"), user.clone()), now);
         }
 
+        env.events().publish(
+            (symbol_short!("liq_bad"), user.clone()),
+            (debt, collateral_value, shortfall, now),
+        );
+    }
+
+    /// Settle seized collateral against the pool debt.
+    ///
+    /// Second half of M-03. There is NO destination parameter by design: the
+    /// only place funds can go is a `Repay` against the pool this contract
+    /// borrows from. An address argument would turn the settlement path into an
+    /// admin extraction route, which is the property the finding is about.
+    /// Permissionless for the same reason.
+    ///
+    /// Only the debt asset settles directly. Any other asset must be sold for
+    /// the debt asset first, and this contract deliberately contains no swap:
+    /// that is a Tranche 2 deliverable with its own slippage bounds. Until then
+    /// a non-debt asset reverts and says so, instead of pretending.
+    pub fn settle_seized(env: Env, asset: Address) {
+        let borrow_asset: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::BorrowAsset)
+            .expect("not initialized");
+        if asset != borrow_asset {
+            panic_with_error!(&env, Error::SettleAssetNotDebtAsset);
+        }
+
+        let seized: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::Seized(asset.clone()))
+            .unwrap_or(0);
+        let pending: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingSettlement)
+            .unwrap_or(0);
+        let amount = if seized < pending { seized } else { pending };
+        if amount <= 0 {
+            panic_with_error!(&env, Error::NothingToSettle);
+        }
+
+        let me = env.current_contract_address();
+        let mut pull: Vec<Request> = Vec::new(&env);
+        pull.push_back(Request {
+            address: asset.clone(),
+            amount,
+            request_type: REQ_WITHDRAW_COLLATERAL,
+        });
+        Self::pool_client(&env).submit(&me, &me, &me, &pull);
+
+        Self::authorize_pool_pull(&env, &asset, amount);
+        let mut repay: Vec<Request> = Vec::new(&env);
+        repay.push_back(Request {
+            address: asset.clone(),
+            amount,
+            request_type: REQ_REPAY,
+        });
+        Self::pool_client(&env).submit(&me, &me, &me, &repay);
+
+        env.storage()
+            .instance()
+            .set(&DataKey::Seized(asset.clone()), &(seized - amount));
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingSettlement, &(pending - amount));
         env.events()
-            .publish((symbol_short!("liq"), user), (debt, hp, now));
+            .publish((symbol_short!("settle"), asset), amount);
     }
 
     // -------------------------------------------------------------------------
@@ -888,6 +1100,10 @@ impl MarginController {
 
     pub fn get_seized(env: Env, asset: Address) -> i128 {
         env.storage().instance().get(&DataKey::Seized(asset)).unwrap_or(0)
+    }
+
+    pub fn get_bad_debt(env: Env) -> i128 {
+        env.storage().instance().get(&DataKey::BadDebt).unwrap_or(0)
     }
 
     pub fn get_pending_settlement(env: Env) -> i128 {
@@ -1133,6 +1349,32 @@ impl MarginController {
                 sub_invocations: vec![env],
             }),
         ]);
+    }
+
+    /// Total value of a user collateral, in borrow-asset units, with NO LTV
+    /// applied. `capacity_of` with a 100 % factor is exactly that, so the price
+    /// path and its staleness guards are shared rather than duplicated.
+    fn raw_collateral_value(env: &Env, user: &Address) -> i128 {
+        Self::total_borrow_capacity(env, user, 10_000)
+    }
+
+    /// Convert a value expressed in borrow-asset units into units of `asset`,
+    /// rounding UP. Ceiling is deliberate: the rounding remainder is charged to
+    /// the position being liquidated, never to the protocol or the liquidator,
+    /// so repeated liquidations cannot leak value out of the contract.
+    fn value_to_collateral(env: &Env, asset: &Address, value: i128) -> i128 {
+        if value <= 0 {
+            return 0;
+        }
+        let p_coll = Self::fresh_price(env, asset);
+        let borrow_asset: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::BorrowAsset)
+            .expect("not initialized");
+        let p_borrow = Self::fresh_price(env, &borrow_asset);
+        let num = value * p_borrow;
+        (num + p_coll - 1) / p_coll
     }
 
     fn badge_client(env: &Env) -> BadgeClient<'_> {
