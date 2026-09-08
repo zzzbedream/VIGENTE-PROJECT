@@ -22,6 +22,7 @@
     "demo:lower-age": "tsx scripts/lower-age-floor.ts 1",
     "demo:reset-age": "tsx scripts/lower-age-floor.ts 30",
     "mint:onchain": "tsx scripts/mint-onchain.ts",
+    "ttl-check": "tsx scripts/ttl-check.ts",
     "validate-t1": "cross-env NODE_ENV=test tsx scripts/validate-t1.ts",
     "collect:metrics": "tsx scripts/collect-metrics.ts",
     "kpi:baseline": "tsx scripts/kpi-baseline.ts",
