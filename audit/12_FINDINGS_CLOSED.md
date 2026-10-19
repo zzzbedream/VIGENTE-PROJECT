@@ -82,6 +82,38 @@ score differs:
 
 1 640 608 998 / 1 447 596 174 = 1.13333… = 8500 / 7500 exactly.
 
+**Why Gold's collateral was equalised after the migration — stated plainly, because the
+alternative reading is worse than the truth.**
+
+Migration is per-user and voluntary: each account withdrew from the old instance and
+re-deposited into the new one. Gold came back with a different collateral balance than
+Silver, and with unequal collateral the comparison above proves nothing — two numbers
+differing for two reasons at once is not evidence. So Gold's collateral was topped back up
+to match Silver's.
+
+The purpose was to **restore the documented experimental conditions**, which have been the
+same since the first publication of this result: *same collateral, same block, only the
+score differs*. It was **not** to adjust data until it fitted a claim. The distinction
+matters and is easy to lose, so here is the test that separates them: the ratio was never
+tuned. `max_borrow` is computed on-chain from the live price and the tier ladder; nobody
+can move it to 1.13333 by choosing a collateral amount. Equalising the collateral is what
+makes the *comparison* valid; it has no influence on the *ratio*, which comes out of the
+contract either way.
+
+Verified again on 2026-10-19 on a third pair of readings — Gold and Silver at 1 000 XLM
+each, plus a Bronze account at 100 XLM added for this run:
+
+| Account | Score | `ltv_bps` | Collateral | `max_borrow` |
+|---|---|---|---|---|
+| `GDESGH52…` | 850 | 8500 | 1 000 XLM | 1 509 013 131 |
+| `GC6IPCM3…` | 650 | 7500 | 1 000 XLM | 1 331 482 175 |
+| `GC5PQMUM…` | 400 | 6000 | 100 XLM | 106 518 573 |
+
+Gold / Silver = 1.133333 against 8500 / 7500 = 1.133333. Bronze, normalised to the same
+collateral, lands within 10 units of a thousand million — integer rounding. Different
+prices, different day, different third account: same ratio. See
+`docs/private/pilot/03_E2E_RESULTS.md` T03.
+
 ---
 
 ## New finding, opened by this work
@@ -124,13 +156,75 @@ user-authorized, with limited administrative controls* — not "fully non-custod
 
 ---
 
+### N-02 — the protocol's share of a liquidation penalty cannot be collected
+
+**Severity: Low** (protocol revenue, no user funds at risk) · `margin-controller`
+**Opened 2026-10-19 by the testnet end-to-end run**, not by reading the code.
+
+`liquidate` records the seizure under the **collateral** asset
+(`DataKey::Seized(collateral_asset)`, `lib.rs:752,755`). `settle_seized` refuses anything
+that is not the **debt** asset (`lib.rs:858-860`, `Error::SettleAssetNotDebtAsset`).
+
+With the deployed configuration — XLM collateral, USDC debt — those two can never meet.
+`Seized(XLM)` is write-only in production: nothing reads it except `get_seized`.
+
+Measured after the liquidation in tx
+[`2f4eae27`](https://stellar.expert/explorer/testnet/tx/2f4eae27e7ba653c9bb12e82c6d9f079d2e667304c6f6904c80b36a2d5f3f7c4):
+
+```
+get_seized(XLM)        → 4930857          (the protocol's cut, stranded)
+settle_seized(XLM)     → Error(Contract, #3)
+```
+
+Per liquidation the protocol loses 20 % of the 8 % penalty = **1.6 % of the repaid
+amount**. Here, 0.49 XLM. No user loses funds and the liquidation itself completes
+correctly: debt fell by exactly the repaid amount, collateral by exactly the seized
+amount, and health went 99 → 120.
+
+**Why the unit tests did not catch it**, which is the part worth keeping. The fixture says
+so itself, at `margin-controller/src/test.rs:1410`:
+
+```rust
+// permite ejercitar el unico caso implementado (asset == borrow_asset).
+h.ctrl.add_collateral_asset(&h.usdc_id, &Asset::Stellar(h.usdc_id.clone()), &0_i128);
+```
+
+The test adds USDC as a collateral asset so the seizure lands where `settle_seized` can
+read it. The test passes, and passes honestly — it exercises the implemented case. What it
+does not exercise is the deployed configuration. **A green test over a fixture that does
+not exist in production is not coverage.** Before mainnet, the other fixtures deserve the
+same question.
+
+Closing it needs a redeploy, exactly like N-01.
+
+---
+
+### M-04's mitigation was deployed but dormant
+
+Not a new defect — a new fact about the live instance, found in the same run.
+
+```
+get_user_cap(XLM) → "0"      (0 means NO CAP)
+```
+
+`UserCap` is the only risk parameter with no path through `init`: it is written solely by
+`set_user_cap` (`lib.rs:993`). Every deployment therefore starts uncapped, and the
+per-user cap that closed M-04 does nothing until somebody runs that call. Set to 150 XLM
+for the test account during the run.
+
+**This belongs in the deployment runbook as a mandatory step**, because it will recur with
+every new controller generation.
+
+---
+
 ## Still open
 
 | Finding | Why it is not closed |
 |---|---|
 | **H-03** — deviation guard limits the rate of manipulation, does not stop it, and fails closed on legitimate large moves | **Cannot be closed on this deployment.** The aggregator sits in the pool's immutable oracle slot; replacing it means a new pool and losing the evidence base. The redesign (time-scaled band, upstream TWAP or multi-source median as the reference, defined degraded mode) belongs to the mainnet aggregator. Stated, not promised. |
-| **N-01** — untracked Blend interest | Needs `sweep_interest` and a further redeploy. Described above. |
-| **M-07** — single-key admin | Not a code problem. The admin key exists in one keystore; generating three keys on the same machine would be multisig theatre, not security. Needs a decision on who custodies the other signers. Current state, verified: 1 signer, weight 1, thresholds 0. |
+| **N-01** — untracked Blend interest | Needs `sweep_interest` and a further redeploy. Described above. **Upgraded 2026-10-19 from historical artefact to systematic property:** reproduced deliberately — every *full* repayment leaves ~1 dToken behind in Blend, always in the pool's favour, and unreachable because `repay()` rejects amounts above the tracked debt. |
+| **N-02** — the protocol's liquidation cut cannot be collected | Needs a redeploy. Described above. |
+| **M-07** — single-key admin | Not a code problem. The admin key exists in one keystore; generating three keys on the same machine would be multisig theatre, not security. Needs a decision on who custodies the other signers. Current state, re-measured 2026-10-19 and **worse than previously recorded**: there are **two** single-key accounts, not one — controller+pool (`GDGMMHYO…`) and badge (`GBV676BN…`), each 1 signer, weight 1, thresholds 0/0/0, held in two different stores (CLI keystore and `web/.env.local`). |
 | **M-01** — TTL maintenance has no owner | The *state* is fixed: badge, pool, aggregator and both controllers now sit ~180 days out, and the aggregator's `LastGood` entries were refreshed with live prices rather than merely restored, so the first read after the gap is not rejected by the deviation guard. The *cause* — that nobody owns the weekly keeper — is unchanged. Half closed, and recorded as half. |
 | **L-01, L-02** | Folded into the H-03 redesign, as the review report already states. |
 

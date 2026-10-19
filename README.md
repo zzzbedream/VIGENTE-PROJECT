@@ -16,17 +16,39 @@ that would make credit cheaper exists on the ledger and nothing reads it.**
 
 ## What is live right now
 
+**One canonical table.** Every other document in this repo points here instead of
+repeating addresses. If a document disagrees with this table, this table is right.
+
 | Contract | ID | What it does | Status |
 |---|---|---|---|
-| **`margin-controller`** | [`CCZNOV65…OCLJ`](https://stellar.expert/explorer/testnet/contract/CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ) | Sets each user's LTV from their reputation, then forwards to the pool | **active** |
+| **`margin-controller`** | [`CAH2BHAE…C75W`](https://stellar.expert/explorer/testnet/contract/CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W) | Sets each user's LTV from their reputation, then forwards to the pool | **active** |
 | **`oracle-aggregator`** | [`CCG6EAGO…FQH4`](https://stellar.expert/explorer/testnet/contract/CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4) | Our SEP-40 feed: per-asset routes, 48h timelock, staleness and deviation guards | **active** |
 | **Vigente pool** | [`CDYUHA3T…HNUI`](https://stellar.expert/explorer/testnet/contract/CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI) | Isolated Blend pool wired to our aggregator. XLM collateral / USDC debt | **`status: 0`** |
 | **`vigente-badge` v3** | [`CDLLO7QE…HWVD`](https://stellar.expert/explorer/testnet/contract/CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD) | Soulbound reputation. `mint` needs 3-of-5 ed25519 signatures verified on-chain | **active** |
 | Reflector | `CCYOZJCO…RN63` | Upstream price source — **third party**, not ours | — |
-| `margin-controller` **v1** | [`CA4SFW73…CHDV`](https://stellar.expert/explorer/testnet/contract/CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV) | **History, not the product.** Same binary, but wired to Blend's *canonical* pool — kept so earlier published evidence stays verifiable | historical |
 
-> Don't confuse v1 with the product. If you query `CA4SFW73…` you will see it pointing at
-> Blend's canonical pool, because that is where it has always run. The product is `CCZNOV65…`.
+### The controller's succession
+
+Soroban contracts here have **no upgrade function** — there is no
+`update_current_contract_wasm` anywhere in this repo. That is a deliberate choice, and it
+has a price: every fix is a new deployment and a voluntary user migration. Four
+generations is not churn, it is what that choice costs.
+
+| Gen | Address | Status | Why it was replaced |
+|---|---|---|---|
+| v0 | [`CAZ2JITV…S3FC`](https://stellar.expert/explorer/testnet/contract/CAZ2JITV36BJ5FO3UYM5XS32CISZ3JUCLW4GWYLGDUXHOGNJHELTS3FC) | historical | Findings from the 11-jul security review. Demo position exited cleanly before retirement |
+| v1 | [`CA4SFW73…CHDV`](https://stellar.expert/explorer/testnet/contract/CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV) | historical, still live | Ran on Blend's **canonical** pool. Replaced when we moved to our own pool so our aggregator could sit in the oracle slot. Kept live so earlier published evidence stays verifiable |
+| v2 | [`CCZNOV65…OCLJ`](https://stellar.expert/explorer/testnet/contract/CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ) | **superseded 2026-09-02**, still live | Closing **M-02** (`try_slash`), **M-03** (proportional liquidation) and **M-04** (per-user cap) required a new instance, because the contract cannot be upgraded. Built before the toolchain pin, so its build is **not reproducible**. Still holds **10 XLM that cannot be recovered** — finding N-01 |
+| **v3** | [`CAH2BHAE…C75W`](https://stellar.expert/explorer/testnet/contract/CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W) | **active** | Current. **Ledger hash equals the reproducible build** — see `contracts/deployed-wasm-hashes.json` |
+
+The pool and the aggregator **did not change** across v2 → v3. The pool's immutable slot
+holds the *oracle*, not the controller, so only the controller address moved.
+
+> **Reading older documents.** `audit/` and `docs/SCF_REBUTTAL.md` cite `CCZNOV65…` on
+> purpose: that is where those measurements were actually taken, and rewriting them would
+> falsify the record. An address in an audit document is evidence of where something was
+> measured, not a claim about what is active today. For what is active today, this table
+> is the only source.
 
 ## The evidence
 
@@ -76,7 +98,7 @@ No keys needed for any of this. Substitute any funded testnet account for `<YOUR
 
 ```bash
 POOL=CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI
-CTRL=CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ
+CTRL=CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W
 
 # 1. The pool is active AND runs on our oracle → status 0, oracle CCG6EAGO…
 stellar contract invoke --id $POOL --network testnet \
@@ -215,7 +237,7 @@ MIT — see [LICENSE](./LICENSE).
   <strong>Vigente Protocol</strong><br/>
   Reputation-priced credit for tokenized assets on Soroban<br/>
   <a href="audit/08_POOL_ACTIVATION.md">Evidence</a> ·
-  <a href="https://stellar.expert/explorer/testnet/contract/CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ">Margin controller</a> ·
+  <a href="https://stellar.expert/explorer/testnet/contract/CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W">Margin controller</a> ·
   <a href="https://stellar.expert/explorer/testnet/contract/CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI">Pool</a>
 </p>
 

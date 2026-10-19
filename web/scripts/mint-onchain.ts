@@ -40,7 +40,14 @@ dotenvConfig({ path: path.resolve(__dirname, "..", ".env.local") });
 
 const RPC_URL = process.env.RPC_URL || "https://soroban-testnet.stellar.org";
 const NETWORK_PASSPHRASE = process.env.NETWORK_PASSPHRASE || Networks.TESTNET;
-const CONTRACT_V2 = process.env.NEXT_PUBLIC_CONTRACT_ID_V2 || "CCD7KNYIJAVN4JRZKCMZWCBK3ED43VYEBX5PSYHOBOR6BHMVMN2GUMA5";
+// El badge activo es v3 (CDLLO7QE...). Hasta 2026-10-18 este script apuntaba
+// por defecto a v2 (CCD7KNYI...), que quedo superado: mintear ahi produce un
+// badge que el margin-controller no lee, porque el controller tiene el registry
+// fijado en init y apunta a v3. Se puede forzar otro contrato con BADGE_ID.
+const BADGE_ID =
+  process.env.BADGE_ID ||
+  process.env.NEXT_PUBLIC_CONTRACT_ID_V3 ||
+  "CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD";
 const MOTHER_SECRET = process.env.VIGENTE_MOTHER_SECRET;
 
 if (!MOTHER_SECRET) {
@@ -109,7 +116,7 @@ async function main(): Promise<void> {
   }
 
   // Assemble Soroban call.
-  const contract = new Contract(CONTRACT_V2);
+  const contract = new Contract(BADGE_ID);
   const op = contract.call(
     "mint",
     Address.fromString(borrower).toScVal(),
@@ -179,7 +186,7 @@ async function main(): Promise<void> {
   }
 
   console.log("\n✅ END-TO-END SUCCESS");
-  console.log(`   contract:  ${CONTRACT_V2}`);
+  console.log(`   contract:  ${BADGE_ID}`);
   console.log(`   tx:        https://stellar.expert/explorer/testnet/tx/${sent.hash}`);
   console.log(`   borrower:  ${borrower}`);
   console.log(`   score:     ${scoreOnChain}`);

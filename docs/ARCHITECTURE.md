@@ -28,7 +28,7 @@ transaction-level evidence is in
 
 | Component | Contract ID |
 |---|---|
-| `margin-controller` (active) | `CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ` |
+| `margin-controller` (active) | `CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W` |
 | `oracle-aggregator` | `CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4` |
 | Vigente Blend pool (`status: 0`) | `CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI` |
 | `vigente-badge` v3 | `CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD` |
@@ -338,7 +338,7 @@ The controller reads the badge's 0–1000 score and maps it to an LTV through an
 it does not hardcode — the ladder is contract state, readable by anyone:
 
 ```
-$ stellar contract invoke --id CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ     --network testnet --send=no -- get_tier_ltv
+$ stellar contract invoke --id CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W     --network testnet --send=no -- get_tier_ltv
 [{"ltv_bps":8500,"min_score":800},{"ltv_bps":7500,"min_score":550},{"ltv_bps":6000,"min_score":300}]
 ```
 

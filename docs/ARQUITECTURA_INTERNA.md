@@ -14,7 +14,7 @@
 
 | Componente | Contract ID | Qué hace |
 |---|---|---|
-| **`margin-controller` (activo)** | `CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ` | **El producto.** Impone el LTV por usuario según su reputación, por delante del **pool propio**. Binario byte-idéntico a v1 (mismo wasm hash), redesplegado solo para apuntar al pool nuevo |
+| **`margin-controller` (activo)** | `CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W` | **El producto.** Impone el LTV por usuario según su reputación, por delante del **pool propio**. Binario byte-idéntico a v1 (mismo wasm hash), redesplegado solo para apuntar al pool nuevo |
 | `margin-controller` v1 | `CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV` | Sigue vivo sobre el pool canónico. **Histórico, no el producto**: se mantiene porque es evidencia ya publicada |
 | **`vigente-badge` v3** | `CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD` | SBT de reputación. El `mint` exige umbral **3-de-5** de firmas ed25519 verificadas on-chain |
 | **`oracle-aggregator`** | `CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4` | **Nuestro.** SEP-40: rutas por asset con timelock de 48 h, staleness y deviation guard |

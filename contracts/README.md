@@ -5,7 +5,7 @@ test them individually.
 
 | Crate | Deployed (testnet) | Role |
 |---|---|---|
-| [`margin-controller`](margin-controller/) | [`CCZNOV65…OCLJ`](https://stellar.expert/explorer/testnet/contract/CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ) | **The product.** Prices each user's LTV from their reputation badge, then forwards to Blend |
+| [`margin-controller`](margin-controller/) | [`CAH2BHAE…C75W`](https://stellar.expert/explorer/testnet/contract/CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W) | **The product.** Prices each user's LTV from their reputation badge, then forwards to Blend |
 | [`oracle-aggregator`](oracle-aggregator/) | [`CCG6EAGO…FQH4`](https://stellar.expert/explorer/testnet/contract/CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4) | SEP-40 price feed. Sits in the immutable oracle slot of our Blend pool |
 | [`vigente-badge`](vigente-badge/) | [`CDLLO7QE…HWVD`](https://stellar.expert/explorer/testnet/contract/CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD) | Soulbound reputation token. `mint` verifies 3-of-5 ed25519 signatures on-chain |
 | [`mock-usdc`](mock-usdc/) | — | Test token for local runs |

@@ -396,7 +396,7 @@ function WhoItsFor() {
 type HistoryKey = "none" | "always" | "sometimes" | "late";
 const HISTORY_BONUS: Record<HistoryKey, number> = { always: 100, sometimes: 30, late: -80, none: 0 };
 // Mirrors the ladder actually deployed on the margin controller, read on-chain:
-//   stellar contract invoke --id CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ \
+//   stellar contract invoke --id CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W \
 //     --network testnet --send=no -- get_tier_ltv
 //   → [{"ltv_bps":8500,"min_score":800},{"ltv_bps":7500,"min_score":550},{"ltv_bps":6000,"min_score":300}]
 // Keep these in sync with `tiers` in copy.ts if the on-chain ladder is ever re-queued.
