@@ -172,11 +172,58 @@ function saveState(patch: State): void {
   fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2));
 }
 
-function resolveActors(): void {
+/**
+ * Clasico USDC de Blend testnet. Una cuenta nueva necesita esta trustline
+ * ANTES de poder recibir lo que pide prestado: sin ella el borrow revierte.
+ */
+const USDC_CLASSIC = "USDC:GATALTGTWIOT6BUDBCZM3Q4OQ4BO2COLOAZ7IYSKPLC2PMSOPPGF5V56";
+
+/**
+ * Paso `fresh` — cuentas nuevas para una corrida limpia.
+ *
+ * Con E2E_SUFFIX=<algo>, los actores pasan a llamarse vigente-gold-<algo>, etc.
+ * Asi una corrida completa no reutiliza estado de corridas anteriores, que es
+ * justo lo que hace dificil leer un E2E: no saber si algo paso por el codigo o
+ * por lo que quedo de ayer.
+ */
+function stepFresh(): void {
+  banner("FRESH — crear y preparar cuentas nuevas");
+  const suffix = process.env.E2E_SUFFIX;
+  if (!suffix) {
+    log("[fresh] falta E2E_SUFFIX. Uso: E2E_SUFFIX=r2 npx tsx scripts/e2e-testnet.ts fresh");
+    process.exitCode = 2;
+    return;
+  }
+  for (const [name, a] of Object.entries(ACTORS)) {
+    log(`\n--- ${name} → ${a.key} ---`);
+    // --fund usa friendbot. Si la identidad ya existe, generate falla y se
+    // sigue: el objetivo es que exista y este fondeada, no crearla dos veces.
+    stellar(["keys", "generate", a.key, "--fund", "--network", NETWORK]);
+    const addr = (spawnSync("stellar", ["keys", "address", a.key], { encoding: "utf8" })
+      .stdout || "").trim();
+    log(`[fresh] ${a.key} = ${addr}`);
+    // Trustline de USDC: sin esto, borrow revierte al intentar entregar.
+    stellar([
+      "tx", "new", "change-trust",
+      "--source-account", a.key, "--network", NETWORK,
+      "--line", USDC_CLASSIC,
+    ]);
+  }
+  log(`\n[fresh] listo. Correr el resto con el MISMO E2E_SUFFIX=${suffix}`);
+}
+
+function resolveActors(strict = true): void {
+  // Sufijo opcional para correr contra cuentas nuevas sin tocar las de siempre.
+  const suffix = process.env.E2E_SUFFIX;
+  if (suffix) {
+    for (const a of Object.values(ACTORS)) a.key = `${a.key}-${suffix}`;
+  }
   for (const a of Object.values(ACTORS)) {
     const r = spawnSync("stellar", ["keys", "address", a.key], { encoding: "utf8" });
     a.addr = (r.stdout || "").trim();
     if (!/^G[A-Z2-7]{55}$/.test(a.addr)) {
+      // En `fresh` las identidades todavia no existen: es el paso que las crea.
+      if (!strict) { a.addr = ""; continue; }
       throw new Error(`no pude resolver la direccion de ${a.key}: "${a.addr}"`);
     }
   }
@@ -208,26 +255,68 @@ function stepState(): void {
  * se delega al camino que ya existe y esta probado.
  */
 function stepT01(): void {
-  banner("T01 — emitir badge bronze y leer score");
-  const a = ACTORS.bronze;
+  banner("T01 — emitir badge en los tres tiers y leer score");
+  for (const [tier, actor] of Object.entries(ACTORS)) {
+    log(`
+--- ${tier} (${actor.key}) score objetivo ${actor.score} ---`);
+    mintBadge(actor);
+  }
+}
+
+/** Mintea un badge para `a` delegando en el camino de firmas ya probado. */
+function mintBadge(a: Actor): void {
   const before = read(BADGE, "get_score", ["--borrower", a.addr]);
   log(`[T01] score antes: ${before.stdout}`);
+  if (before.stdout.trim() === String(a.score)) {
+    log(`[T01] ya tiene el score ${a.score}; nada que mintear.`);
+    return;
+  }
 
-  log(
-    `\n[T01] El minteo requiere firmas de oraculo (umbral 3 de 5) y la mother\n` +
-    `      account, que no esta en el keystore del CLI sino en web/.env.local.\n` +
-    `      OJO: scripts/mint-onchain.ts apunta al badge v2 (CCD7KNYI...), no al\n` +
-    `      v3 activo (CDLLO7QE...). Hay que pasarle el contrato correcto.`,
-  );
-  log(`[T01] comando: npm run mint:onchain -- ${a.addr} ${a.score}`);
-  log(`[T01] PENDIENTE de ejecucion manual verificada — ver informe.`);
+  // Se DELEGA en scripts/mint-onchain.ts en vez de duplicar aqui la firma de
+  // umbral. Ese script ya arma el mensaje canonico, junta 3 de 5 firmas de
+  // oraculo y firma el sobre con la mother account (que vive en .env.local, no
+  // en el keystore del CLI). Reimplementarlo seria tener dos caminos que
+  // pueden divergir en el formato del mensaje — justo lo que la paridad XDR
+  // existe para evitar.
+  const script = path.join(__dirname, "mint-onchain.ts");
+  log(`\n$ npx tsx ${script} ${a.addr} ${a.score}`);
+  const r = spawnSync("npx", ["tsx", script, a.addr, String(a.score)], {
+    encoding: "utf8",
+    cwd: path.join(REPO, "web"),
+    shell: true,
+    maxBuffer: 32 * 1024 * 1024,
+    env: { ...process.env, BADGE_ID: BADGE },
+  });
+  const out = `${r.stdout || ""}${r.stderr || ""}`.trim();
+  if (out) log(out);
+  log(`[exit ${r.status}]`);
+
+  const after = read(BADGE, "get_score", ["--borrower", a.addr]);
+  const ok = after.stdout.trim() === String(a.score);
+  log(`\n[T01] esperado: get_score → ${a.score}`);
+  log(`[T01] obtenido: ${after.stdout.trim()}  (${ok ? "PASA" : "FALLA"})`);
+  const tx = /tx\/([a-f0-9]{64})/.exec(out)?.[1];
+  if (tx) log(`[T01] tx: ${tx}`);
 }
 
 /** T02 — depositar colateral. */
 function stepT02(): void {
-  banner("T02 — depositar colateral via controller");
-  const a = ACTORS.bronze;
-  const amount = String(100 * STROOP); // 100 XLM
+  banner("T02 — depositar colateral via controller (los tres actores)");
+  for (const [tier, actor] of Object.entries(ACTORS)) {
+    log(`
+--- ${tier} ---`);
+    depositFor(actor, 100);
+  }
+}
+
+/**
+ * Deposita `xlm` XLM para `a`. Gold y silver reciben el MISMO monto a
+ * proposito: con colateral identico, la razon entre sus max_borrow tiene que
+ * ser la razon entre sus LTV, y eso es lo que prueba T03. Con colateral
+ * distinto la comparacion no prueba nada.
+ */
+function depositFor(a: Actor, xlm: number): void {
+  const amount = String(xlm * STROOP);
   const before = num(read(CTRL, "get_collateral", ["--user", a.addr, "--asset", XLM]));
   const r = write(CTRL, a.key, "deposit_collateral", [
     "--user", a.addr, "--asset", XLM, "--amount", amount,
@@ -495,6 +584,76 @@ function stepT12(): void {
   }
 }
 
+/**
+ * T12b — la segunda salida: `withdraw_collateral` estando pausado.
+ *
+ * Determinista, sin dependencia de mercado: basta una posicion sana con holgura.
+ * Prueba DOS cosas que conviene no confundir:
+ *   - la pausa no bloquea el retiro;
+ *   - la guarda de salud SI lo limita (`capacity_after < debt` revierte,
+ *     lib.rs:447), asi que un usuario no puede retirarse hasta volverse
+ *     liquidable. Pausa y salud son dos controles distintos.
+ */
+function stepT12b(): void {
+  banner("T12b — withdraw_collateral estando pausado, y el limite de la guarda de salud");
+  const a = ACTORS.bronze;
+  const col = num(read(CTRL, "get_collateral", ["--user", a.addr, "--asset", XLM])) ?? 0n;
+  const h = num(read(CTRL, "health", ["--user", a.addr]));
+  log(`\n[T12b] colateral=${col} salud=${h}`);
+  if (col <= 0n) {
+    log("[T12b] sin colateral; no se puede construir el caso. NO PROBADO.");
+    return;
+  }
+
+  let paused_full_withdraw_failed = false;
+  const small = BigInt(5 * STROOP); // 5 XLM, holgado dentro de la guarda
+
+  log(`\n[T12b] --- pausando ---`);
+  if (!write(CTRL, ADMIN, "pause").ok) {
+    log("[T12b] no se pudo pausar; se aborta sin dejar el contrato en estado raro.");
+    return;
+  }
+
+  try {
+    log(`\n[T12b] (a) retirar ${small} estando pausado -> debe FUNCIONAR`);
+    const w = write(CTRL, a.key, "withdraw_collateral", [
+      "--user", a.addr, "--asset", XLM, "--amount", String(small),
+    ]);
+    log(`[T12b] (a) obtenido: ${w.ok ? "EXITO (correcto — la pausa no bloquea el retiro)" : "FALLO — INVARIANTE ROTO"}`);
+
+    // Saldo RE-LEIDO: usar el de antes de (a) pedia mas de lo que queda y
+    // chocaba con "withdraw exceeds collateral balance", que no es la guarda
+    // que queremos probar. Pedir exactamente el saldo cae dentro del balance y
+    // solo puede fallar por salud.
+    const now = num(read(CTRL, "get_collateral", ["--user", a.addr, "--asset", XLM])) ?? 0n;
+    log(`\n[T12b] (b) retirar TODO el saldo actual (${now}) -> debe FALLAR`);
+    const w2 = write(CTRL, a.key, "withdraw_collateral", [
+      "--user", a.addr, "--asset", XLM, "--amount", String(now),
+    ]);
+    log(`[T12b] (b) obtenido: ${w2.ok ? "EXITO — inesperado" : "FALLO (correcto)"}`);
+    paused_full_withdraw_failed = !w2.ok;
+  } finally {
+    log(`\n[T12b] --- despausando (pase lo que pase) ---`);
+    write(CTRL, ADMIN, "unpause");
+  }
+
+  // (c) El discriminador. "withdraw exceeds collateral balance" y "position
+  // would become unhealthy" son AMBOS panic! sin tipar, asi que llegan
+  // identicos como UnreachableCodeReached: el mensaje no distingue cual fue.
+  // En vez de adivinar parseando texto, se repite el mismo intento SIN pausa.
+  // Si tambien falla, la causa no era la pausa. Eso es deducible; parsear un
+  // panic opaco, no.
+  if (paused_full_withdraw_failed) {
+    const now2 = num(read(CTRL, "get_collateral", ["--user", a.addr, "--asset", XLM])) ?? 0n;
+    log(`\n[T12b] (c) MISMO retiro total (${now2}) ya DESPAUSADO -> si tambien falla, la causa es la salud`);
+    const w3 = write(CTRL, a.key, "withdraw_collateral", [
+      "--user", a.addr, "--asset", XLM, "--amount", String(now2),
+    ]);
+    log(`[T12b] (c) obtenido: ${w3.ok ? "EXITO -> entonces (b) SI fallaba por la pausa: INVARIANTE ROTO" : "FALLO (correcto) -> la causa es la guarda de salud, no la pausa"}`);
+  }
+  read(CTRL, "get_collateral", ["--user", a.addr, "--asset", XLM]);
+}
+
 /** T13 — el keeper de TTL, una pasada real. */
 function stepT13(): void {
   banner("T13 — keeper de TTL, pasada real");
@@ -511,6 +670,7 @@ function stepT13(): void {
 // --------------------------------------------------------------------------
 
 const STEPS: Record<string, () => void> = {
+  fresh: stepFresh,
   state: stepState,
   t01: stepT01,
   t02: stepT02,
@@ -522,6 +682,7 @@ const STEPS: Record<string, () => void> = {
   t08: stepT08,
   t09: stepT09,
   t12: stepT12,
+  t12b: stepT12b,
   t13: stepT13,
 };
 
@@ -532,7 +693,7 @@ function main(): void {
     process.exitCode = 2;
     return;
   }
-  resolveActors();
+  resolveActors(step !== "fresh");
   log(`\n\n######## corrida ${new Date().toISOString()} — paso "${step}" ########`);
   const toRun = step === "all" ? Object.keys(STEPS) : [step];
   for (const s of toRun) {

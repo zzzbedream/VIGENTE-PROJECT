@@ -28,3 +28,12 @@ docs/letters/demo-script-payku.md
 # Config de Drizzle: importa drizzle-kit, que no esta en dependencias.
 # Rompe el build de produccion. Se conserva en disco para el CTO.
 web/drizzle.config.ts
+
+# Residuo del CLI de Stellar: se reescribe solo al invocar contratos
+asset.json
+web/asset.json
+
+# Config de servidores MCP. NO se versiona: en un repo publico, commitearla
+# auto-configura una fuente de contenido externa para todo el que clone, y ese
+# contenido entra al contexto del agente. Cada quien la crea a mano si la quiere.
+.mcp.json
