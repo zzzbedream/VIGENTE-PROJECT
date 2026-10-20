@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
+/*
+  El sitio es oscuro en los dos esquemas de color. Antes --background era
+  #ffffff en modo claro y el fondo oscuro vivia solo en <main>, asi que el
+  rebote de scroll en iOS mostraba bandas BLANCAS arriba y abajo de una pagina
+  negra. #0B0D0F es el mismo valor que usa <main> y que themeColor en layout.
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0b0d0f;
+  --foreground: #e8ecea;
 }
 
 @theme inline {
@@ -12,21 +18,44 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--background);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /*
+    Era `Arial, Helvetica, sans-serif`, que peleaba con las fuentes cargadas en
+    layout.tsx. La landing se salvaba solo porque <main> lleva su propia clase;
+    cualquier texto fuera de <main> caia en Arial.
+  */
+  font-family: var(--font-sans), system-ui, sans-serif;
 }
 
-/* Phase D landing typography */
-.hero-title {
-  letter-spacing: -0.04em;
-  line-height: 0.95;
+/*
+  Foco visible. Varios controles usan `outline-none` y solo definen estados
+  :hover, asi que navegar con teclado era invisible. :focus-visible solo se
+  activa con teclado, no al hacer clic, de modo que no ensucia el raton.
+*/
+:focus-visible {
+  outline: 2px solid #8be9b0;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/*
+  Movimiento reducido. El canvas ya lo respetaba por JS, pero la animacion
+  hecha en CSS -- animate-pulse del indicador en vivo, las barras de progreso
+  con transition-all -- no lo consultaba.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

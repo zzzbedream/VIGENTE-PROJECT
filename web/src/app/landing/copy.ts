@@ -43,6 +43,7 @@ const es = {
   navTrust: "seguridad",
   navFaq: "faq",
   navCta: "hablemos de integrar",
+  navMenuLabel: "menú",
 
   heroCta: "hablemos de integrar",
   heroCta2: "ver contrato en testnet",
@@ -312,15 +313,15 @@ const es = {
     {
       phase: "fase 2",
       status: "completado",
-      here: true,
+      here: false,
       title: "pool colateralizado activo",
-      body: "nuestro propio pool aislado sobre blend, con nuestro agregador sep-40 en el slot de oráculo — inmutable — ruteando a reflector. ciclo completo verificado en cadena: depósito, préstamo, repago y retiro, más la custodia probada bajo pausa adversarial. evidencia en audit/08.",
+      body: "nuestro propio pool aislado sobre blend, con nuestro agregador sep-40 en el slot de oráculo — inmutable — ruteando a reflector. ciclo completo verificado en cadena: depósito, préstamo, repago y retiro, más la custodia probada bajo pausa adversarial. evidencia publicada en el repositorio, con hashes de transaccion.",
       accent: "#8BE9B0",
     },
     {
       phase: "fase 3",
-      status: "siguiente",
-      here: false,
+      status: "en curso",
+      here: true,
       title: "endurecimiento + activos tokenizados + rampa",
       body: "liquidación proporcional, cap de exposición por usuario y fees on-chain; primer activo de renta fija tokenizado como colateral; rampa fiat conectada extremo a extremo.",
       accent: "#E9C98B",
@@ -365,6 +366,22 @@ const es = {
       q: "¿en qué países está disponible?",
       a: "el protocolo es global por diseño: solo necesitas una wallet de stellar. los corredores del piloto (con integración de datos de ingreso/remesas) se anunciarán según la demanda de la whitelist — apúntate e indícanos desde dónde nos escribes.",
     },
+    {
+      q: "¿hay auditoría externa?",
+      a: "no. todavía no. lo que sí hay es una revisión de seguridad interna con sus hallazgos publicados en el repositorio, incluidos los que siguen abiertos — no solo los cerrados. una auditoría externa es condición para mainnet, no algo que demos por hecho.",
+    },
+    {
+      q: "¿quién controla las llaves de administración?",
+      a: "hoy, dos cuentas de un solo firmante: una para el controller y el pool, otra para el registro de reputación. está registrado como hallazgo abierto. generar tres llaves en la misma máquina sería multifirma de utilería, así que la decisión pendiente es de custodia, no de código.",
+    },
+    {
+      q: "¿qué pasa si el emisor del colateral lo congela o lo confisca?",
+      a: "es una facultad real: los activos tokenizados regulados suelen tener clawback y revocación de trustline activos, y lo verificamos en cadena antes de listar cualquiera. significa que la confianza en el emisor no complementa la garantía: es parte de la garantía. por eso se pide compromiso contractual sobre la dirección del pool, y si no lo hay, se dice.",
+    },
+    {
+      q: "¿qué pasa si el oráculo falla o da un precio viejo?",
+      a: "la operación revierte. el agregador rechaza un precio vencido, uno no positivo o un salto por encima de la banda configurada, y el controller verifica la frescura otra vez por su cuenta. preferimos que una operación no ocurra a que ocurra con un precio que no pudimos validar.",
+    },
   ],
 
   footContact: "contacto",
@@ -384,6 +401,7 @@ const en: LandingCopy = {
   navTrust: "security",
   navFaq: "faq",
   navCta: "let's talk integration",
+  navMenuLabel: "menu",
 
   heroCta: "let's talk integration",
   heroCta2: "view testnet contract",
@@ -653,15 +671,15 @@ const en: LandingCopy = {
     {
       phase: "phase 2",
       status: "done",
-      here: true,
+      here: false,
       title: "collateralized pool live",
-      body: "our own isolated pool on blend, with our sep-40 aggregator in the oracle slot — immutable — routing to reflector. full cycle verified on-chain: deposit, borrow, repay and withdraw, plus custody proven under an adversarial pause. evidence in audit/08.",
+      body: "our own isolated pool on blend, with our sep-40 aggregator in the oracle slot — immutable — routing to reflector. full cycle verified on-chain: deposit, borrow, repay and withdraw, plus custody proven under an adversarial pause. evidence published in the repository, with transaction hashes.",
       accent: "#8BE9B0",
     },
     {
       phase: "phase 3",
-      status: "next",
-      here: false,
+      status: "in progress",
+      here: true,
       title: "hardening + tokenized assets + ramp",
       body: "proportional liquidation, per-user exposure cap and on-chain fees; first tokenized fixed-income asset as collateral; fiat ramp connected end to end.",
       accent: "#E9C98B",
@@ -705,6 +723,22 @@ const en: LandingCopy = {
     {
       q: "which countries is it available in?",
       a: "the protocol is global by design: you only need a stellar wallet. pilot corridors (with income/remittance data integration) will be announced based on whitelist demand — sign up and tell us where you're writing from.",
+    },
+    {
+      q: "has it been audited externally?",
+      a: "no. not yet. what does exist is an internal security review with its findings published in the repository — including the ones still open, not only the closed ones. an external audit is a condition for mainnet, not something we assume away.",
+    },
+    {
+      q: "who controls the admin keys?",
+      a: "today, two single-signer accounts: one for the controller and pool, one for the reputation registry. it is recorded as an open finding. generating three keys on the same machine would be multisig theatre, so the pending decision is about custody, not code.",
+    },
+    {
+      q: "what if the collateral issuer freezes or claws back the token?",
+      a: "it is a real power: regulated tokenized assets typically have clawback and trustline revocation enabled, and we verify this on-chain before listing any of them. it means trust in the issuer does not complement the collateral — it is part of the collateral. that is why we ask for a contractual commitment covering the pool address, and say so plainly when there isn't one.",
+    },
+    {
+      q: "what if the oracle fails or returns a stale price?",
+      a: "the operation reverts. the aggregator rejects a stale price, a non-positive one, or a jump beyond the configured band, and the controller checks freshness again independently. we would rather an operation not happen than happen on a price we could not validate.",
     },
   ],
 

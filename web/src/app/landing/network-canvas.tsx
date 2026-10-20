@@ -60,13 +60,16 @@ export function NetworkCanvas({ count, alpha, dist, className }: NetworkCanvasPr
     const pulses: Pulse[] = [];
     const maxD = dist * dpr;
 
+    // Asignar canvas.width/height BORRA el lienzo. Con movimiento reducido no
+    // hay bucle que vuelva a pintar, asi que cualquier resize dejaba el canvas
+    // en blanco para siempre. En movil eso pasaba al primer scroll, cuando la
+    // barra de direcciones se contrae y dispara resize.
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
       w = canvas.width = Math.max(1, Math.round(rect.width * dpr));
       h = canvas.height = Math.max(1, Math.round(rect.height * dpr));
+      if (reduced) drawFrame();
     };
-    resize();
-    window.addEventListener("resize", resize);
 
     const drawFrame = () => {
       ctx.clearRect(0, 0, w, h);
@@ -138,6 +141,11 @@ export function NetworkCanvas({ count, alpha, dist, className }: NetworkCanvasPr
         ctx.fill();
       }
     };
+
+    // Registrado aqui, no antes: resize() llama a drawFrame() y esa constante
+    // se declara mas abajo que resize.
+    resize();
+    window.addEventListener("resize", resize);
 
     if (reduced) {
       drawFrame();

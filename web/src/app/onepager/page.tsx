@@ -94,8 +94,8 @@ export default function OnePagerPage() {
         </Section>
 
         <p className="text-xs text-zinc-500 mt-6 border-t border-zinc-200 pt-3">
-          vigente-project.vercel.app · zzzbedream@gmail.com · Stellar Soroban
-          (testnet)
+          vigenteprotocol.tech · lucas.cifuentes@vigenteprotocol.tech · Stellar
+          Soroban (testnet)
         </p>
       </div>
     </main>

@@ -37,7 +37,7 @@ const mono = monoFont.className;
 
 const CONTRACT_ID = "CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD";
 const CONTRACT_URL = `https://stellar.expert/explorer/testnet/contract/${CONTRACT_ID}`;
-const CONTACT_EMAIL = "zzzbedream@gmail.com";
+const CONTACT_EMAIL = "lucas.cifuentes@vigenteprotocol.tech";
 const PUBKEY_RE = /^G[A-Z2-7]{55}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -56,7 +56,18 @@ function useCopy(): { lang: Lang; setLang: (l: Lang) => void; t: LandingCopy } {
 // --- page -------------------------------------------------------------------
 
 export default function LandingPage() {
-  const [lang, setLang] = useState<Lang>("es");
+  // Arranca en ingles: el documento declara <html lang="en"> y la mayoria de
+  // quienes llegan aqui -- socios, integradores, inversores -- leen en ingles.
+  // Antes arrancaba en "es" mientras el <html> decia "en", asi que el atributo
+  // mentia y un lector de pantalla leia espanol con voz inglesa.
+  const [lang, setLang] = useState<Lang>("en");
+
+  // El atributo lang del documento sigue al idioma activo. Sin esto, cambiar de
+  // idioma en la UI no cambia nada para un lector de pantalla ni para el
+  // navegador al ofrecer traduccion.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
 
   return (
     <LangCtx.Provider value={{ lang, setLang }}>
@@ -125,16 +136,22 @@ function Nav() {
               </button>
             ))}
           </div>
+          {/*
+            Oculto bajo sm: este CTA es `whitespace-nowrap shrink-0` y en 375px
+            se comia ~150px, dejando a la marca -- que es `truncate` -- en
+            "vig...". El menu hamburguesa ya ofrece la misma accion en movil,
+            asi que lo que cedia era lo unico que no debia ceder: el nombre.
+          */}
           <a
             href="#waitlist"
-            className="shrink-0 whitespace-nowrap rounded-lg bg-[#8BE9B0] px-3 py-2 text-xs font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2] sm:px-4 sm:text-[13px]"
+            className="hidden shrink-0 whitespace-nowrap rounded-lg bg-[#8BE9B0] px-3 py-2 text-xs font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2] sm:inline-block sm:px-4 sm:text-[13px]"
           >
             {t.navCta}
           </a>
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            aria-label="Menu"
+            aria-label={t.navMenuLabel}
             aria-expanded={open}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#2A2F35] text-[#9AA3A0] transition-colors hover:text-[#E8ECEA] md:hidden"
           >
@@ -154,6 +171,18 @@ function Nav() {
               {l.label}
             </a>
           ))}
+          {/*
+            El CTA vive aqui en movil, porque arriba se oculta bajo sm: para no
+            truncar la marca. Si se quitara de los dos sitios, el telefono se
+            quedaria sin la accion principal de la pagina.
+          */}
+          <a
+            href="#waitlist"
+            onClick={() => setOpen(false)}
+            className="mt-3 block rounded-lg bg-[#8BE9B0] px-4 py-3 text-center text-[15px] font-semibold text-[#0B0D0F] transition-colors hover:bg-[#A5F0C2]"
+          >
+            {t.navCta}
+          </a>
         </div>
       )}
     </nav>
@@ -322,7 +351,7 @@ function SectionHeading({ title, sub }: { title: string; sub?: string }) {
 function HowItWorks() {
   const { t } = useCopy();
   return (
-    <section id="how" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
+    <section id="how" className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 md:pt-24">
       <SectionHeading title={t.howTitle} sub={t.howSub} />
       <div className="grid gap-5 md:grid-cols-3">
         {t.steps.map((step) => (
@@ -342,15 +371,22 @@ function HowItWorks() {
 function Differentiator() {
   const { t } = useCopy();
   return (
-    <section className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
+    <section className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 md:pt-24">
       <div className="grid items-start gap-10 md:grid-cols-2 md:gap-14">
         <div>
           <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-[34px]">{t.diffTitle}</h2>
           <p className="mb-4 text-base leading-relaxed text-[#B4BCB9]">{t.diffBody1}</p>
           <p className="text-base leading-relaxed text-[#B4BCB9]">{t.diffBody2}</p>
         </div>
+        {/*
+          Comparativa. Hasta sm: se apila con etiquetas; desde sm: son tres
+          columnas. Antes era `grid-cols-[1.2fr_1fr_1fr]` en todos los anchos
+          dentro de un `overflow-hidden`: a 375px cada columna quedaba en ~90px
+          y el texto que no cabia se RECORTABA en silencio, sin barra de scroll
+          que delatara la perdida.
+        */}
         <div className="overflow-hidden rounded-[14px] border border-[#23282E] bg-[#12151A]">
-          <div className={`${mono} grid grid-cols-[1.2fr_1fr_1fr] gap-x-2 border-b border-[#23282E] px-3.5 py-3 text-xs text-[#6B7370] sm:px-5 sm:py-3.5`}>
+          <div className={`${mono} hidden grid-cols-[1.2fr_1fr_1fr] gap-x-2 border-b border-[#23282E] px-3.5 py-3 text-xs text-[#6B7370] sm:grid sm:px-5 sm:py-3.5`}>
             <span />
             <span>{t.diffColCdp}</span>
             <span className="text-[#8BE9B0]">vigente</span>
@@ -358,11 +394,21 @@ function Differentiator() {
           {t.diffRows.map((row) => (
             <div
               key={row.label}
-              className="grid grid-cols-[1.2fr_1fr_1fr] items-baseline gap-x-2 border-b border-[#1C2126] px-3.5 py-3 text-[13px] last:border-b-0 sm:px-5 sm:py-3.5 sm:text-sm"
+              className="border-b border-[#1C2126] px-4 py-3.5 text-[13px] last:border-b-0 sm:grid sm:grid-cols-[1.2fr_1fr_1fr] sm:items-baseline sm:gap-x-2 sm:px-5 sm:text-sm"
             >
-              <span className="text-[#9AA3A0]">{row.label}</span>
-              <span className="text-[#6B7370]">{row.cdp}</span>
-              <span className="text-[#E8ECEA]">{row.vig}</span>
+              <span className="block font-medium text-[#9AA3A0] sm:font-normal">{row.label}</span>
+              <span className="mt-2 flex items-baseline justify-between gap-3 sm:mt-0 sm:block">
+                <span className={`${mono} text-[11px] uppercase text-[#4F5753] sm:hidden`}>
+                  {t.diffColCdp}
+                </span>
+                <span className="text-right text-[#6B7370] sm:text-left">{row.cdp}</span>
+              </span>
+              <span className="mt-1 flex items-baseline justify-between gap-3 sm:mt-0 sm:block">
+                <span className={`${mono} text-[11px] uppercase text-[#4F5753] sm:hidden`}>
+                  vigente
+                </span>
+                <span className="text-right text-[#E8ECEA] sm:text-left">{row.vig}</span>
+              </span>
             </div>
           ))}
         </div>
@@ -376,7 +422,7 @@ function Differentiator() {
 function WhoItsFor() {
   const { t } = useCopy();
   return (
-    <section id="who" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
+    <section id="who" className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 md:pt-24">
       <SectionHeading title={t.whoTitle} />
       <div className="grid gap-5 md:grid-cols-2">
         {t.segments.map((seg) => (
@@ -523,7 +569,7 @@ function PassportSection() {
   }
 
   return (
-    <section id="passport" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
+    <section id="passport" className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 md:pt-24">
       <div className="rounded-[18px] border border-[#23282E] bg-gradient-to-b from-[#12151A] to-[#0E1114] p-5 sm:p-7 md:p-12">
         <div className={`${mono} mb-3.5 text-xs text-[#8BE9B0]`}>{t.ppTag}</div>
         <h2 className="mb-3 text-3xl font-bold tracking-tight md:text-[34px]">{t.ppTitle}</h2>
@@ -786,7 +832,7 @@ function TrustSection() {
   const minAge = status?.minWalletAgeDays;
 
   return (
-    <section id="trust" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
+    <section id="trust" className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 md:pt-24">
       <SectionHeading title={t.trustTitle} sub={t.trustSub} />
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {t.trustCards.map((card) => (
@@ -899,7 +945,7 @@ function WaitlistSection() {
   )}`;
 
   return (
-    <section id="waitlist" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
+    <section id="waitlist" className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 md:pt-24">
       <div className="grid items-center gap-8 rounded-[18px] border border-[#23282E] bg-gradient-to-b from-[#12151A] to-[#0E1114] p-6 sm:p-8 md:grid-cols-2 md:gap-12 md:p-12">
         <div>
           <h2 className="mb-3.5 text-3xl font-bold tracking-tight md:text-[34px]">{t.wlTitle}</h2>
@@ -983,7 +1029,7 @@ function WaitlistSection() {
 function VisionSection() {
   const { t } = useCopy();
   return (
-    <section className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
+    <section className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 md:pt-24">
       <div className="max-w-[720px]">
         <div className={`${mono} mb-3.5 text-xs text-[#8BE9B0]`}>{t.visionTag}</div>
         <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-[34px]">{t.visionTitle}</h2>
@@ -1010,7 +1056,7 @@ function VisionSection() {
 function FlowSection() {
   const { t } = useCopy();
   return (
-    <section id="flow" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
+    <section id="flow" className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 md:pt-24">
       <SectionHeading title={t.flowTitle} sub={t.flowSub} />
       <div className="grid gap-y-3.5 md:grid-cols-3">
         {t.flow.map((fs, i) => {
@@ -1045,7 +1091,7 @@ function NetworkSection() {
   return (
     <section className="relative mt-16 overflow-hidden border-y border-[#1C2126] bg-[#080A0C] md:mt-24">
       <NetworkCanvas count={70} alpha={0.9} dist={170} className="pointer-events-none absolute inset-0 h-full w-full" />
-      <div className="relative mx-auto max-w-6xl px-6 py-16 text-center md:py-28">
+      <div className="relative mx-auto max-w-6xl px-4 sm:px-6 py-16 text-center md:py-28">
         <div className={`${mono} mb-4 text-xs tracking-[0.15em] text-[#8BE9B0]`}>{t.netTag}</div>
         <h2 className="mx-auto mb-5 max-w-[760px] text-3xl font-bold leading-[1.1] tracking-tight sm:text-4xl md:text-[52px]">
           {t.netTitle}
@@ -1069,7 +1115,7 @@ function NetworkSection() {
 function RoadmapSection() {
   const { t } = useCopy();
   return (
-    <section id="roadmap" className="mx-auto max-w-6xl px-6 pt-16 md:pt-24">
+    <section id="roadmap" className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 md:pt-24">
       <SectionHeading title={t.roadmapTitle} />
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
         {t.roadmap.map((r) => (
@@ -1104,7 +1150,7 @@ function FaqSection() {
   const { t } = useCopy();
   const [open, setOpen] = useState(0);
   return (
-    <section id="faq" className="mx-auto max-w-3xl px-6 pt-16 md:pt-24">
+    <section id="faq" className="mx-auto max-w-3xl px-4 sm:px-6 pt-16 md:pt-24">
       <h2 className="mb-8 text-3xl font-bold tracking-tight md:text-[34px]">{t.faqTitle}</h2>
       <div className="grid gap-3">
         {t.faqs.map((faq, i) => {
@@ -1167,7 +1213,7 @@ function Footer() {
           </a>
         </div>
       </div>
-      <div className="mx-auto max-w-6xl px-6 pb-7 text-xs leading-relaxed text-[#4C5350]">{t.footDisclaimer}</div>
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 pb-7 text-xs leading-relaxed text-[#4C5350]">{t.footDisclaimer}</div>
     </footer>
   );
 }
