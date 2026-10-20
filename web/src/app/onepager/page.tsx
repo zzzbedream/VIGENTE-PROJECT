@@ -62,11 +62,18 @@ export default function OnePagerPage() {
           </ul>
         </Section>
 
+        {/*
+          Categorias, no nombres. La seccion se titula "How partners integrate",
+          asi que cualquier empresa nombrada aqui se lee como partner existente.
+          Hasta que haya una LOI firmada no se nombra a nadie -- la misma regla
+          declarada en landing/copy.ts, que existe porque ya hubo que retirar
+          una afirmacion falsa sobre un proveedor de oraculo en agosto.
+        */}
         <Section title="How partners integrate">
           <ul className="list-disc list-inside space-y-1">
             <li>
-              <b>Wallets</b> (Meru, LOBSTR): embed a credit passport so users build
-              and see a real, portable credit history.
+              <b>Wallets</b>: embed a credit passport so users build and see a
+              real, portable credit history.
             </li>
             <li>
               <b>Lending protocols</b> (any Soroban market): gate a reputation-tier
@@ -74,8 +81,12 @@ export default function OnePagerPage() {
               at conservative, throttled limits.
             </li>
             <li>
-              <b>Data</b> (Floid, Fintoc): consented open-finance enrichment, never
-              published on-chain.
+              <b>Open-finance data providers</b>: consented income enrichment,
+              never published on-chain.
+            </li>
+            <li>
+              <b>Tokenized-asset issuers</b>: their instrument accepted as
+              collateral, with a per-asset cap sized to its redemption capacity.
             </li>
           </ul>
         </Section>
