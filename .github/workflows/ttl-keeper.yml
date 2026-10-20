@@ -34,10 +34,17 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # 22 y no 20: varias dependencias declaran engines.node >= 22 y en 20
+          # el install sale lleno de EBADENGINE.
+          node-version: "22"
 
-      - name: Install web deps
-        working-directory: web
+      # Instala desde la RAIZ, no desde web/. Esto es un monorepo con workspaces
+      # (el package.json de la raiz declara workspaces: ["web"]) y las
+      # dependencias se izan a la raiz. Correr `npm ci` dentro de web/ usaba un
+      # package-lock.json propio, remanente de antes del monorepo y sin
+      # actualizar desde junio: por eso el keeper fallaba con EUSAGE cada semana
+      # desde el 14-sep sin que nadie lo mirara.
+      - name: Install deps (workspace root)
         run: npm ci --no-audit --no-fund
 
       - name: Check TTL of every watched instance
