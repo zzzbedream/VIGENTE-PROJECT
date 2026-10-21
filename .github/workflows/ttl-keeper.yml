@@ -38,14 +38,20 @@ jobs:
           # el install sale lleno de EBADENGINE.
           node-version: "22"
 
-      # Instala desde la RAIZ, no desde web/. Esto es un monorepo con workspaces
-      # (el package.json de la raiz declara workspaces: ["web"]) y las
-      # dependencias se izan a la raiz. Correr `npm ci` dentro de web/ usaba un
-      # package-lock.json propio, remanente de antes del monorepo y sin
-      # actualizar desde junio: por eso el keeper fallaba con EUSAGE cada semana
-      # desde el 14-sep sin que nadie lo mirara.
-      - name: Install deps (workspace root)
-        run: npm ci --no-audit --no-fund
+      # ttl-check.ts importa UN paquete: @stellar/stellar-sdk. Instalar el arbol
+      # entero de la web -1006 paquetes, con sharp, tailwind y next- para correr
+      # un chequeo de TTL convertia cada dependencia de la aplicacion en una
+      # forma de romper el keeper. Y rompio dos veces por eso: primero por un
+      # package-lock.json remanente dentro de web/, y despues por @emnapi/runtime,
+      # una dependencia opcional de unos paquetes wasm32 que el lock generado en
+      # Windows no traia para Linux.
+      #
+      # El keeper no necesita nada de eso. Se instala solo lo que el script usa,
+      # con version fija (las mismas que declara web/package.json), sin lockfile
+      # y sin workspace. Asi el keeper deja de depender de la salud del arbol de
+      # la aplicacion, que es lo que lo tuvo rojo cinco semanas.
+      - name: Install only what the check needs
+        run: npm install --no-save --no-audit --no-fund @stellar/stellar-sdk@14.4.2 tsx@4.22.3
 
       - name: Check TTL of every watched instance
         id: ttl
