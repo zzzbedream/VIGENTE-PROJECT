@@ -69,6 +69,15 @@ pub enum Error {
     /// in that asset, yet the position as a whole is not insolvent. The
     /// liquidator should lower `repay_amount` or pick another asset.
     SeizeExceedsCollateral = 6,
+    /// `init` was called with `user_cap <= 0`.
+    ///
+    /// M-04 shipped the per-user cap as code but left the parameter outside
+    /// `InitConfig`, so every deployment started uncapped and the mitigation
+    /// did nothing until somebody remembered `set_user_cap`. It was measured
+    /// dormant in production on 2026-10-19: `get_user_cap` returned 0, which
+    /// this contract reads as NO LIMIT. The safe value is now the one you get
+    /// by default and the unsafe one takes a deliberate act.
+    UserCapRequired = 7,
 }
 
 // =============================================================================
@@ -256,6 +265,11 @@ pub struct InitConfig {
     /// Immutable after init: grace window (s) for tier changes and slash
     /// effects on existing positions (48 h recommended in production).
     pub param_grace_secs: u64,
+    /// Per-user cap for the collateral asset registered here, in token units.
+    /// MUST be positive: `init` rejects 0 with `Error::UserCapRequired`.
+    /// Changed later with `set_user_cap`; extra assets get theirs through
+    /// `add_collateral_asset`.
+    pub user_cap: i128,
 }
 
 /// Hard ceiling for any tier LTV. Must stay strictly below the Blend
@@ -313,6 +327,12 @@ impl MarginController {
         if config.collateral_cap < 0 {
             panic!("cap must be non-negative");
         }
+        // Typed, not a string panic: a caller can branch on this one, and a
+        // deployment script should be able to tell "you forgot the cap" apart
+        // from any other init failure.
+        if config.user_cap <= 0 {
+            panic_with_error!(&env, Error::UserCapRequired);
+        }
         // All Stellar classic-asset SACs use 7 decimals; the LTV math assumes
         // collateral and borrow asset share the same token scale.
         let borrow_decimals = TokenClient::new(&env, &config.borrow_asset).decimals();
@@ -336,6 +356,7 @@ impl MarginController {
             &config.collateral_feed,
         );
         s.set(&DataKey::Cap(config.collateral_asset.clone()), &config.collateral_cap);
+        s.set(&DataKey::UserCap(config.collateral_asset.clone()), &config.user_cap);
         s.set(&DataKey::TierLtv, &config.tier_ltv);
         s.set(&DataKey::MaxPriceAge, &config.max_price_age);
         // Immutable by construction: no setter exists for either key.
@@ -1003,13 +1024,31 @@ impl MarginController {
         env.events().publish((symbol_short!("ucap"), asset), cap);
     }
 
-    /// Allowlist a new collateral asset with its SEP-40 feed key and cap.
-    /// This is how BENJI (or any RWA) drops in post-sprint: config, not code.
-    pub fn add_collateral_asset(env: Env, asset: Address, feed: Asset, cap: i128) {
+    /// Allowlist a new collateral asset with its SEP-40 feed key, its total
+    /// cap and its per-user cap. This is how BENJI (or any RWA) drops in
+    /// post-sprint: config, not code. `user_cap` MUST be positive -- see the
+    /// body for why it is a parameter and not a follow-up call.
+    pub fn add_collateral_asset(
+        env: Env,
+        asset: Address,
+        feed: Asset,
+        cap: i128,
+        user_cap: i128,
+    ) {
         let admin = Self::require_admin(&env);
         admin.require_auth();
         if cap < 0 {
             panic!("cap must be non-negative");
+        }
+        // Same reason `init` demands it: the read path treats 0 as NO LIMIT, so
+        // an asset listed without a per-user cap is listed uncapped. Before
+        // this parameter existed the only way to cap a new asset was to
+        // remember `set_user_cap` afterwards, and M-04 already showed what that
+        // produces -- the cap stayed 0 in production until somebody looked.
+        // The asset that most needs the cap is the one listed here, not the one
+        // in `init`: an RWA with finite redemption capacity arrives this way.
+        if user_cap <= 0 {
+            panic_with_error!(&env, Error::UserCapRequired);
         }
         let borrow_asset: Address = env
             .storage()
@@ -1033,6 +1072,7 @@ impl MarginController {
         env.storage().instance().set(&DataKey::CollateralAssets, &assets);
         env.storage().instance().set(&DataKey::FeedKey(asset.clone()), &feed);
         env.storage().instance().set(&DataKey::Cap(asset.clone()), &cap);
+        env.storage().instance().set(&DataKey::UserCap(asset.clone()), &user_cap);
         env.events().publish((symbol_short!("asset"), asset), cap);
     }
 

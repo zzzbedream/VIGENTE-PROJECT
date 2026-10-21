@@ -232,6 +232,10 @@ fn units(n: i128) -> i128 {
 
 const POOL_LIQUIDITY: i128 = 10_000_000_0000000; // 10M USDC
 const XLM_CAP: i128 = 0; // uncapped by default; cap tests use setup_with_cap
+/// Per-user cap del fixture. Deliberadamente generoso para no estorbar al resto
+/// de los tests, pero NO cero: `init` ya lo rechaza, que es justo el punto de
+/// que exista. Los tests de cap lo bajan con `set_user_cap`.
+const USER_CAP: i128 = 1_000_000_0000000; // 1M XLM
 
 struct Harness<'a> {
     env: Env,
@@ -321,6 +325,7 @@ fn setup_with_cap(xlm_cap: i128) -> Harness<'static> {
         max_price_age: MAX_PRICE_AGE,
         min_ltv_floor: MIN_LTV_FLOOR,
         param_grace_secs: GRACE_SECS,
+        user_cap: USER_CAP,
     });
 
     // Controller may slash badges on liquidation.
@@ -1270,12 +1275,111 @@ fn user_cap_nunca_atrapa_una_posicion_preexistente() {
     assert_eq!(h.xlm.balance(&h.borrower), units(10_000), "recupero todo su colateral");
 }
 
+/// Antes este test se llamaba `user_cap_en_cero_significa_sin_limite` y fijaba
+/// justo lo que resulto ser el problema: que un despliegue arrancaba SIN tope
+/// por usuario y la mitigacion de M-04 no hacia nada hasta que alguien se
+/// acordaba de `set_user_cap`. Se midio dormida en produccion el 2026-10-19.
+///
+/// Ahora `init` escribe el tope y lo exige positivo, asi que el valor seguro es
+/// el que se obtiene por omision.
 #[test]
-fn user_cap_en_cero_significa_sin_limite() {
+fn init_deja_el_tope_por_usuario_puesto_sin_que_nadie_lo_llame() {
     let h = setup();
-    assert_eq!(h.ctrl.get_user_cap(&h.xlm_id), 0);
+    assert_eq!(
+        h.ctrl.get_user_cap(&h.xlm_id),
+        USER_CAP,
+        "init debe dejar el tope escrito: nadie llamo a set_user_cap"
+    );
+    // Y el tope rige de verdad, no es solo un valor guardado.
+    h.ctrl.set_user_cap(&h.xlm_id, &units(5_000));
     h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(5_000));
-    assert_eq!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id), units(5_000));
+    let err = h
+        .ctrl
+        .try_deposit_collateral(&h.borrower, &h.xlm_id, &units(1))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::UserCapExceeded as u32));
+}
+
+/// `init` con `user_cap = 0` revierte con error TIPADO. Es la diferencia entre
+/// un script de despliegue que puede distinguir "te falto el tope" de
+/// cualquier otro fallo, y uno que solo ve un panic opaco.
+#[test]
+fn init_rechaza_un_tope_por_usuario_en_cero() {
+    let h = setup();
+
+    // Instancia nueva, misma configuracion de PRODUCCION que el resto de los
+    // tests -- colateral XLM, deuda USDC -- cambiando solo el tope a 0.
+    let ctrl_id = h.env.register_contract(None, MarginController);
+    let ctrl = MarginControllerClient::new(&h.env, &ctrl_id);
+    let err = ctrl
+        .try_init(&InitConfig {
+            admin: h.admin.clone(),
+            oracle: h.price_oracle.address.clone(),
+            reputation_registry: h.badge.address.clone(),
+            blend_pool: h.pool_id.clone(),
+            borrow_asset: h.usdc_id.clone(),
+            borrow_feed: Asset::Stellar(h.usdc_id.clone()),
+            collateral_asset: h.xlm_id.clone(),
+            collateral_feed: Asset::Stellar(h.xlm_id.clone()),
+            collateral_cap: 0,
+            tier_ltv: default_tiers(&h.env),
+            max_price_age: MAX_PRICE_AGE,
+            min_ltv_floor: MIN_LTV_FLOOR,
+            param_grace_secs: GRACE_SECS,
+            user_cap: 0,
+        })
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::UserCapRequired as u32));
+}
+
+/// `add_collateral_asset` con `user_cap = 0` revierte, igual que `init`. Esta es
+/// la ruta por la que entra un RWA, asi que es la que mas importa: un bono con
+/// capacidad de redencion finita listado sin tope por usuario deja que una sola
+/// cuenta tome todo lo que el emisor puede honrar.
+#[test]
+fn add_collateral_asset_rechaza_un_tope_por_usuario_en_cero() {
+    let h = setup();
+    let err = h
+        .ctrl
+        .try_add_collateral_asset(
+            &h.usdc_id,
+            &Asset::Stellar(h.usdc_id.clone()),
+            &0_i128,
+            &0_i128,
+        )
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::UserCapRequired as u32));
+}
+
+/// El tope del activo nuevo esta vivo en el PRIMER deposito, sin que nadie llame
+/// a `set_user_cap`. Antes de que el parametro existiera, este deposito pasaba:
+/// el activo quedaba en 0, que la ruta de lectura interpreta como SIN LIMITE.
+#[test]
+fn add_collateral_asset_deja_el_tope_vivo_sin_llamar_a_set_user_cap() {
+    let h = setup();
+    h.ctrl.add_collateral_asset(
+        &h.usdc_id,
+        &Asset::Stellar(h.usdc_id.clone()),
+        &0_i128, // cap total sin limite: el que frena es el por-usuario
+        &units(100),
+    );
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&h.borrower, &units(1_000));
+
+    assert_eq!(h.ctrl.get_user_cap(&h.usdc_id), units(100));
+    h.ctrl.deposit_collateral(&h.borrower, &h.usdc_id, &units(100));
+    let err = h
+        .ctrl
+        .try_deposit_collateral(&h.borrower, &h.usdc_id, &units(1))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::UserCapExceeded as u32));
 }
 
 // =============================================================================
@@ -1410,7 +1514,7 @@ fn m03_settle_seized_repaga_contra_el_pool() {
     // permite ejercitar el unico caso implementado (asset == borrow_asset).
     let h = setup();
     h.ctrl
-        .add_collateral_asset(&h.usdc_id, &Asset::Stellar(h.usdc_id.clone()), &0_i128);
+        .add_collateral_asset(&h.usdc_id, &Asset::Stellar(h.usdc_id.clone()), &0_i128, &USER_CAP);
     MockUsdcClient::new(&h.env, &h.usdc_id).mint(&h.borrower, &units(1_000));
 
     h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000)); // ~192
