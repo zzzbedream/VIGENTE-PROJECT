@@ -38,30 +38,41 @@ jobs:
           # el install sale lleno de EBADENGINE.
           node-version: "22"
 
-      # ttl-check.ts importa UN paquete: @stellar/stellar-sdk. Instalar el arbol
-      # entero de la web -1006 paquetes, con sharp, tailwind y next- para correr
-      # un chequeo de TTL convertia cada dependencia de la aplicacion en una
-      # forma de romper el keeper. Y rompio dos veces por eso: primero por un
-      # package-lock.json remanente dentro de web/, y despues por @emnapi/runtime,
-      # una dependencia opcional de unos paquetes wasm32 que el lock generado en
-      # Windows no traia para Linux.
+      # El keeper tiene su propio package.json y su propio lock, en
+      # .github/keeper, con las dos unicas cosas que ttl-check.ts necesita:
+      # @stellar/stellar-sdk y tsx. 90 paquetes en vez de los 1006 del arbol de
+      # la web.
       #
-      # El keeper no necesita nada de eso. Se instala solo lo que el script usa,
-      # con version fija (las mismas que declara web/package.json), sin lockfile
-      # y sin workspace. Asi el keeper deja de depender de la salud del arbol de
-      # la aplicacion, que es lo que lo tuvo rojo cinco semanas.
-      - name: Install only what the check needs
-        run: npm install --no-save --no-audit --no-fund @stellar/stellar-sdk@14.4.2 tsx@4.22.3
+      # Por que aislado: el keeper fallo cinco semanas seguidas por dependencias
+      # de la APLICACION que no tienen nada que ver con comprobar un TTL --
+      # primero un package-lock.json remanente dentro de web/, despues
+      # @emnapi/runtime, una opcional de unos paquetes wasm32 que el lock
+      # generado en Windows no traia para Linux. Un chequeo de infraestructura
+      # no debe caerse porque la web cambio de empaquetador.
+      #
+      # Por que `npm ci` y con lock: una version intermedia de este arreglo usaba
+      # `npm install` con las dos versiones fijadas pero SIN lock, lo que dejaba
+      # las transitivas sin fijar en un job que tiene permiso issues:write. Eso
+      # cambiaba un problema de fragilidad por uno de cadena de suministro.
+      - name: Install the keeper's own pinned deps
+        working-directory: .github/keeper
+        run: npm ci --no-audit --no-fund
 
+      # El script se copia junto a sus dependencias: node resuelve los imports
+      # desde la carpeta del archivo que importa, no desde el cwd, asi que
+      # ejecutarlo desde web/ no encontraria .github/keeper/node_modules.
+      # La fuente sigue siendo web/scripts/ttl-check.ts, que es la que se usa en
+      # local con `npm run ttl-check`: no hay dos copias que puedan divergir.
       - name: Check TTL of every watched instance
         id: ttl
-        working-directory: web
         env:
           TTL_MIN_DAYS: ${{ github.event.inputs.min_days || '30' }}
           TTL_JSON: "1"
         run: |
           set -o pipefail
-          npx tsx scripts/ttl-check.ts 2>&1 | tee "$GITHUB_WORKSPACE/ttl-report.txt"
+          cp web/scripts/ttl-check.ts .github/keeper/ttl-check.ts
+          cd .github/keeper
+          npx tsx ttl-check.ts 2>&1 | tee "$GITHUB_WORKSPACE/ttl-report.txt"
 
       - name: Open an issue when an instance needs attention
         if: failure()

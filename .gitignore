@@ -37,3 +37,7 @@ web/asset.json
 # auto-configura una fuente de contenido externa para todo el que clone, y ese
 # contenido entra al contexto del agente. Cada quien la crea a mano si la quiere.
 .mcp.json
+
+# node_modules del keeper: el lock si se versiona, los modulos no
+.github/keeper/node_modules/
+.github/keeper/ttl-check.ts
