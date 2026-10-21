@@ -1336,6 +1336,52 @@ fn init_rechaza_un_tope_por_usuario_en_cero() {
     assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::UserCapRequired as u32));
 }
 
+/// La asercion del paso 2 de 4.8, como test: toda la configuracion que `init`
+/// recibio se puede volver a leer POR LA ABI. Antes de `get_config` diez claves
+/// no tenian getter -- `Pool` y `Oracle` entre ellas, las dos que deciden a
+/// donde van los fondos y de donde sale el precio -- asi que un script de
+/// despliegue no podia afirmar nada sobre ellas.
+#[test]
+fn get_config_devuelve_lo_que_init_recibio() {
+    let h = setup();
+    let c = h.ctrl.get_config();
+
+    assert_eq!(c.admin, h.admin);
+    assert_eq!(c.oracle, h.price_oracle.address);
+    assert_eq!(c.reputation_registry, h.badge.address);
+    assert_eq!(c.blend_pool, h.pool_id);
+    assert_eq!(c.borrow_asset, h.usdc_id);
+    assert_eq!(c.max_price_age, MAX_PRICE_AGE);
+    assert_eq!(c.min_ltv_floor, MIN_LTV_FLOOR);
+    assert_eq!(c.param_grace_secs, GRACE_SECS);
+    assert!(!c.paused);
+
+    // Per-activo: no caben en el struct global.
+    assert_eq!(h.ctrl.get_cap(&h.xlm_id), XLM_CAP);
+    assert_eq!(h.ctrl.get_feed_key(&h.xlm_id), Some(Asset::Stellar(h.xlm_id.clone())));
+    // El activo de deuda tambien lleva feed, puesto por `init`.
+    assert_eq!(h.ctrl.get_feed_key(&h.usdc_id), Some(Asset::Stellar(h.usdc_id.clone())));
+    // Un activo que nadie listo devuelve None, no un panic: el script de
+    // despliegue puede distinguir "no esta" de "esta mal".
+    let ajeno = Address::generate(&h.env);
+    assert_eq!(h.ctrl.get_feed_key(&ajeno), None);
+    assert_eq!(h.ctrl.get_cap(&ajeno), 0);
+}
+
+/// `is_paused` sigue al cortacircuitos. Importa que exista porque hoy un
+/// integrador no tiene forma de preguntarlo: solo puede mandar la transaccion
+/// y ver si revierte.
+#[test]
+fn is_paused_sigue_al_cortacircuitos() {
+    let h = setup();
+    assert!(!h.ctrl.is_paused());
+    h.ctrl.pause();
+    assert!(h.ctrl.is_paused());
+    assert!(h.ctrl.get_config().paused);
+    h.ctrl.unpause();
+    assert!(!h.ctrl.is_paused());
+}
+
 /// `add_collateral_asset` con `user_cap = 0` revierte, igual que `init`. Esta es
 /// la ruta por la que entra un RWA, asi que es la que mas importa: un bono con
 /// capacidad de redencion finita listado sin tope por usuario deja que una sola

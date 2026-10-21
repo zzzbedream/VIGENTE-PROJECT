@@ -245,6 +245,29 @@ pub struct TierLevel {
     pub ltv_bps: u32,
 }
 
+/// Everything `init` fixed, readable in one call.
+///
+/// Exists because ten configuration keys had no getter at all -- `Pool` and
+/// `Oracle` among them, which govern where user funds go and where the price
+/// comes from. They were readable off-chain by parsing instance storage, but
+/// not through the ABI, so neither an integrating contract nor a deploy script
+/// could assert anything about them. See ADR v4 4.10.
+///
+/// A struct rather than ten separate getters because the case that motivates it
+/// -- the deploy script's assertion pass -- wants all of them at once.
+#[contracttype]
+pub struct ControllerConfig {
+    pub admin: Address,
+    pub oracle: Address,
+    pub reputation_registry: Address,
+    pub blend_pool: Address,
+    pub borrow_asset: Address,
+    pub max_price_age: u64,
+    pub min_ltv_floor: u32,
+    pub param_grace_secs: u64,
+    pub paused: bool,
+}
+
 /// One-shot init configuration (grouped: Soroban caps functions at 10 params).
 #[derive(Clone, Debug)]
 #[contracttype]
@@ -1136,6 +1159,48 @@ impl MarginController {
             .instance()
             .get(&DataKey::UserCap(asset))
             .unwrap_or(0)
+    }
+
+    /// The TOTAL cap for this asset, across every user. `0` means NO CAP --
+    /// the same encoding `deposit_collateral` reads (`if cap > 0`).
+    pub fn get_cap(env: Env, asset: Address) -> i128 {
+        env.storage().instance().get(&DataKey::Cap(asset)).unwrap_or(0)
+    }
+
+    /// The SEP-40 key this asset is priced under. Lets a deploy script check
+    /// the oracle route end to end: read the key here, then ask the aggregator
+    /// for `lastprice` of it.
+    pub fn get_feed_key(env: Env, asset: Address) -> Option<Asset> {
+        env.storage().instance().get(&DataKey::FeedKey(asset))
+    }
+
+    /// Whether the circuit breaker is on. Separate from `get_config` because
+    /// this is the hot path: an integrator checking before building a
+    /// transaction should not deserialize eight addresses to read one bool.
+    ///
+    /// Note what a `true` does NOT mean: `pause` never blocks `withdraw`,
+    /// `repay` or `liquidate`. It only stops NEW risk from entering.
+    pub fn is_paused(env: Env) -> bool {
+        env.storage().instance().get(&DataKey::Paused).unwrap_or(false)
+    }
+
+    /// Everything `init` fixed, in one call. Panics if not initialized --
+    /// absent config is not a default, it is a contract that was never set up,
+    /// and a script asserting against it should fail loudly rather than read
+    /// zeros.
+    pub fn get_config(env: Env) -> ControllerConfig {
+        let s = env.storage().instance();
+        ControllerConfig {
+            admin: s.get(&DataKey::Admin).expect("not initialized"),
+            oracle: s.get(&DataKey::Oracle).expect("not initialized"),
+            reputation_registry: s.get(&DataKey::Registry).expect("not initialized"),
+            blend_pool: s.get(&DataKey::Pool).expect("not initialized"),
+            borrow_asset: s.get(&DataKey::BorrowAsset).expect("not initialized"),
+            max_price_age: s.get(&DataKey::MaxPriceAge).expect("not initialized"),
+            min_ltv_floor: s.get(&DataKey::MinLtvFloor).expect("not initialized"),
+            param_grace_secs: s.get(&DataKey::ParamGraceSecs).expect("not initialized"),
+            paused: s.get(&DataKey::Paused).unwrap_or(false),
+        }
     }
 
     pub fn get_seized(env: Env, asset: Address) -> i128 {
