@@ -279,6 +279,7 @@ struct Harness<'a> {
     xlm_id: Address,
     xlm: TokenClient<'a>,
     price_oracle: MockOracleClient<'a>,
+    treasury: Address,
 }
 
 fn default_tiers(env: &Env) -> Vec<TierLevel> {
@@ -336,6 +337,11 @@ fn setup_with_cap(xlm_cap: i128) -> Harness<'static> {
     let pool_id = env.register_contract(None, MockPool);
     usdc_admin.mint(&pool_id, &POOL_LIQUIDITY);
 
+    // Tesoreria del protocolo: una direccion externa, como en produccion.
+    // Que sea distinta del contrato es un requisito de `init`, no una
+    // comodidad del test -- barrer hacia uno mismo no recupera nada.
+    let treasury = Address::generate(&env);
+
     // The controller under test.
     let ctrl_id = env.register_contract(None, MarginController);
     let ctrl = MarginControllerClient::new(&env, &ctrl_id);
@@ -354,6 +360,7 @@ fn setup_with_cap(xlm_cap: i128) -> Harness<'static> {
         min_ltv_floor: MIN_LTV_FLOOR,
         param_grace_secs: GRACE_SECS,
         user_cap: USER_CAP,
+        treasury: treasury.clone(),
     });
 
     // Controller may slash badges on liquidation.
@@ -376,6 +383,7 @@ fn setup_with_cap(xlm_cap: i128) -> Harness<'static> {
         xlm_id: xlm_id.clone(),
         xlm: TokenClient::new(&env, &xlm_id),
         price_oracle,
+        treasury,
     }
 }
 
@@ -1357,6 +1365,7 @@ fn init_rechaza_un_tope_por_usuario_en_cero() {
             min_ltv_floor: MIN_LTV_FLOOR,
             param_grace_secs: GRACE_SECS,
             user_cap: 0,
+            treasury: Address::generate(&h.env),
         })
         .err()
         .unwrap()
@@ -1498,6 +1507,349 @@ fn add_collateral_asset_deja_el_tope_vivo_sin_llamar_a_set_user_cap() {
         .unwrap()
         .unwrap();
     assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::UserCapExceeded as u32));
+}
+
+
+
+// =============================================================================
+// FASE 1.3 — UN ACTIVO TIPO CETES COMO COLATERAL, DEUDA EN USDC
+// =============================================================================
+
+/// Precio del CETES de prueba: US$ 0,0643 con los 14 decimales del agregador.
+/// Es el numero que midio `09_ORACLE_RWA_DECISION` componiendo el NAV de
+/// Etherfuse con el FX de Reflector.
+const P_CETES: i128 = 6_435_220_000_000; // $0.0643522
+
+/// Lista un activo tipo CETES: 7 decimales como el SAC de
+/// `CETES:GC3CW7ED…`, precio propio, y su tope por usuario.
+///
+/// Lo que este helper NO simula, y conviene decirlo: los flags del emisor.
+/// El CETES real de testnet tiene `auth_clawback_enabled` y `auth_revocable`
+/// activados, y un contrato de prueba no los tiene. El comportamiento ante un
+/// clawback es la prueba T20 de la Fase 5 y necesita una red, no un test
+/// unitario.
+fn listar_cetes(h: &Harness) -> Address {
+    let cetes_id = h.env.register_contract(None, MockUsdc);
+    let cetes_admin = MockUsdcClient::new(&h.env, &cetes_id);
+    // 7 decimales, igual que el SAC de CETES:GC3CW7ED... en testnet, y que el
+    // activo de deuda: la matematica de LTV asume la misma escala en los dos.
+    cetes_admin.initialize(
+        &h.admin,
+        &7_u32,
+        &String::from_str(&h.env, "Cetes"),
+        &String::from_str(&h.env, "CETES"),
+    );
+    cetes_admin.mint(&h.borrower, &units(100_000));
+    h.price_oracle.set_price(
+        &Asset::Stellar(cetes_id.clone()),
+        &P_CETES,
+        &INITIAL_TIMESTAMP,
+    );
+    h.ctrl.add_collateral_asset(
+        &cetes_id,
+        &Asset::Stellar(cetes_id.clone()),
+        &0_i128,
+        &USER_CAP,
+    );
+    cetes_id
+}
+
+/// El ciclo entero con CETES de colateral y USDC de deuda: deposito, borrow,
+/// repago, retiro. Es la configuracion del MVP, no la del fixture.
+#[test]
+fn cetes_ciclo_completo_con_deuda_en_usdc() {
+    let h = setup();
+    let cetes = listar_cetes(&h);
+    let cetes_token = TokenClient::new(&h.env, &cetes);
+    let antes = cetes_token.balance(&h.borrower);
+
+    h.ctrl.deposit_collateral(&h.borrower, &cetes, &units(10_000));
+    mint_badge(&h, &h.borrower, 850, 51);
+
+    let max = h.ctrl.max_borrow(&h.borrower);
+    assert!(max > 0, "con CETES de colateral no se puede pedir nada");
+    h.ctrl.borrow(&h.borrower, &max);
+    assert_eq!(h.ctrl.get_debt(&h.borrower), max);
+
+    h.ctrl.repay(&h.borrower, &max);
+    assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
+    assert_eq!(h.ctrl.health(&h.borrower), HEALTH_NO_DEBT);
+
+    h.ctrl.withdraw_collateral(&h.borrower, &cetes, &units(10_000));
+    assert_eq!(cetes_token.balance(&h.borrower), antes);
+}
+
+/// Liquidacion de una posicion en CETES, y el corte del protocolo sale por
+/// `sweep_seized`. Es N-02 cerrado sobre el activo que de verdad importa: un
+/// RWA, no el XLM del fixture.
+#[test]
+fn cetes_liquidacion_y_el_protocolo_cobra_su_parte() {
+    let h = setup();
+    let cetes = listar_cetes(&h);
+    let cetes_token = TokenClient::new(&h.env, &cetes);
+
+    h.ctrl.deposit_collateral(&h.borrower, &cetes, &units(10_000));
+    mint_badge(&h, &h.borrower, 850, 52);
+    let max = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &max);
+
+    // El CETES cae al 55 %: insana pero solvente -> liquidacion parcial.
+    h.price_oracle.set_price(
+        &Asset::Stellar(cetes.clone()),
+        &(P_CETES * 55 / 100),
+        &INITIAL_TIMESTAMP,
+    );
+    let keeper = liquidador_financiado(&h);
+    h.ctrl.liquidate(&keeper, &h.borrower, &cetes, &(max / 10));
+
+    let incautado = h.ctrl.get_seized(&cetes);
+    assert!(incautado > 0, "la liquidacion de CETES no dejo corte");
+
+    let tesoreria_antes = cetes_token.balance(&h.treasury);
+    h.ctrl.sweep_seized(&cetes);
+    assert_eq!(cetes_token.balance(&h.treasury) - tesoreria_antes, incautado);
+    assert_eq!(h.ctrl.get_seized(&cetes), 0);
+}
+
+/// El tope por usuario rige igual sobre el RWA. Importa mas aca que en el XLM:
+/// un bono tiene capacidad de redencion finita, asi que una sola cuenta sin
+/// tope puede tomar todo lo que el emisor puede honrar.
+#[test]
+fn cetes_el_tope_por_usuario_rige_sobre_el_rwa() {
+    let h = setup();
+    let cetes = listar_cetes(&h);
+    h.ctrl.set_user_cap(&cetes, &units(1_000));
+
+    h.ctrl.deposit_collateral(&h.borrower, &cetes, &units(1_000));
+    let err = h
+        .ctrl
+        .try_deposit_collateral(&h.borrower, &cetes, &units(1))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::UserCapExceeded as u32));
+}
+
+// =============================================================================
+// ALIASING — LOS CASOS QUE EL BARRIDO ANTERIOR NO VIO
+// =============================================================================
+
+/// `liquidate` toma TRES direcciones, no dos.
+///
+/// El barrido que `audit/12` cita para sostener que la clase de aliasing de
+/// Comet no nos alcanza uso un patron de UNA SOLA LINEA, asi que se salto
+/// `liquidate` y `slash`, que tienen la firma multilinea. La conclusion de
+/// fondo aguanta --ninguna funcion toma dos ACTIVOS sobre la misma reserva,
+/// que es la forma del bug de Comet-- pero el metodo estaba incompleto y estos
+/// casos no tenian test. Se cierran aca.
+#[test]
+fn aliasing_liquidate_con_deudor_igual_al_activo_revierte() {
+    let h = setup();
+    posicion_insana_pero_solvente(&h);
+    let keeper = liquidador_financiado(&h);
+    // user == collateral_asset: el "activo" no esta en la allowlist, asi que
+    // la operacion muere antes de tocar contabilidad alguna.
+    let r = h.ctrl.try_liquidate(&keeper, &h.xlm_id, &h.xlm_id, &units(1));
+    assert!(r.is_err(), "user == collateral_asset deberia revertir");
+}
+
+#[test]
+fn aliasing_liquidate_con_liquidador_igual_al_activo_revierte() {
+    let h = setup();
+    posicion_insana_pero_solvente(&h);
+    // liquidator == collateral_asset: el contrato del token tendria que
+    // autorizar la transferencia que lo financia, y no lo hace.
+    let r = h.ctrl.try_liquidate(&h.xlm_id, &h.borrower, &h.xlm_id, &units(1));
+    assert!(r.is_err(), "liquidator == collateral_asset deberia revertir");
+}
+
+/// `withdraw_collateral(user, asset)` con los dos iguales, el hermano del caso
+/// que ya estaba cubierto para `deposit_collateral`.
+#[test]
+fn aliasing_withdraw_con_user_igual_a_asset_revierte() {
+    let h = setup();
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(100));
+    let r = h.ctrl.try_withdraw_collateral(&h.borrower, &h.borrower, &units(1));
+    assert!(r.is_err(), "user == asset deberia revertir por allowlist");
+    // Y la contabilidad del deposito real sigue intacta.
+    assert_eq!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id), units(100));
+}
+
+// =============================================================================
+// N-02 — EL CORTE DEL PROTOCOLO TIENE RUTA DE SALIDA
+// =============================================================================
+
+/// El test que cierra N-02: lo incautado sale del pool y llega a la tesoreria.
+///
+/// Antes esto era imposible de escribir. `liquidate` anota bajo el activo de
+/// COLATERAL y `settle_seized` solo acepta el de DEUDA, asi que con XLM de
+/// colateral y USDC de deuda `Seized(XLM)` era una clave de solo escritura.
+#[test]
+fn n02_sweep_saca_el_corte_del_protocolo_a_la_tesoreria() {
+    let h = setup();
+    posicion_insana_pero_solvente(&h);
+    let keeper = liquidador_financiado(&h);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(10));
+
+    let incautado = h.ctrl.get_seized(&h.xlm_id);
+    assert!(incautado > 0, "la liquidacion no dejo corte para el protocolo");
+    assert_eq!(h.ctrl.get_sweepable(&h.xlm_id), incautado,
+               "el XLM no es el activo de deuda: todo deberia ser barrible");
+
+    let antes = h.xlm.balance(&h.treasury);
+    h.ctrl.sweep_seized(&h.xlm_id);
+
+    assert_eq!(h.xlm.balance(&h.treasury) - antes, incautado,
+               "la tesoreria no recibio exactamente lo incautado");
+    assert_eq!(h.ctrl.get_seized(&h.xlm_id), 0);
+    assert_eq!(h.ctrl.get_sweepable(&h.xlm_id), 0);
+}
+
+/// INVARIANTE: nunca existe saldo en `Seized(asset)` sin ruta de salida para
+/// ese activo. Se comprueba sobre TODOS los activos de colateral listados, no
+/// solo sobre el del fixture -- que es la forma del hallazgo original.
+#[test]
+fn n02_invariante_todo_activo_incautado_tiene_ruta_de_salida() {
+    let h = setup();
+    h.ctrl.add_collateral_asset(
+        &h.usdc_id,
+        &Asset::Stellar(h.usdc_id.clone()),
+        &0_i128,
+        &USER_CAP,
+    );
+    posicion_insana_pero_solvente(&h);
+    let keeper = liquidador_financiado(&h);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(10));
+
+    for asset in h.ctrl.get_collateral_assets().iter() {
+        let incautado = h.ctrl.get_seized(&asset);
+        if incautado == 0 {
+            continue;
+        }
+        let barrible = h.ctrl.get_sweepable(&asset);
+        assert!(
+            barrible > 0 || asset == h.usdc_id,
+            "hay saldo incautado sin ruta de salida"
+        );
+        if barrible > 0 {
+            h.ctrl.sweep_seized(&asset);
+            assert_eq!(h.ctrl.get_seized(&asset), incautado - barrible);
+        }
+    }
+}
+
+/// INVARIANTE: lo incautado = lo transferido a la tesoreria + lo que queda
+/// pendiente, por activo. La contabilidad cuadra al entero, sin fugas.
+#[test]
+fn n02_invariante_lo_incautado_cuadra_con_lo_barrido_mas_lo_que_queda() {
+    let h = setup();
+    posicion_insana_pero_solvente(&h);
+    let keeper = liquidador_financiado(&h);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(10));
+
+    let incautado_inicial = h.ctrl.get_seized(&h.xlm_id);
+    let tesoreria_antes = h.xlm.balance(&h.treasury);
+    h.ctrl.sweep_seized(&h.xlm_id);
+
+    let a_tesoreria = h.xlm.balance(&h.treasury) - tesoreria_antes;
+    let queda = h.ctrl.get_seized(&h.xlm_id);
+    assert_eq!(incautado_inicial, a_tesoreria + queda,
+               "incautado != barrido + remanente");
+}
+
+/// En el activo de DEUDA, lo que `PendingSettlement` reclama no se puede
+/// barrer: es deuda incobrable que hay que repagarle al pool, y va antes que
+/// el corte del protocolo. Cobrarnos primero seria quedarnos con una perdida
+/// ajena.
+#[test]
+fn n02_en_el_activo_de_deuda_lo_pendiente_tiene_prioridad() {
+    let h = setup();
+    h.ctrl.add_collateral_asset(
+        &h.usdc_id,
+        &Asset::Stellar(h.usdc_id.clone()),
+        &0_i128,
+        &USER_CAP,
+    );
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&h.borrower, &units(1_000));
+
+    // Insolvencia: el XLM se desploma y el USDC incautado queda pendiente.
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    h.ctrl.deposit_collateral(&h.borrower, &h.usdc_id, &units(100));
+    mint_badge(&h, &h.borrower, 850, 41);
+    h.ctrl.borrow(&h.borrower, &units(200));
+    h.price_oracle.set_price(
+        &Asset::Stellar(h.xlm_id.clone()),
+        &(P_XLM * 10 / 100),
+        &INITIAL_TIMESTAMP,
+    );
+    let keeper = liquidador_financiado(&h);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.usdc_id, &units(1));
+
+    let incautado = h.ctrl.get_seized(&h.usdc_id);
+    let pendiente = h.ctrl.get_pending_settlement();
+    assert!(incautado > 0 && pendiente > 0, "el escenario no produjo las dos cosas");
+
+    // Lo barrible excluye la reserva.
+    let reservado = if incautado < pendiente { incautado } else { pendiente };
+    assert_eq!(h.ctrl.get_sweepable(&h.usdc_id), incautado - reservado);
+
+    // Si todo esta reservado, barrer revierte TIPADO aunque `get_seized` sea
+    // positivo. Es la distincion que `NothingToSweep` existe para hacer.
+    if incautado <= pendiente {
+        let err = h.ctrl.try_sweep_seized(&h.usdc_id).err().unwrap().unwrap();
+        assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::NothingToSweep as u32));
+    }
+}
+
+/// `sweep_seized` sin nada incautado revierte TIPADO, no con un panic opaco.
+#[test]
+fn n02_sweep_sin_nada_incautado_revierte_tipado() {
+    let h = setup();
+    assert_eq!(h.ctrl.get_seized(&h.xlm_id), 0);
+    let err = h.ctrl.try_sweep_seized(&h.xlm_id).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::NothingToSweep as u32));
+}
+
+/// `init` rechaza una tesoreria igual al propio contrato: barrer hacia uno
+/// mismo deja los fondos igual de atrapados, que es justo el bug que N-02
+/// describe. Se rechaza al desplegar porque despues la direccion es inmutable.
+#[test]
+fn n02_init_rechaza_tesoreria_igual_al_contrato() {
+    let h = setup();
+    let ctrl_id = h.env.register_contract(None, MarginController);
+    let ctrl = MarginControllerClient::new(&h.env, &ctrl_id);
+    let err = ctrl
+        .try_init(&InitConfig {
+            admin: h.admin.clone(),
+            oracle: h.price_oracle.address.clone(),
+            reputation_registry: h.badge.address.clone(),
+            blend_pool: h.pool_id.clone(),
+            borrow_asset: h.usdc_id.clone(),
+            borrow_feed: Asset::Stellar(h.usdc_id.clone()),
+            collateral_asset: h.xlm_id.clone(),
+            collateral_feed: Asset::Stellar(h.xlm_id.clone()),
+            collateral_cap: 0,
+            tier_ltv: default_tiers(&h.env),
+            max_price_age: MAX_PRICE_AGE,
+            min_ltv_floor: MIN_LTV_FLOOR,
+            param_grace_secs: GRACE_SECS,
+            user_cap: USER_CAP,
+            treasury: ctrl_id.clone(),
+        })
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::TreasuryRequired as u32));
+}
+
+/// La tesoreria se lee por la ABI y es la que `init` recibio. Sin setter: no
+/// hay forma de que el admin la redirija, y eso es lo que hace que
+/// `sweep_seized` no sea un poder de mover fondos ajenos.
+#[test]
+fn n02_la_tesoreria_es_inmutable_y_se_lee_por_la_abi() {
+    let h = setup();
+    assert_eq!(h.ctrl.get_treasury(), h.treasury);
+    assert_eq!(h.ctrl.get_config().treasury, h.treasury);
 }
 
 // =============================================================================

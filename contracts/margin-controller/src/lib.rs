@@ -181,6 +181,22 @@ pub enum Error {
     NoPendingAdmin = 37,
     /// El activo esta en la allowlist pero no tiene clave de feed SEP-40.
     NoFeedForAsset = 38,
+
+    // ---------------------------------------------------------------------
+    // N-02. El corte del protocolo en una liquidacion se registraba bajo el
+    // activo de COLATERAL y `settle_seized` solo acepta el de DEUDA, asi que
+    // con XLM de colateral y USDC de deuda nunca se cruzaban: `Seized(XLM)`
+    // era de solo escritura. `sweep_seized` es la ruta de salida que faltaba.
+    // ---------------------------------------------------------------------
+    /// `sweep_seized` sobre un activo sin nada barrible.
+    ///
+    /// "Nada barrible" no es lo mismo que "nada incautado": en el activo de
+    /// DEUDA, lo que `PendingSettlement` reclama tiene prioridad y no se puede
+    /// barrer. Si todo lo incautado esta reservado para repagar al pool, esto
+    /// revierte aunque `get_seized` devuelva un numero positivo.
+    NothingToSweep = 39,
+    /// `init` fue llamado sin direccion de tesoreria utilizable.
+    TreasuryRequired = 40,
 }
 
 // =============================================================================
@@ -302,6 +318,10 @@ pub enum DataKey {
     /// Collateral seized from liquidated users, pending keeper settlement
     /// (swap → repay on Blend). See README runbook; automated in T2.
     Seized(Address),
+    /// Donde salen los fondos de `sweep_seized`. Se escribe en `init` y NO
+    /// tiene setter: el admin no puede redirigirla. Es lo que hace que esta
+    /// funcion sea una ruta de salida y no un poder de mover fondos ajenos.
+    Treasury,
     /// Debt written off at liquidation, pending Blend-side settlement.
     PendingSettlement,
     /// Debt that collateral could not cover at liquidation (insolvency).
@@ -369,6 +389,7 @@ pub struct ControllerConfig {
     pub min_ltv_floor: u32,
     pub param_grace_secs: u64,
     pub paused: bool,
+    pub treasury: Address,
 }
 
 /// One-shot init configuration (grouped: Soroban caps functions at 10 params).
@@ -396,6 +417,10 @@ pub struct InitConfig {
     /// Changed later with `set_user_cap`; extra assets get theirs through
     /// `add_collateral_asset`.
     pub user_cap: i128,
+    /// Direccion que recibe el corte del protocolo via `sweep_seized`.
+    /// Inmutable despues de `init`. MUST ser distinta del propio contrato:
+    /// barrer hacia uno mismo dejaria los fondos igual de atrapados.
+    pub treasury: Address,
 }
 
 /// Hard ceiling for any tier LTV. Must stay strictly below the Blend
@@ -459,6 +484,12 @@ impl MarginController {
         if config.user_cap <= 0 {
             panic_with_error!(&env, Error::UserCapRequired);
         }
+        // Barrer hacia el propio contrato no recupera nada: los fondos quedan
+        // donde ya estaban. Se rechaza al desplegar y no en el primer barrido,
+        // porque para entonces la direccion ya es inmutable.
+        if config.treasury == env.current_contract_address() {
+            panic_with_error!(&env, Error::TreasuryRequired);
+        }
         // All Stellar classic-asset SACs use 7 decimals; the LTV math assumes
         // collateral and borrow asset share the same token scale.
         let borrow_decimals = TokenClient::new(&env, &config.borrow_asset).decimals();
@@ -483,6 +514,7 @@ impl MarginController {
         );
         s.set(&DataKey::Cap(config.collateral_asset.clone()), &config.collateral_cap);
         s.set(&DataKey::UserCap(config.collateral_asset.clone()), &config.user_cap);
+        s.set(&DataKey::Treasury, &config.treasury);
         s.set(&DataKey::TierLtv, &config.tier_ltv);
         s.set(&DataKey::MaxPriceAge, &config.max_price_age);
         // Immutable by construction: no setter exists for either key.
@@ -1202,6 +1234,127 @@ impl MarginController {
         env.events().publish((symbol_short!("asset"), asset), cap);
     }
 
+
+    /// Saca el corte del protocolo del pool y lo manda a la tesoreria — la
+    /// ruta de salida que N-02 demostro que no existia.
+    ///
+    /// **El hallazgo, medido en produccion.** `liquidate` anota la incautacion
+    /// bajo el activo de COLATERAL (`Seized(collateral_asset)`) y
+    /// `settle_seized` rechaza todo lo que no sea el activo de DEUDA. Con XLM
+    /// de colateral y USDC de deuda nunca se cruzan, asi que `Seized(XLM)` era
+    /// una clave de solo escritura: 12.980.108 stroops (1,298 XLM) acumulados
+    /// en `CAH2BHAE…` e inalcanzables, creciendo con cada liquidacion.
+    ///
+    /// **Por que en el activo incautado y no vendiendolo por el de deuda.**
+    /// Vender exige un swap, y un swap dentro de una liquidacion trae
+    /// deslizamiento, MEV y una dependencia de DEX que hoy no tenemos. El
+    /// protocolo acumula el activo de colateral: es menos elegante y es
+    /// verificable.
+    ///
+    /// **Por que el destino se fija en `init`.** Si `sweep_seized` tomara la
+    /// direccion por parametro, el admin podria mandar el corte a donde
+    /// quisiera, y eso SI seria un poder de mover fondos. Con el destino
+    /// inmutable, lo unico que decide el admin es *cuando* se barre.
+    ///
+    /// **Prioridad sobre el activo de deuda.** Lo que `PendingSettlement`
+    /// reclama es deuda incobrable que hay que repagarle al pool, y va antes
+    /// que el corte del protocolo. Por eso lo barrible excluye esa reserva:
+    /// cobrarnos antes que al pool seria quedarnos con una perdida ajena.
+    pub fn sweep_seized(env: Env, asset: Address) {
+        let admin = Self::require_admin(&env);
+        admin.require_auth();
+        Self::require_collateral_asset(&env, &asset);
+
+        let seized: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::Seized(asset.clone()))
+            .unwrap_or(0);
+
+        // En el activo de deuda, lo reservado para `settle_seized` no se toca.
+        let borrow_asset: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::BorrowAsset)
+            .expect("not initialized");
+        let reservado: i128 = if asset == borrow_asset {
+            let pending: i128 = env
+                .storage()
+                .instance()
+                .get(&DataKey::PendingSettlement)
+                .unwrap_or(0);
+            if seized < pending { seized } else { pending }
+        } else {
+            0
+        };
+
+        let amount = seized - reservado;
+        if amount <= 0 {
+            panic_with_error!(&env, Error::NothingToSweep);
+        }
+
+        // Sacarlo del pool y mandarlo a la tesoreria. El orden importa: se
+        // descuenta `Seized` DESPUES de que las dos operaciones externas
+        // salieron bien, para que un fallo no deje el contador dicho pero el
+        // dinero sin mover.
+        let me = env.current_contract_address();
+        let mut pull: Vec<Request> = Vec::new(&env);
+        pull.push_back(Request {
+            address: asset.clone(),
+            amount,
+            request_type: REQ_WITHDRAW_COLLATERAL,
+        });
+        Self::pool_client(&env).submit(&me, &me, &me, &pull);
+
+        let treasury: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Treasury)
+            .expect("not initialized");
+        TokenClient::new(&env, &asset).transfer(&me, &treasury, &amount);
+
+        env.storage()
+            .instance()
+            .set(&DataKey::Seized(asset.clone()), &(seized - amount));
+        env.events()
+            .publish((symbol_short!("sweep"), asset), amount);
+    }
+
+    /// La direccion de tesoreria fijada en `init`. Sin setter.
+    pub fn get_treasury(env: Env) -> Address {
+        env.storage()
+            .instance()
+            .get(&DataKey::Treasury)
+            .expect("not initialized")
+    }
+
+    /// Cuanto de `Seized(asset)` se puede barrer AHORA. Distinto de
+    /// `get_seized`: en el activo de deuda descuenta lo que
+    /// `PendingSettlement` reclama. Existe para que un operador pueda
+    /// comprobar antes de firmar, en vez de descubrirlo con una reversion.
+    pub fn get_sweepable(env: Env, asset: Address) -> i128 {
+        let seized: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::Seized(asset.clone()))
+            .unwrap_or(0);
+        let borrow_asset: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::BorrowAsset)
+            .expect("not initialized");
+        if asset != borrow_asset {
+            return seized;
+        }
+        let pending: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingSettlement)
+            .unwrap_or(0);
+        let reservado = if seized < pending { seized } else { pending };
+        seized - reservado
+    }
+
     /// Circuit breaker — NON-CUSTODIAL INVARIANT: `pause` only freezes the
     /// entry of NEW risk (`deposit_collateral`, `borrow`). It can NEVER
     /// freeze `withdraw_collateral`, `repay`, or `liquidate`: the user can
@@ -1303,6 +1456,7 @@ impl MarginController {
             min_ltv_floor: s.get(&DataKey::MinLtvFloor).expect("not initialized"),
             param_grace_secs: s.get(&DataKey::ParamGraceSecs).expect("not initialized"),
             paused: s.get(&DataKey::Paused).unwrap_or(false),
+            treasury: s.get(&DataKey::Treasury).expect("not initialized"),
         }
     }
 
