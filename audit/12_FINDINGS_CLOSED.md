@@ -19,7 +19,7 @@ or an on-chain read, not an estimate.
 | Finding | What it was | Commit | Tests | How a third party verifies it |
 |---|---|---|---|---|
 | **H-04** — badge instance TTL expired | `getLedgerEntries` returned `liveUntilLedgerSeq: 0` for the badge instance. Every controller path that reads the badge failed in a real transaction. | — (operational) | — | Query the badge instance: `liveUntil` is now **7 667 156** (~180 days). Restore tx [`1730fbf2`](https://stellar.expert/explorer/testnet/tx/1730fbf2fb11e9c463b2efba029cb56ffa0ee8b889dd73b753ad839403f23db0) |
-| **M-05** — build not reproducible | rustc embeds the crate path and `$CARGO_HOME` in the binary, so two machines produced different hashes from identical source. Confirmed: the wasm contained `C:\Users\<user>\.cargo\registry\...`. | `e587d78` | CI job `wasm reproducibility` | **Proved on-chain.** Rebuild with `bash contracts/scripts/build-reproducible.sh margin-controller`, then `stellar contract fetch --id CAH2BHAE… \| sha256sum`. Both give `64cb01f427a4e72c…` |
+| **M-05** — build not reproducible | rustc embeds the crate path and `$CARGO_HOME` in the binary, so two machines produced different hashes from identical source. Confirmed: the wasm contained `C:\Users\<user>\.cargo\registry\...`. | `e587d78` | CI job `wasm reproducibility` | **PARTIALLY CLOSED — see the 2026-10-21 correction under *Still open*.** Same machine only. Rebuild with `bash contracts/scripts/build-reproducible.sh margin-controller`, then `stellar contract fetch --id CAH2BHAE… \| sha256sum`. Both give `64cb01f427a4e72c…` **on the machine that built it**. CI has produced a different hash for all three contracts on every run since 2026-09-08. |
 | **M-04** — no per-user exposure cap | Only per-asset caps existed; one account could absorb an entire asset cap. | `0adf6e8` | 5 tests, incl. `user_cap_nunca_atrapa_una_posicion_preexistente` | `get_user_cap(asset)`; `cargo test -j 1 user_cap` |
 | **M-03** — liquidation seized 100 %, seized funds had no exit | `liquidate` swept every asset into `Seized`/`PendingSettlement`, which only had getters. | `dbc870d` | 8 tests, incl. `m03_el_excedente_es_retirable_por_el_deudor` and `m03_settle_seized_repaga_contra_el_pool` | `cargo test -j 1 m03_`; read the new `liquidate` and `settle_seized` signatures in `src/lib.rs` |
 | **M-02** — badge admin could block liquidations | `liquidate` called `slash` unconditionally, and `slash` starts with `require_not_paused`. A paused badge blocked every liquidation. | `dbc870d` | covered by the M-03 insolvency tests | `liquidate_insolvent` now uses `try_slash` and emits `noslash` when skipped |
@@ -227,6 +227,64 @@ every new controller generation.
 | **M-07** — single-key admin | Not a code problem. The admin key exists in one keystore; generating three keys on the same machine would be multisig theatre, not security. Needs a decision on who custodies the other signers. Current state, re-measured 2026-10-19 and **worse than previously recorded**: there are **two** single-key accounts, not one — controller+pool (`GDGMMHYO…`) and badge (`GBV676BN…`), each 1 signer, weight 1, thresholds 0/0/0, held in two different stores (CLI keystore and `web/.env.local`). |
 | **M-01** — TTL maintenance has no owner | The *state* is fixed: badge, pool, aggregator and both controllers now sit ~180 days out, and the aggregator's `LastGood` entries were refreshed with live prices rather than merely restored, so the first read after the gap is not rejected by the deviation guard. The *cause* — that nobody owns the weekly keeper — is unchanged. Half closed, and recorded as half. |
 | **L-01, L-02** | Folded into the H-03 redesign, as the review report already states. |
+| **M-05** — reproducible on one machine, not between machines (**correction of 2026-10-21**) | The row in *Closed* above is right about what it measured and wrong about what it implied. Measured again today: the deployed controller binary is `64cb01f427a4e72c61c651e327576dea79777e345355bb0c7b7333cb765a0507` and the local reproducible build matches it exactly — **on the machine that produced it**. But the CI job `wasm reproducibility` has failed on **every run since 2026-09-08** (`34285692880`, `34286312201`, `39188099409`), with a different hash for all three contracts. Pinning rustc in `rust-toolchain.toml` was not sufficient. The criterion that matters to an external auditor is *"anyone can rebuild and compare"*, and under that criterion **M-05 is not closed**. `contracts/deployed-wasm-hashes.json` carried that exact phrase; it has been withdrawn there too. Recorded as half closed, like M-01, rather than quietly left in the closed column. |
+
+### M-05 — root cause found, 2026-10-21
+
+Six weeks of a red CI job had no diagnosis. It has one now, and it is not a version pin.
+
+**The two builds use the same compiler.** CI logs `rustc 1.92.0 (ded5c06cf 2025-12-08)`;
+so does this machine. Same `Cargo.lock`, same source, same remapping scheme
+(`--remap-path-prefix=$CARGO_HOME=/cargo`, `=$REPO_ROOT=/src`). The local build still
+reproduces the manifest byte-for-byte — measured today on `vigente-badge`, the one crate
+untouched this sprint:
+
+```
+$ bash contracts/scripts/build-reproducible.sh vigente-badge
+vigente-badge   raw=d7299b17594cb81d496fdd3f17f114d49bcd8c9876f112117c7643abf7fa97bb   ← manifest match
+                opt=08e39d75c0a0c9e5c3c1c2a128235be0a730af28c3eafbe15d1aad848182caa9   ← manifest match
+```
+
+CI builds the same crate as `b3076c7682879870…`.
+
+**The cause is the path separator.** Dumping the printable strings of the Windows-built
+wasm:
+
+```
+/cargo\registry\src\index.crates.io-1949cf8c6b5b557f\soroban-sdk-21.7.7\src\ledger.rs
+src\lib.rs
+/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234/library/core/src/ops/function.rs
+```
+
+`rustc` records source locations for panic metadata **using the host OS separator**, and
+`--remap-path-prefix` only rewrites the *prefix* — everything after it keeps `\` on
+Windows and `/` on Linux. Different bytes, different hash. The third line shows the std
+library is **not** the problem: Rust already remaps it to `/rustc/<commit>/…` with forward
+slashes on both hosts, which is why that one is identical.
+
+**This cannot be fixed with more remap flags.** The remainder of the path is not a prefix.
+
+**Consequences, stated plainly:**
+
+1. The honest claim is *"reproducible on one host OS"*, not *"reproducible"*. Already
+   corrected here and in `deployed-wasm-hashes.json`.
+2. The manifest's hashes were produced on **Windows**, so they are the wrong canonical
+   reference: a third party rebuilding on Linux — which is what an auditor will do — gets
+   CI's numbers, not the manifest's.
+3. **The deployed v3 binaries were built on Windows, so no third party on Linux can ever
+   reproduce them.** M-05 cannot be fully closed on this generation. It can only be closed
+   by the v4 redeployment, and only if v4 is built in a canonical Linux environment.
+
+**Recommendation:** build the v4 wasm in a pinned container (Linux, toolchain 1.92.0), make
+that the only sanctioned build path, re-baseline the manifest from it, and deploy the
+binary the container produced. Then `reproducible` and `deployed` agree *and* a stranger
+can reproduce both.
+
+**Second, independent defect in the same job, found in the same log:** the manifest
+contains a fourth entry, `margin-controller-v-previous`, that the build script never
+builds — its default list is three crates. CI reports `margin-controller-v-previous: not
+built` and fails on that line alone, so the job would stay red even if every hash matched.
+
 | **D-01** — the backstop's Comet contract is still the exploited one (opened 2026-10-21) | Not our code, and it is testnet, so no funds are at risk here. But the verification §1 left pending now has an answer, and it is **no**: `stellar contract read --id CA5UTUUP… --network testnet` returns wasm `8abc28913035c07411ed5d134e6bfeab4723d97ddd4d1a22a0605d35c94d1a36`, byte-identical to the hash this report already flags as the mainnet Comet exploited on 2026-08-25. Two months on, the backstop token has not moved to Comet V1.1. Our backstop holds **22 980 LP** behind a **17-day** withdrawal queue. The exploit mechanism was reported as **self-swaps** — one token swapped for itself through a missing check — which is precisely the aliasing class §1 argues does not reach our contracts. **That argument was re-checked and holds:** the only three public functions taking two `Address` parameters are `deposit_collateral`, `withdraw_collateral` and `get_collateral`, and all three take `(user, asset)`, never a pair of assets over one reserve; `user == asset` is covered by `aliasing_user_igual_a_asset_no_corrompe_contabilidad`. What this *does* change is the mainnet decision: Blend v2.1 runs Comet **V1.1**, and the Blend v3 proposal drops the shared Comet LP backstop entirely. Incident sources are secondary — **no official Blend or Comet post-mortem was found**, so the root cause is recorded as provisional. |
 
 ## Reproduce

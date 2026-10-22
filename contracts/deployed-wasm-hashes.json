@@ -2,8 +2,15 @@
   "_comment": [
     "Wasm hash manifest — finding M-05 (audit/10_SECURITY_REVIEW_REPORT.md).",
     "'reproducible' is the sha256 produced by contracts/scripts/build-reproducible.sh with the",
-    "toolchain pinned in rust-toolchain.toml. CI rebuilds and compares against it, so a change in",
-    "source or toolchain that nobody declared fails the build.",
+    "toolchain pinned in rust-toolchain.toml.",
+    "CORRECTION 2026-10-21 — READ BEFORE TRUSTING THE LINE BELOW: this file used to say that CI",
+    "rebuilds and compares, implying the comparison passes. CI does rebuild and compare, and it",
+    "HAS FAILED on every run since 2026-09-08 (runs 34285692880, 34286312201, 39188099409), with a",
+    "different hash for all three contracts. So the build is reproducible ON THE SAME MACHINE --",
+    "proven: the local optimized build equals the on-chain binary, 64cb01f427a4e72c... -- but it is",
+    "NOT reproducible BETWEEN machines. Pinning rustc in rust-toolchain.toml was not enough. Until",
+    "that is fixed, a third party CANNOT independently reproduce these hashes, and M-05 is not",
+    "closed under the criterion that matters, which is exactly 'anyone can rebuild and compare'.",
     "'deployed' is the sha256 fetched from the ledger with `stellar contract fetch`.",
     "READ THIS: the deployed binaries were built BEFORE the toolchain was pinned and before path",
     "remapping existed, so they do NOT match the reproducible hashes and cannot be reproduced from",
@@ -23,7 +30,7 @@
       "reproducible_raw": "1b8b3d4f1e019f03fe5866916b1421892daf7a7d448c655afb6f04b7e81ed509",
       "reproducible_optimized": "64cb01f427a4e72c61c651e327576dea79777e345355bb0c7b7333cb765a0507",
       "matches_deployed": true,
-      "note": "First deployment built with contracts/scripts/build-reproducible.sh. The ledger hash equals the optimized reproducible hash: anyone can rebuild and compare. Closes M-03, M-04 and M-02."
+      "note": "First deployment built with contracts/scripts/build-reproducible.sh. The ledger hash equals the optimized reproducible hash WHEN REBUILT ON THE MACHINE THAT PRODUCED IT (verified 2026-10-21: the deployed binary is 64cb01f427a4e72c...). It does NOT reproduce in CI -- see the CORRECTION in _comment. The earlier wording here, 'anyone can rebuild and compare', overstated it and is withdrawn. Closes M-03, M-04 and M-02."
     },
     "oracle-aggregator": {
       "address": "CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4",
