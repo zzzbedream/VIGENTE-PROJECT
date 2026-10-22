@@ -128,6 +128,11 @@ const es = {
       body: "cualquier contrato en soroban puede leer el badge de reputación y el LTV asociado, y usarlos para diferenciar condiciones. nuestro agregador sep-40 — el mismo que ocupa el slot de oráculo de nuestro pool — se publica como referencia abierta para la red.",
     },
     {
+      tag: "emisor de activos tokenizados",
+      title: "quien emite el bono y quiere que sirva de garantía",
+      body: "hay más de 3.000 millones de dólares en activos del mundo real tokenizados en stellar, y poco más de 2 millones aceptados como colateral en mercados de préstamo (redstone, ago-2026). tu instrumento no está quieto porque falte demanda de crédito: está quieto porque aceptarlo exige precio continuo y controles de riesgo de emisor que casi nadie construyó. nosotros los construimos a propósito — tope por activo y por usuario exigidos al desplegar, ruta de salida con destino inmutable, y el contrato revierte antes que operar con un precio que no pudo validar.",
+    },
+    {
       tag: "usuario final",
       title: "quien pide el préstamo dentro de esa plataforma",
       body: "deposita colateral, recibe stablecoins y recupera todo al repagar. cada repago puntual sube su límite y baja su tasa. las secciones de abajo son una demo de esa experiencia — la que verían los usuarios de una plataforma integrada.",
@@ -484,6 +489,11 @@ const en: LandingCopy = {
       tag: "protocol",
       title: "lending markets that want risk-priced terms",
       body: "any soroban contract can read the reputation badge and its associated LTV, and use them to differentiate terms. our sep-40 aggregator — the same one occupying our pool's oracle slot — is published as an open reference for the network.",
+    },
+    {
+      tag: "tokenized-asset issuer",
+      title: "whoever issues the bond and wants it to work as collateral",
+      body: "there is over $3B of tokenized real-world assets on stellar, and just above $2M accepted as collateral in lending markets (redstone, aug-2026). your instrument is not idle for lack of credit demand: it is idle because accepting it requires continuous pricing and issuer-risk controls almost nobody built. we built them deliberately — per-asset and per-user caps enforced at deployment, an exit route whose destination is fixed at init with no setter, and a contract that reverts rather than operate on a price it could not validate.",
     },
     {
       tag: "end user",
