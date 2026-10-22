@@ -674,6 +674,63 @@ fn reanchor_fuera_de_la_banda_revierte() {
     assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::ReanchorOutOfBand as u32));
 }
 
+/// **El ataque que la revision de seguridad encontro sobre el commit a74b128.**
+///
+/// `anchor_at` lo elige el admin. Con un ancla en el FUTURO, `nav_at` devuelve
+/// un NAV muy mayor, la banda se mide contra ese valor inflado, y despues
+/// `nav_at(cfg, ahora)` con `ahora < anchor_at` devuelve `nav_anchor` directo:
+/// el precio salta de inmediato al NAV futuro.
+///
+/// Las cuatro guardas se evadian con un parametro, y la de monotonia no ayudaba
+/// porque el precio SUBE. Este test fija el arreglo.
+#[test]
+fn reanchor_con_ancla_en_el_futuro_revierte() {
+    let h = setup();
+    let bono = Asset::Stellar(Address::generate(&h.env));
+    h.agg.set_initial_accrual(
+        &bono,
+        &cfg_base(NAV_CETES, RATE_CETES, FxLeg::AlreadyInOutputCurrency, T0),
+    );
+    advance(&h.env, 2 * 86_400);
+
+    let ahora = h.env.ledger().timestamp();
+    let diez_anos = 10 * 360 * 86_400;
+    // Lo que la vieja config predice a diez anos: ~55,5 % mas.
+    let inflado = NAV_CETES + NAV_CETES * (RATE_CETES as i128) * 3_600 / (360 * 10_000);
+    assert!(inflado > NAV_CETES * 15 / 10, "el escenario no infla lo suficiente");
+
+    let err = h
+        .agg
+        .try_reanchor(&bono, &inflado, &(ahora + diez_anos), &RATE_CETES)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::AnchorInFuture as u32));
+
+    // Y el precio no se movio: sigue siendo el devengado honesto de dos dias.
+    let honesto = NAV_CETES + NAV_CETES * (RATE_CETES as i128) * 2 / (360 * 10_000);
+    assert_eq!(h.agg.get_nav_now(&bono), honesto);
+}
+
+/// Y el mismo agujero al configurar por primera vez: un ancla inicial en el
+/// futuro dejaria el precio congelado en un NAV que no se devengo.
+#[test]
+fn set_initial_accrual_con_ancla_en_el_futuro_revierte() {
+    let h = setup();
+    let bono = Asset::Stellar(Address::generate(&h.env));
+    let futuro = h.env.ledger().timestamp() + 86_400;
+    let err = h
+        .agg
+        .try_set_initial_accrual(
+            &bono,
+            &cfg_base(NAV_CETES, RATE_CETES, FxLeg::AlreadyInOutputCurrency, futuro),
+        )
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::AnchorInFuture as u32));
+}
+
 /// Una tasa absurda no es un bono: se rechaza al configurar.
 #[test]
 fn tasa_por_encima_del_techo_se_rechaza() {

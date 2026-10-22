@@ -259,6 +259,15 @@ pub enum Error {
     NavNotPositive = 20,
     /// No hay `AccrualConfig` para el activo.
     NoAccrualForAsset = 21,
+    /// `anchor_at` esta en el futuro.
+    ///
+    /// **Es la guarda que faltaba y sin ella las otras cuatro no valen nada.**
+    /// `anchor_at` lo elige el admin, y con un ancla en el futuro:
+    /// `nav_at(vieja, anchor_at)` devuelve un NAV muy mayor, la banda se mide
+    /// contra ese valor inflado, y despues `nav_at(cfg, ahora)` con
+    /// `ahora < anchor_at` devuelve `nav_anchor` directo -- el precio salta de
+    /// inmediato al NAV futuro. Un ancla es un valor OBSERVADO, nunca predicho.
+    AnchorInFuture = 22,
 }
 
 #[contract]
@@ -540,6 +549,13 @@ impl OracleAggregator {
     ///
     /// Con eso, una llave comprometida solo puede adelantar o atrasar el
     /// devengado dentro de una banda chica. Importa porque M-07 sigue abierto.
+    ///
+    /// **Cuanto es "chica", con precision.** La banda acota la desviacion EN EL
+    /// INSTANTE DEL ANCLA. Como el devengado despues corre desde ese ancla, la
+    /// desviacion efectiva en un momento posterior es la banda multiplicada por
+    /// el factor de devengo entre el ancla y ese momento -- que para un
+    /// re-ancla reciente es practicamente la banda. No es exactamente la banda
+    /// y conviene no afirmar que lo sea.
     pub fn reanchor(env: Env, asset: Asset, nav_anchor: i128, anchor_at: u64, rate_bps: u32) {
         let admin = Self::require_admin(&env);
         admin.require_auth();
@@ -555,6 +571,13 @@ impl OracleAggregator {
         }
         if rate_bps > MAX_RATE_BPS {
             panic_with_error!(&env, Error::RateAboveCeiling);
+        }
+        // (0) El ancla no puede estar en el FUTURO. Va primero porque sin
+        // ella las otras no sirven: con un ancla futura, `predicho` se calcula
+        // adelantado, la banda se mide contra un valor inflado, y el precio
+        // salta de inmediato a ese NAV. Un ancla es un valor observado.
+        if anchor_at > env.ledger().timestamp() {
+            panic_with_error!(&env, Error::AnchorInFuture);
         }
         // (1) y (2)
         if anchor_at <= vieja.anchor_at
@@ -668,6 +691,11 @@ impl OracleAggregator {
     }
 
     fn validate_accrual(env: &Env, cfg: &AccrualConfig) {
+        // Misma razon que en `reanchor`: un ancla inicial en el futuro deja el
+        // precio congelado en un NAV que todavia no se devengo.
+        if cfg.anchor_at > env.ledger().timestamp() {
+            panic_with_error!(env, Error::AnchorInFuture);
+        }
         if cfg.nav_anchor <= 0 {
             panic_with_error!(env, Error::NavNotPositive);
         }
