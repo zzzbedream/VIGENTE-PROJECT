@@ -11,7 +11,8 @@
 extern crate std;
 
 use crate::{
-    Asset, OracleAggregator, OracleAggregatorClient, PriceData, Route, MAX_DEVIATION_CEILING_BPS,
+    Asset, Error, OracleAggregator, OracleAggregatorClient, PriceData, Route,
+    MAX_DEVIATION_CEILING_BPS,
 };
 use soroban_sdk::{
     contract, contractimpl, contracttype,
@@ -255,10 +256,10 @@ fn invariante_asset_nuevo_tambien_pasa_por_la_cola() {
 }
 
 #[test]
-#[should_panic(expected = "no pending route")]
 fn apply_sin_pendiente_falla() {
     let h = setup();
-    h.agg.apply_route(&h.xlm);
+    let err = h.agg.try_apply_route(&h.xlm).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::NoPendingRoute as u32));
 }
 
 // =============================================================================
@@ -266,37 +267,37 @@ fn apply_sin_pendiente_falla() {
 // =============================================================================
 
 #[test]
-#[should_panic(expected = "stale")]
 fn precio_viejo_revierte() {
     let h = setup();
     advance(&h.env, MAX_AGE + 1);
-    h.agg.lastprice(&h.xlm);
+    let err = h.agg.try_lastprice(&h.xlm).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::UpstreamPriceStale as u32));
 }
 
 #[test]
-#[should_panic(expected = "no price")]
 fn upstream_sin_precio_revierte() {
     let h = setup();
     h.up.clear_price(&up_xlm(&h.env));
-    h.agg.lastprice(&h.xlm);
+    let err = h.agg.try_lastprice(&h.xlm).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::UpstreamNoPrice as u32));
 }
 
 #[test]
-#[should_panic(expected = "non-positive")]
 fn precio_cero_revierte() {
     let h = setup();
     h.up.set_price(&up_xlm(&h.env), &0, &T0);
-    h.agg.lastprice(&h.xlm);
+    let err = h.agg.try_lastprice(&h.xlm).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::UpstreamInvalidPrice as u32));
 }
 
 #[test]
-#[should_panic(expected = "deviation above limit")]
 fn salto_anomalo_revierte() {
     let h = setup();
     h.agg.lastprice(&h.xlm); // fija la referencia en $0.19
     // +58% de golpe, muy por encima del 10% permitido.
     h.up.set_price(&up_xlm(&h.env), &30_000_000_000_000, &T0);
-    h.agg.lastprice(&h.xlm);
+    let err = h.agg.try_lastprice(&h.xlm).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::DeviationAboveLimit as u32));
 }
 
 #[test]
@@ -359,13 +360,13 @@ fn escala_hacia_abajo_desde_un_upstream_de_mas_decimales() {
 }
 
 #[test]
-#[should_panic(expected = "underflows")]
 fn un_precio_que_se_redondearia_a_cero_revierte() {
     // Servir 0 haría que el pool tratara el colateral como sin valor.
     let h = setup();
     h.up.set_decimals(&18);
     h.up.set_price(&up_xlm(&h.env), &1, &T0);
-    h.agg.lastprice(&h.xlm);
+    let err = h.agg.try_lastprice(&h.xlm).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::PriceUnderflow as u32));
 }
 
 // =============================================================================
@@ -373,35 +374,45 @@ fn un_precio_que_se_redondearia_a_cero_revierte() {
 // =============================================================================
 
 #[test]
-#[should_panic(expected = "above ceiling")]
 fn desviacion_por_encima_del_techo_se_rechaza() {
     let h = setup();
     let otro = Asset::Stellar(Address::generate(&h.env));
-    h.agg.set_initial_route(
-        &otro,
-        &Route {
-            source: h.up_id.clone(),
-            upstream_asset: up_xlm(&h.env),
-            max_age: MAX_AGE,
-            max_deviation_bps: MAX_DEVIATION_CEILING_BPS + 1,
-        },
-    );
+    let err = h
+        .agg
+        .try_set_initial_route(
+            &otro,
+            &Route {
+                source: h.up_id.clone(),
+                upstream_asset: up_xlm(&h.env),
+                max_age: MAX_AGE,
+                max_deviation_bps: MAX_DEVIATION_CEILING_BPS + 1,
+            },
+        )
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::DeviationAboveCeiling as u32));
 }
 
 #[test]
-#[should_panic(expected = "max_age must be positive")]
 fn max_age_cero_se_rechaza() {
     let h = setup();
     let otro = Asset::Stellar(Address::generate(&h.env));
-    h.agg.set_initial_route(
-        &otro,
-        &Route {
-            source: h.up_id.clone(),
-            upstream_asset: up_xlm(&h.env),
-            max_age: 0,
-            max_deviation_bps: DEV_BPS,
-        },
-    );
+    let err = h
+        .agg
+        .try_set_initial_route(
+            &otro,
+            &Route {
+                source: h.up_id.clone(),
+                upstream_asset: up_xlm(&h.env),
+                max_age: 0,
+                max_deviation_bps: DEV_BPS,
+            },
+        )
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::MaxAgeRequired as u32));
 }
 
 #[test]
@@ -433,10 +444,10 @@ fn rotacion_de_admin_en_dos_pasos() {
 }
 
 #[test]
-#[should_panic(expected = "already initialized")]
 fn no_se_puede_re_inicializar() {
     let h = setup();
-    h.agg.init(&h.admin, &OUT_DECIMALS, &GRACE);
+    let err = h.agg.try_init(&h.admin, &OUT_DECIMALS, &GRACE).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::AlreadyInitialized as u32));
 }
 
 // =============================================================================
@@ -478,7 +489,6 @@ fn banda_de_desviacion_de_la_ruta_viva_de_xlm() {
 
 /// El otro lado del mismo borde: pasado el 20 % la ruta viva SI revierte.
 #[test]
-#[should_panic(expected = "deviation above limit")]
 fn pasado_el_veinte_por_ciento_la_ruta_viva_de_xlm_revierte() {
     let h = setup();
     let xlm_prod = Asset::Stellar(Address::generate(&h.env));
@@ -494,5 +504,6 @@ fn pasado_el_veinte_por_ciento_la_ruta_viva_de_xlm_revierte() {
     h.agg.lastprice(&xlm_prod);
     // +21 %.
     h.up.set_price(&up_xlm(&h.env), &22_990_000_000_000, &T0);
-    h.agg.lastprice(&xlm_prod);
+    let err = h.agg.try_lastprice(&xlm_prod).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::DeviationAboveLimit as u32));
 }

@@ -23,7 +23,7 @@
 //! =============================================================================
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short,
+    contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short,
     xdr::ToXdr,
     Address, Bytes, BytesN, Env, Vec,
 };
@@ -111,6 +111,64 @@ pub struct DefaultBadge {
 // CONTRACT DEFINITION
 // =============================================================================
 
+/// Errores tipados del badge.
+///
+/// Este es el contrato que cualquiera lee sin permiso (`get_score`,
+/// `is_defaulted`) y el que verifica el quorum 3-de-5. Un `mint` rechazado
+/// tenia diez razones posibles y todas llegaban como el mismo panic opaco:
+/// quien integra no podia distinguir "falta una firma" de "el nonce ya se uso"
+/// de "nos rompimos".
+///
+/// Los codigos son ABI. Se apendan, nunca se renumeran.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    /// `initialize` sobre un contrato ya inicializado.
+    AlreadyInitialized = 1,
+    /// Conjunto de llaves de oraculo vacio.
+    EmptyOracleKeySet = 2,
+    /// `threshold == 0`: cualquier mint pasaria sin firmas.
+    ThresholdNotPositive = 3,
+    /// `threshold` mayor que la cantidad de llaves: ningun mint seria posible.
+    ThresholdExceedsKeyCount = 4,
+    /// La misma llave de oraculo aparece dos veces. Sin este chequeo, un
+    /// firmante repetido contaria varias veces contra el umbral.
+    DuplicateOracleKey = 5,
+
+    /// El prestatario tiene un registro de impago. Los impagos son inmutables.
+    BorrowerInDefault = 6,
+    /// Score fuera de 0..=1000.
+    InvalidScore = 7,
+    /// La expiracion del badge ya paso.
+    ExpirationInPast = 8,
+    /// La antiguedad de la cuenta no llega al piso configurado.
+    WalletAgeBelowMinimum = 9,
+    /// El nonce ya se uso. Es la guarda contra repeticion de un sobre firmado.
+    NonceAlreadyUsed = 10,
+    /// El contrato no tiene configurado el conjunto de llaves ni el umbral.
+    OracleAclNotConfigured = 11,
+    /// Las firmas validas no alcanzan el umbral.
+    ThresholdNotMet = 12,
+    /// Una firma apunta a un indice de oraculo que no existe.
+    OracleIndexOutOfRange = 13,
+    /// Dos firmas apuntan al mismo indice de oraculo.
+    DuplicateOracleIndex = 14,
+
+    /// El badge ya esta marcado como slashed.
+    BadgeAlreadySlashed = 15,
+    /// El prestatario ya tiene un registro de impago.
+    AlreadyInDefault = 16,
+    /// Codigo de motivo fuera de 0..=3.
+    InvalidReasonCode = 17,
+    /// `slash` desde una direccion que no esta en la lista de vaults.
+    NotAuthorizedVault = 18,
+    /// El contrato esta en pausa.
+    ContractPaused = 19,
+    /// `slash` sobre un usuario sin badge vigente.
+    NoActiveBadge = 20,
+}
+
 #[contract]
 pub struct VigenteBadge;
 
@@ -127,7 +185,7 @@ impl VigenteBadge {
     /// any `mint()` can succeed. Vault ACL also starts empty; admin calls `add_vault()`.
     pub fn initialize(env: Env, admin: Address) {
         if env.storage().instance().has(&DataKey::Admin) {
-            panic!("already initialized");
+            panic_with_error!(&env, Error::AlreadyInitialized);
         }
         admin.require_auth();
 
@@ -176,13 +234,13 @@ impl VigenteBadge {
 
         let n = keys.len();
         if n == 0 {
-            panic!("oracle key set must be non-empty");
+            panic_with_error!(&env, Error::EmptyOracleKeySet);
         }
         if threshold == 0 {
-            panic!("threshold must be > 0");
+            panic_with_error!(&env, Error::ThresholdNotPositive);
         }
         if threshold > n {
-            panic!("threshold exceeds oracle key count");
+            panic_with_error!(&env, Error::ThresholdExceedsKeyCount);
         }
 
         // Reject duplicates — every pubkey must be unique in the set.
@@ -193,7 +251,7 @@ impl VigenteBadge {
             while j < n {
                 let key_j = keys.get(j).unwrap();
                 if key_i == key_j {
-                    panic!("duplicate oracle pubkey in set");
+                    panic_with_error!(&env, Error::DuplicateOracleKey);
                 }
                 j += 1;
             }
@@ -336,18 +394,18 @@ impl VigenteBadge {
 
         // Cannot mint for a defaulted borrower.
         if Self::is_defaulted(env.clone(), borrower.clone()) {
-            panic!("borrower is in default");
+            panic_with_error!(&env, Error::BorrowerInDefault);
         }
 
         // Validate score.
         if score > 1000 {
-            panic!("invalid score: must be 0-1000");
+            panic_with_error!(&env, Error::InvalidScore);
         }
 
         // Validate expiration is in the future.
         let now = env.ledger().timestamp();
         if expiration <= now {
-            panic!("expiration must be in the future");
+            panic_with_error!(&env, Error::ExpirationInPast);
         }
 
         // Anti-Sybil floor: reject borrowers whose wallet is too young.
@@ -358,13 +416,13 @@ impl VigenteBadge {
             .get(&DataKey::MinWalletAgeDays)
             .unwrap_or(DEFAULT_MIN_WALLET_AGE_DAYS);
         if account_age_days < min_age {
-            panic!("wallet age below minimum");
+            panic_with_error!(&env, Error::WalletAgeBelowMinimum);
         }
 
         // Anti-replay: the nonce must not have been used before.
         let nonce_key = DataKey::UsedNonce(nonce.clone());
         if env.storage().persistent().has(&nonce_key) {
-            panic!("nonce already used");
+            panic_with_error!(&env, Error::NonceAlreadyUsed);
         }
 
         // Threshold verification: load oracle key set + threshold from storage.
@@ -376,10 +434,10 @@ impl VigenteBadge {
             .unwrap_or(0);
 
         if threshold == 0 || oracle_keys.is_empty() {
-            panic!("oracle threshold ACL not configured");
+            panic_with_error!(&env, Error::OracleAclNotConfigured);
         }
         if signatures.len() < threshold {
-            panic!("insufficient signatures: threshold not met");
+            panic_with_error!(&env, Error::ThresholdNotMet);
         }
 
         // Build the canonical mint message that every signature must verify against.
@@ -395,10 +453,10 @@ impl VigenteBadge {
         while i < n_sigs {
             let (idx, sig) = signatures.get(i).unwrap();
             if idx >= n_keys {
-                panic!("oracle index out of range");
+                panic_with_error!(&env, Error::OracleIndexOutOfRange);
             }
             if seen_indices.contains(&idx) {
-                panic!("duplicate oracle index in signatures");
+                panic_with_error!(&env, Error::DuplicateOracleIndex);
             }
             seen_indices.push_back(idx);
 
@@ -493,20 +551,20 @@ impl VigenteBadge {
         let badge_key = DataKey::Badge(borrower.clone());
         let badge: CreditBadge = env.storage().persistent()
             .get(&badge_key)
-            .expect("no active badge to slash");
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NoActiveBadge));
 
         if badge.slashed {
-            panic!("badge already slashed");
+            panic_with_error!(&env, Error::BadgeAlreadySlashed);
         }
 
         // Check not already defaulted
         if env.storage().persistent().has(&DataKey::Default(borrower.clone())) {
-            panic!("borrower already in default");
+            panic_with_error!(&env, Error::AlreadyInDefault);
         }
 
         // Validate reason code
         if reason > 3 {
-            panic!("invalid reason code: must be 0-3");
+            panic_with_error!(&env, Error::InvalidReasonCode);
         }
 
         let now = env.ledger().timestamp();
@@ -666,7 +724,7 @@ impl VigenteBadge {
             .unwrap_or(Vec::new(env));
 
         if !vaults.contains(caller) {
-            panic!("caller is not an authorized vault");
+            panic_with_error!(&env, Error::NotAuthorizedVault);
         }
     }
 
@@ -675,7 +733,7 @@ impl VigenteBadge {
             .get(&DataKey::Paused)
             .unwrap_or(false);
         if paused {
-            panic!("contract is paused");
+            panic_with_error!(&env, Error::ContractPaused);
         }
     }
 }

@@ -18,7 +18,7 @@
 
 extern crate std;
 
-use crate::{VigenteBadge, VigenteBadgeClient};
+use crate::{Error, VigenteBadge, VigenteBadgeClient};
 use ed25519_dalek::{Signer, SigningKey};
 use rand::rngs::OsRng;
 use soroban_sdk::{
@@ -207,6 +207,54 @@ fn mint_with_age(
     )
 }
 
+/// `mint_with_age` para los tests que esperan que FALLE: devuelve el error del
+/// contrato en vez de entrar en panico, para poder afirmar cual es.
+fn mint_err(
+    env: &Env,
+    client: &VigenteBadgeClient,
+    oracles: &OracleSet,
+    borrower: &Address,
+    score: u32,
+    expiration: u64,
+    age_days: u32,
+    nonce_seed: u8,
+) -> soroban_sdk::Error {
+    let nonce = fresh_nonce(nonce_seed);
+    let sigs = oracles.sign_with_first(
+        env,
+        borrower,
+        score,
+        expiration,
+        age_days,
+        &nonce,
+        oracles.threshold as usize,
+    );
+    client
+        .try_mint(
+            borrower,
+            &score,
+            &expiration,
+            &age_days,
+            &BytesN::from_array(env, &nonce),
+            &sigs,
+        )
+        .err()
+        .unwrap()
+        .unwrap()
+}
+
+fn mint_err_default(
+    env: &Env,
+    client: &VigenteBadgeClient,
+    oracles: &OracleSet,
+    borrower: &Address,
+    score: u32,
+    expiration: u64,
+    nonce_seed: u8,
+) -> soroban_sdk::Error {
+    mint_err(env, client, oracles, borrower, score, expiration, DEFAULT_AGE_DAYS, nonce_seed)
+}
+
 const DEFAULT_EXPIRATION: u64 = 1_700_000_000 + 7_776_000;
 
 // =============================================================================
@@ -228,7 +276,6 @@ fn test_initialize_success() {
 }
 
 #[test]
-#[should_panic(expected = "already initialized")]
 fn test_initialize_twice_fails() {
     let env = Env::default();
     let contract_id = env.register_contract(None, VigenteBadge);
@@ -237,7 +284,11 @@ fn test_initialize_twice_fails() {
 
     env.mock_all_auths();
     client.initialize(&admin);
-    client.initialize(&admin);
+    let err = client.try_initialize(&admin)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::AlreadyInitialized as u32));
 }
 
 // =============================================================================
@@ -277,14 +328,17 @@ fn test_add_and_remove_vault() {
 }
 
 #[test]
-#[should_panic(expected = "caller is not an authorized vault")]
 fn test_unauthorized_vault_cannot_slash() {
     let env = Env::default();
     let (_, _, borrower, client, oracles) = setup(&env);
     let unauthorized = Address::generate(&env);
 
     mint_default(&env, &client, &oracles, &borrower, 500, DEFAULT_EXPIRATION, 2);
-    client.slash(&unauthorized, &borrower, &0);
+    let err = client.try_slash(&unauthorized, &borrower, &0)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::NotAuthorizedVault as u32));
 }
 
 // =============================================================================
@@ -366,23 +420,22 @@ fn test_max_score_badge() {
 // =============================================================================
 
 #[test]
-#[should_panic(expected = "invalid score")]
 fn test_mint_score_too_high() {
     let env = Env::default();
     let (_, _, borrower, client, oracles) = setup(&env);
-    mint_default(&env, &client, &oracles, &borrower, 1500, DEFAULT_EXPIRATION, 20);
+    let err = mint_err_default(&env, &client, &oracles, &borrower, 1500, DEFAULT_EXPIRATION, 20);
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::InvalidScore as u32));
 }
 
 #[test]
-#[should_panic(expected = "expiration must be in the future")]
 fn test_mint_expired_timestamp() {
     let env = Env::default();
     let (_, _, borrower, client, oracles) = setup(&env);
-    mint_default(&env, &client, &oracles, &borrower, 500, 1_600_000_000, 21);
+    let err = mint_err_default(&env, &client, &oracles, &borrower, 500, 1_600_000_000, 21);
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::ExpirationInPast as u32));
 }
 
 #[test]
-#[should_panic(expected = "borrower is in default")]
 fn test_mint_defaulted_borrower_fails() {
     let env = Env::default();
     let (_, vault, borrower, client, oracles) = setup(&env);
@@ -390,7 +443,8 @@ fn test_mint_defaulted_borrower_fails() {
     mint_default(&env, &client, &oracles, &borrower, 500, DEFAULT_EXPIRATION, 22);
     client.slash(&vault, &borrower, &1);
 
-    mint_default(&env, &client, &oracles, &borrower, 800, DEFAULT_EXPIRATION, 23);
+    let err = mint_err_default(&env, &client, &oracles, &borrower, 800, DEFAULT_EXPIRATION, 23);
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::BorrowerInDefault as u32));
 }
 
 // =============================================================================
@@ -443,32 +497,41 @@ fn test_slash_sets_is_defaulted_true() {
 // =============================================================================
 
 #[test]
-#[should_panic(expected = "no active badge to slash")]
 fn test_slash_no_badge_fails() {
     let env = Env::default();
     let (_, vault, borrower, client, _oracles) = setup(&env);
-    client.slash(&vault, &borrower, &0);
+    let err = client.try_slash(&vault, &borrower, &0)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::NoActiveBadge as u32));
 }
 
 #[test]
-#[should_panic(expected = "badge already slashed")]
 fn test_slash_twice_fails() {
     let env = Env::default();
     let (_, vault, borrower, client, oracles) = setup(&env);
 
     mint_default(&env, &client, &oracles, &borrower, 500, DEFAULT_EXPIRATION, 33);
     client.slash(&vault, &borrower, &1);
-    client.slash(&vault, &borrower, &1);
+    let err = client.try_slash(&vault, &borrower, &1)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::BadgeAlreadySlashed as u32));
 }
 
 #[test]
-#[should_panic(expected = "invalid reason code")]
 fn test_slash_invalid_reason_fails() {
     let env = Env::default();
     let (_, vault, borrower, client, oracles) = setup(&env);
 
     mint_default(&env, &client, &oracles, &borrower, 500, DEFAULT_EXPIRATION, 34);
-    client.slash(&vault, &borrower, &5);
+    let err = client.try_slash(&vault, &borrower, &5)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::InvalidReasonCode as u32));
 }
 
 // =============================================================================
@@ -528,24 +591,27 @@ fn test_get_default_returns_none_for_non_defaulted() {
 // =============================================================================
 
 #[test]
-#[should_panic(expected = "contract is paused")]
 fn test_mint_while_paused_fails() {
     let env = Env::default();
     let (_, _, borrower, client, oracles) = setup(&env);
 
     client.pause();
-    mint_default(&env, &client, &oracles, &borrower, 500, DEFAULT_EXPIRATION, 50);
+    let err = mint_err_default(&env, &client, &oracles, &borrower, 500, DEFAULT_EXPIRATION, 50);
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::ContractPaused as u32));
 }
 
 #[test]
-#[should_panic(expected = "contract is paused")]
 fn test_slash_while_paused_fails() {
     let env = Env::default();
     let (_, vault, borrower, client, oracles) = setup(&env);
 
     mint_default(&env, &client, &oracles, &borrower, 500, DEFAULT_EXPIRATION, 51);
     client.pause();
-    client.slash(&vault, &borrower, &1);
+    let err = client.try_slash(&vault, &borrower, &1)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::ContractPaused as u32));
 }
 
 #[test]
@@ -620,7 +686,6 @@ fn test_mint_with_3_of_5_signatures_succeeds() {
 }
 
 #[test]
-#[should_panic(expected = "insufficient signatures")]
 fn test_mint_fails_with_2_signatures() {
     let env = Env::default();
     let (_, _, borrower, client, oracles) = setup(&env);
@@ -628,11 +693,14 @@ fn test_mint_fails_with_2_signatures() {
     let nonce = fresh_nonce(81);
     let sigs = oracles.sign_with_first(&env, &borrower, 700, DEFAULT_EXPIRATION, DEFAULT_AGE_DAYS, &nonce, 2);
 
-    client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs);
+    let err = client.try_mint(&borrower, &700, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::ThresholdNotMet as u32));
 }
 
 #[test]
-#[should_panic(expected = "duplicate oracle index")]
 fn test_mint_fails_with_duplicate_index() {
     let env = Env::default();
     let (_, _, borrower, client, oracles) = setup(&env);
@@ -640,11 +708,14 @@ fn test_mint_fails_with_duplicate_index() {
     let nonce = fresh_nonce(82);
     let sigs = oracles.sign_with_indices(&env, &borrower, 700, DEFAULT_EXPIRATION, DEFAULT_AGE_DAYS, &nonce, &[0, 0, 0]);
 
-    client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs);
+    let err = client.try_mint(&borrower, &700, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::DuplicateOracleIndex as u32));
 }
 
 #[test]
-#[should_panic(expected = "nonce already used")]
 fn test_mint_fails_with_replayed_nonce() {
     let env = Env::default();
     let (_, _, borrower, client, oracles) = setup(&env);
@@ -655,7 +726,11 @@ fn test_mint_fails_with_replayed_nonce() {
 
     let other_borrower = Address::generate(&env);
     let sigs2 = oracles.sign_with_first(&env, &other_borrower, 500, DEFAULT_EXPIRATION, DEFAULT_AGE_DAYS, &nonce, 3);
-    client.mint(&other_borrower, &500, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs2);
+    let err = client.try_mint(&other_borrower, &500, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs2)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::NonceAlreadyUsed as u32));
 }
 
 #[test]
@@ -672,7 +747,6 @@ fn test_mint_fails_with_invalid_signature() {
 }
 
 #[test]
-#[should_panic(expected = "oracle index out of range")]
 fn test_mint_fails_with_out_of_range_index() {
     let env = Env::default();
     let (_, _, borrower, client, oracles) = setup(&env);
@@ -685,7 +759,11 @@ fn test_mint_fails_with_out_of_range_index() {
     combined.push_back(valid_sigs.get(1).unwrap());
     combined.push_back((7u32, bogus_sig));
 
-    client.mint(&borrower, &700, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &combined);
+    let err = client.try_mint(&borrower, &700, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &combined)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::OracleIndexOutOfRange as u32));
 }
 
 // =============================================================================
@@ -693,12 +771,12 @@ fn test_mint_fails_with_out_of_range_index() {
 // =============================================================================
 
 #[test]
-#[should_panic(expected = "wallet age below minimum")]
 fn test_mint_fails_for_account_below_age_floor() {
     let env = Env::default();
     let (_, _, borrower, client, oracles) = setup(&env);
     // Default floor is 30 days; supply age 15 → reject.
-    mint_with_age(&env, &client, &oracles, &borrower, 750, DEFAULT_EXPIRATION, 15, 90);
+    let err = mint_err(&env, &client, &oracles, &borrower, 750, DEFAULT_EXPIRATION, 15, 90);
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::WalletAgeBelowMinimum as u32));
 }
 
 #[test]
@@ -748,17 +826,19 @@ fn test_mint_fails_if_age_tampered_after_signing() {
 }
 
 #[test]
-#[should_panic(expected = "threshold exceeds oracle key count")]
 fn test_set_oracle_keys_threshold_too_high() {
     let env = Env::default();
     let (_, _, _, client, _oracles) = setup(&env);
 
     let new_set = OracleSet::generate(&env, 3, 5);
-    client.set_oracle_keys(&new_set.pubkeys_vec(&env), &new_set.threshold);
+    let err = client.try_set_oracle_keys(&new_set.pubkeys_vec(&env), &new_set.threshold)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::ThresholdExceedsKeyCount as u32));
 }
 
 #[test]
-#[should_panic(expected = "duplicate oracle pubkey")]
 fn test_set_oracle_keys_rejects_duplicates() {
     let env = Env::default();
     let (_, _, _, client, _oracles) = setup(&env);
@@ -766,5 +846,9 @@ fn test_set_oracle_keys_rejects_duplicates() {
     let n = OracleSet::generate(&env, 3, 2);
     let mut keys = n.pubkeys_vec(&env);
     keys.push_back(keys.get(0).unwrap());
-    client.set_oracle_keys(&keys, &2u32);
+    let err = client.try_set_oracle_keys(&keys, &2u32)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::DuplicateOracleKey as u32));
 }

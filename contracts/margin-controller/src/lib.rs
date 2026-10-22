@@ -78,6 +78,109 @@ pub enum Error {
     /// this contract reads as NO LIMIT. The safe value is now the one you get
     /// by default and the unsafe one takes a deliberate act.
     UserCapRequired = 7,
+
+    // ---------------------------------------------------------------------
+    // Reglas de negocio que un INTEGRADOR puede provocar.
+    //
+    // Estas son las que de verdad motivan el cambio. Hasta ahora llegaban como
+    // `panic!` con string, que al cruzar la frontera del contrato se convierte
+    // en `UnreachableCodeReached`: indistinguible de un fallo interno. Quien
+    // integra no podia saber si rechazamos su operacion por una regla o si nos
+    // habiamos roto.
+    // ---------------------------------------------------------------------
+    /// `amount <= 0` en `deposit_collateral`, `withdraw_collateral`, `borrow`,
+    /// `repay` o `liquidate`.
+    AmountNotPositive = 8,
+    /// El deposito pasaria el tope TOTAL del activo (`Cap(asset)`), que es
+    /// distinto del tope por usuario (`UserCapExceeded = 2`).
+    AssetCapExceeded = 9,
+    /// El retiro pide mas de lo que el usuario tiene en ese activo.
+    WithdrawExceedsCollateral = 10,
+    /// El retiro dejaria la posicion por debajo del umbral de salud. No es que
+    /// falte saldo: es que ese saldo esta respaldando deuda.
+    PositionWouldBeUnhealthy = 11,
+    /// El badge del prestatario tiene un registro de impago.
+    BorrowerInDefault = 12,
+    /// El score no alcanza el tramo mas bajo de la escalera.
+    ScoreBelowMinimumTier = 13,
+    /// **El limite de LTV.** Es la regla central del producto: el prestamo
+    /// pedido pasa lo que el colateral y el tramo de reputacion permiten.
+    /// Tenia que ser la primera en dejar de ser un panic opaco.
+    ExceedsCreditLimit = 14,
+    /// El repago pide mas que la deuda contabilizada.
+    RepayExceedsDebt = 15,
+    /// `liquidate` sobre una posicion sin deuda.
+    NoDebtToLiquidate = 16,
+    /// `liquidate` sobre una posicion sana. No hay nada que liquidar.
+    PositionIsHealthy = 17,
+    /// El cortacircuitos esta activo. Solo frena la ENTRADA de riesgo nuevo:
+    /// `withdraw_collateral`, `repay` y `liquidate` nunca lo ven.
+    ContractPaused = 18,
+    /// El activo no esta en la allowlist de colateral.
+    AssetNotAllowlisted = 19,
+
+    // ---------------------------------------------------------------------
+    // La ruta del oraculo. Tipadas aparte porque un integrador necesita
+    // distinguir "el precio esta rancio" -- que se resuelve esperando -- de
+    // "este activo no tiene ruta", que no.
+    // ---------------------------------------------------------------------
+    /// El oraculo no devolvio precio para el activo.
+    OracleNoPrice = 20,
+    /// El oraculo devolvio un precio <= 0.
+    OracleInvalidPrice = 21,
+    /// El precio es mas viejo que `MaxPriceAge`. El contrato revierte en vez de
+    /// operar con un numero que no pudo validar.
+    OraclePriceStale = 22,
+
+    // ---------------------------------------------------------------------
+    // Configuracion. Las provoca un admin o un script de despliegue, no un
+    // usuario. Van tipadas por la razon de 4.8: un script que afirma algo tiene
+    // que poder distinguir que asercion fallo.
+    // ---------------------------------------------------------------------
+    /// `init` sobre un contrato ya inicializado.
+    AlreadyInitialized = 23,
+    /// `min_ltv_floor` fuera de rango.
+    MinLtvFloorOutOfRange = 24,
+    /// `param_grace_secs == 0` dejaria el timelock de parametros en nada.
+    ParamGraceSecsRequired = 25,
+    /// `max_price_age == 0` aceptaria cualquier precio por rancio que fuese.
+    MaxPriceAgeRequired = 26,
+    /// Un tope (total o por usuario) llego negativo.
+    CapNegative = 27,
+    /// Los decimales del colateral no coinciden con los del activo de deuda.
+    /// La matematica de LTV asume la misma escala en los dos.
+    DecimalsMismatch = 28,
+    /// `apply_tier_ltv` antes de que venza la ventana de gracia.
+    StillInGracePeriod = 29,
+    /// `add_collateral_asset` sobre un activo que ya esta listado.
+    AssetAlreadyListed = 30,
+    /// Escalera de tramos vacia.
+    EmptyTierLadder = 31,
+    /// Un LTV de tramo por encima del margen del `c_factor` del pool.
+    TierLtvOutOfRange = 32,
+    /// Un LTV de tramo por debajo del piso inmutable.
+    TierLtvBelowFloor = 33,
+    /// Los pisos de score de la escalera no son estrictamente descendentes.
+    TierFloorsNotDescending = 34,
+
+    // ---------------------------------------------------------------------
+    // Reglas de negocio que llegaban como `.expect()`. Mismo problema que los
+    // `panic!`: al cruzar la frontera del contrato se vuelven indistinguibles
+    // de un fallo interno.
+    //
+    // Las otras 23 `.expect("not initialized")` NO se tipan a proposito: esa
+    // condicion no dice "tu operacion no cumple una regla" sino "este contrato
+    // nunca se monto", y conviene que falle ruidosamente.
+    // ---------------------------------------------------------------------
+    /// El usuario no tiene badge vigente. Distinto de `ScoreBelowMinimumTier`:
+    /// ahi hay badge y no alcanza; aca no hay badge.
+    NoActiveBadge = 35,
+    /// `apply_tier_ltv` sin nada encolado.
+    NoPendingTierChange = 36,
+    /// `accept_admin` sin rotacion encolada.
+    NoPendingAdmin = 37,
+    /// El activo esta en la allowlist pero no tiene clave de feed SEP-40.
+    NoFeedForAsset = 38,
 }
 
 // =============================================================================
@@ -333,22 +436,22 @@ impl MarginController {
     /// `add_collateral_asset` (config, not code — BENJI drops in this way).
     pub fn init(env: Env, config: InitConfig) {
         if env.storage().instance().has(&DataKey::Admin) {
-            panic!("already initialized");
+            panic_with_error!(&env, Error::AlreadyInitialized);
         }
         config.admin.require_auth();
 
         if config.min_ltv_floor == 0 || config.min_ltv_floor > MAX_LTV_BPS {
-            panic!("min_ltv_floor out of range");
+            panic_with_error!(&env, Error::MinLtvFloorOutOfRange);
         }
         if config.param_grace_secs == 0 {
-            panic!("param_grace_secs must be positive");
+            panic_with_error!(&env, Error::ParamGraceSecsRequired);
         }
-        Self::validate_tiers(&config.tier_ltv, config.min_ltv_floor);
+        Self::validate_tiers(&env, &config.tier_ltv, config.min_ltv_floor);
         if config.max_price_age == 0 {
-            panic!("max_price_age must be positive");
+            panic_with_error!(&env, Error::MaxPriceAgeRequired);
         }
         if config.collateral_cap < 0 {
-            panic!("cap must be non-negative");
+            panic_with_error!(&env, Error::CapNegative);
         }
         // Typed, not a string panic: a caller can branch on this one, and a
         // deployment script should be able to tell "you forgot the cap" apart
@@ -361,7 +464,7 @@ impl MarginController {
         let borrow_decimals = TokenClient::new(&env, &config.borrow_asset).decimals();
         let coll_decimals = TokenClient::new(&env, &config.collateral_asset).decimals();
         if borrow_decimals != coll_decimals {
-            panic!("collateral decimals must match borrow asset");
+            panic_with_error!(&env, Error::DecimalsMismatch);
         }
 
         let s = env.storage().instance();
@@ -406,7 +509,7 @@ impl MarginController {
         Self::require_not_paused(&env);
         user.require_auth();
         if amount <= 0 {
-            panic!("amount must be positive");
+            panic_with_error!(&env, Error::AmountNotPositive);
         }
         Self::require_collateral_asset(&env, &asset);
 
@@ -438,7 +541,7 @@ impl MarginController {
             }
         }
         if cap > 0 && total + amount > cap {
-            panic!("deposit exceeds collateral cap");
+            panic_with_error!(&env, Error::AssetCapExceeded);
         }
 
         let me = env.current_contract_address();
@@ -474,12 +577,12 @@ impl MarginController {
         // NON-CUSTODIAL INVARIANT: exits are NEVER pausable. See `pause()`.
         user.require_auth();
         if amount <= 0 {
-            panic!("amount must be positive");
+            panic_with_error!(&env, Error::AmountNotPositive);
         }
         let key = DataKey::Collateral(user.clone(), asset.clone());
         let held: i128 = env.storage().persistent().get(&key).unwrap_or(0);
         if amount > held {
-            panic!("withdraw exceeds collateral balance");
+            panic_with_error!(&env, Error::WithdrawExceedsCollateral);
         }
 
         // Simulate the post-withdraw position before touching state.
@@ -488,7 +591,7 @@ impl MarginController {
             let capacity_after =
                 Self::borrow_capacity(&env, &user, &asset, held - amount);
             if capacity_after < debt {
-                panic!("position would become unhealthy");
+                panic_with_error!(&env, Error::PositionWouldBeUnhealthy);
             }
         }
 
@@ -551,24 +654,24 @@ impl MarginController {
         Self::require_not_paused(&env);
         user.require_auth();
         if amount <= 0 {
-            panic!("amount must be positive");
+            panic_with_error!(&env, Error::AmountNotPositive);
         }
 
         let badge = Self::badge_client(&env);
         if badge.is_defaulted(&user) {
-            panic!("borrower is in default");
+            panic_with_error!(&env, Error::BorrowerInDefault);
         }
         let score = badge
             .get_score(&user)
-            .expect("no active credit badge — mint a badge first");
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NoActiveBadge));
         let ltv = Self::ltv_for_score(&env, score);
         if ltv == 0 {
-            panic!("score below minimum tier");
+            panic_with_error!(&env, Error::ScoreBelowMinimumTier);
         }
 
         let allowed = Self::max_borrow(env.clone(), user.clone());
         if amount > allowed {
-            panic!("amount exceeds credit limit for tier");
+            panic_with_error!(&env, Error::ExceedsCreditLimit);
         }
 
         // Draw from Blend straight to the user.
@@ -612,12 +715,12 @@ impl MarginController {
         // NON-CUSTODIAL INVARIANT: deleveraging is NEVER pausable. See `pause()`.
         user.require_auth();
         if amount <= 0 {
-            panic!("amount must be positive");
+            panic_with_error!(&env, Error::AmountNotPositive);
         }
         let debt_key = DataKey::Debt(user.clone());
         let debt: i128 = env.storage().persistent().get(&debt_key).unwrap_or(0);
         if amount > debt {
-            panic!("repay exceeds outstanding debt");
+            panic_with_error!(&env, Error::RepayExceedsDebt);
         }
 
         let me = env.current_contract_address();
@@ -713,17 +816,17 @@ impl MarginController {
             panic_with_error!(&env, Error::SelfLiquidation);
         }
         if repay_amount <= 0 {
-            panic!("repay_amount must be positive");
+            panic_with_error!(&env, Error::AmountNotPositive);
         }
         Self::require_collateral_asset(&env, &collateral_asset);
 
         let debt: i128 = Self::get_debt(env.clone(), user.clone());
         if debt <= 0 {
-            panic!("no debt to liquidate");
+            panic_with_error!(&env, Error::NoDebtToLiquidate);
         }
         let hp = Self::health(env.clone(), user.clone());
         if hp >= 100 {
-            panic!("position is healthy");
+            panic_with_error!(&env, Error::PositionIsHealthy);
         }
 
         let borrow_asset: Address = env
@@ -962,7 +1065,7 @@ impl MarginController {
             .instance()
             .get(&DataKey::MinLtvFloor)
             .expect("not initialized");
-        Self::validate_tiers(&tiers, floor);
+        Self::validate_tiers(&env, &tiers, floor);
         let grace: u64 = env
             .storage()
             .instance()
@@ -982,9 +1085,9 @@ impl MarginController {
             .storage()
             .instance()
             .get(&DataKey::PendingTiers)
-            .expect("no pending tier change");
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NoPendingTierChange));
         if env.ledger().timestamp() < pending.effective_at {
-            panic!("tier change still in grace period");
+            panic_with_error!(&env, Error::StillInGracePeriod);
         }
         env.storage().instance().set(&DataKey::TierLtv, &pending.tiers);
         env.storage().instance().remove(&DataKey::PendingTiers);
@@ -1008,7 +1111,7 @@ impl MarginController {
             .storage()
             .instance()
             .get(&DataKey::PendingAdmin)
-            .expect("no pending admin");
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NoPendingAdmin));
         pending.require_auth();
         env.storage().instance().set(&DataKey::Admin, &pending);
         env.storage().instance().remove(&DataKey::PendingAdmin);
@@ -1020,7 +1123,7 @@ impl MarginController {
         let admin = Self::require_admin(&env);
         admin.require_auth();
         if cap < 0 {
-            panic!("cap must be non-negative");
+            panic_with_error!(&env, Error::CapNegative);
         }
         Self::require_collateral_asset(&env, &asset);
         env.storage().instance().set(&DataKey::Cap(asset.clone()), &cap);
@@ -1038,7 +1141,7 @@ impl MarginController {
         let admin = Self::require_admin(&env);
         admin.require_auth();
         if cap < 0 {
-            panic!("cap must be non-negative");
+            panic_with_error!(&env, Error::CapNegative);
         }
         Self::require_collateral_asset(&env, &asset);
         env.storage()
@@ -1061,7 +1164,7 @@ impl MarginController {
         let admin = Self::require_admin(&env);
         admin.require_auth();
         if cap < 0 {
-            panic!("cap must be non-negative");
+            panic_with_error!(&env, Error::CapNegative);
         }
         // Same reason `init` demands it: the read path treats 0 as NO LIMIT, so
         // an asset listed without a per-user cap is listed uncapped. Before
@@ -1081,7 +1184,7 @@ impl MarginController {
         if TokenClient::new(&env, &asset).decimals()
             != TokenClient::new(&env, &borrow_asset).decimals()
         {
-            panic!("collateral decimals must match borrow asset");
+            panic_with_error!(&env, Error::DecimalsMismatch);
         }
         let mut assets: Vec<Address> = env
             .storage()
@@ -1089,7 +1192,7 @@ impl MarginController {
             .get(&DataKey::CollateralAssets)
             .unwrap_or(Vec::new(&env));
         if assets.contains(&asset) {
-            panic!("asset already listed");
+            panic_with_error!(&env, Error::AssetAlreadyListed);
         }
         assets.push_back(asset.clone());
         env.storage().instance().set(&DataKey::CollateralAssets, &assets);
@@ -1244,7 +1347,7 @@ impl MarginController {
     fn require_not_paused(env: &Env) {
         let paused: bool = env.storage().instance().get(&DataKey::Paused).unwrap_or(false);
         if paused {
-            panic!("contract is paused");
+            panic_with_error!(&env, Error::ContractPaused);
         }
     }
 
@@ -1255,25 +1358,25 @@ impl MarginController {
             .get(&DataKey::CollateralAssets)
             .unwrap_or(Vec::new(env));
         if !assets.contains(asset) {
-            panic!("asset not allowlisted as collateral");
+            panic_with_error!(&env, Error::AssetNotAllowlisted);
         }
     }
 
-    fn validate_tiers(tiers: &Vec<TierLevel>, min_ltv_floor: u32) {
+    fn validate_tiers(env: &Env, tiers: &Vec<TierLevel>, min_ltv_floor: u32) {
         if tiers.is_empty() {
-            panic!("tier ladder must be non-empty");
+            panic_with_error!(&env, Error::EmptyTierLadder);
         }
         let mut prev_floor: Option<u32> = None;
         for t in tiers.iter() {
             if t.ltv_bps == 0 || t.ltv_bps > MAX_LTV_BPS {
-                panic!("tier ltv out of range (must stay below pool c_factor)");
+                panic_with_error!(&env, Error::TierLtvOutOfRange);
             }
             if t.ltv_bps < min_ltv_floor {
-                panic!("tier ltv below immutable floor");
+                panic_with_error!(&env, Error::TierLtvBelowFloor);
             }
             if let Some(p) = prev_floor {
                 if t.min_score >= p {
-                    panic!("tier floors must be strictly descending");
+                    panic_with_error!(&env, Error::TierFloorsNotDescending);
                 }
             }
             prev_floor = Some(t.min_score);
@@ -1347,14 +1450,14 @@ impl MarginController {
             .storage()
             .instance()
             .get(&DataKey::FeedKey(asset.clone()))
-            .expect("no price feed configured for asset");
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NoFeedForAsset));
         let oracle = Self::oracle_client(env);
         let pd = match oracle.lastprice(&feed) {
             Some(p) => p,
-            None => panic!("oracle returned no price"),
+            None => panic_with_error!(&env, Error::OracleNoPrice),
         };
         if pd.price <= 0 {
-            panic!("oracle returned non-positive price");
+            panic_with_error!(&env, Error::OracleInvalidPrice);
         }
         let now = env.ledger().timestamp();
         let max_age: u64 = env
@@ -1363,7 +1466,7 @@ impl MarginController {
             .get(&DataKey::MaxPriceAge)
             .expect("not initialized");
         if now.saturating_sub(pd.timestamp) > max_age {
-            panic!("oracle price is stale");
+            panic_with_error!(&env, Error::OraclePriceStale);
         }
         pd.price
     }

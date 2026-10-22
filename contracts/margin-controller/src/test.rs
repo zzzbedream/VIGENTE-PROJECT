@@ -424,19 +424,19 @@ fn test_deposit_records_and_forwards_to_pool() {
 }
 
 #[test]
-#[should_panic(expected = "deposit exceeds collateral cap")]
 fn test_deposit_above_cap_rejected() {
     let h = setup_with_cap(units(1_500));
     h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
-    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    let err = h.ctrl.try_deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000)).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::AssetCapExceeded as u32));
 }
 
 #[test]
-#[should_panic(expected = "asset not allowlisted")]
 fn test_deposit_unlisted_asset_rejected() {
     let h = setup();
     // The borrow asset itself is not allowlisted as collateral.
-    h.ctrl.deposit_collateral(&h.borrower, &h.usdc_id, &units(100));
+    let err = h.ctrl.try_deposit_collateral(&h.borrower, &h.usdc_id, &units(100)).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::AssetNotAllowlisted as u32));
 }
 
 #[test]
@@ -519,25 +519,24 @@ fn test_borrow_at_limit_succeeds() {
 }
 
 #[test]
-#[should_panic(expected = "amount exceeds credit limit for tier")]
 fn test_borrow_above_limit_fails() {
     let h = setup();
     h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
     mint_badge(&h, &h.borrower, 850, 1);
     let max = h.ctrl.max_borrow(&h.borrower);
-    h.ctrl.borrow(&h.borrower, &(max + 1));
+    let err = h.ctrl.try_borrow(&h.borrower, &(max + 1)).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::ExceedsCreditLimit as u32));
 }
 
 #[test]
-#[should_panic(expected = "no active credit badge")]
 fn test_borrow_without_badge_fails() {
     let h = setup();
     h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
-    h.ctrl.borrow(&h.borrower, &units(10));
+    let err = h.ctrl.try_borrow(&h.borrower, &units(10)).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::NoActiveBadge as u32));
 }
 
 #[test]
-#[should_panic(expected = "borrower is in default")]
 fn test_borrow_when_defaulted_fails() {
     let h = setup();
     h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
@@ -545,7 +544,8 @@ fn test_borrow_when_defaulted_fails() {
     // Slash through an authorized vault (the admin address doubles as one).
     h.badge.add_vault(&h.admin);
     h.badge.slash(&h.admin, &h.borrower, &1_u32);
-    h.ctrl.borrow(&h.borrower, &units(10));
+    let err = h.ctrl.try_borrow(&h.borrower, &units(10)).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::BorrowerInDefault as u32));
 }
 
 #[test]
@@ -568,13 +568,13 @@ fn test_repay_reduces_debt_and_returns_liquidity() {
 }
 
 #[test]
-#[should_panic(expected = "repay exceeds outstanding debt")]
 fn test_repay_more_than_debt_fails() {
     let h = setup();
     h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
     mint_badge(&h, &h.borrower, 850, 1);
     h.ctrl.borrow(&h.borrower, &units(50));
-    h.ctrl.repay(&h.borrower, &units(51));
+    let err = h.ctrl.try_repay(&h.borrower, &units(51)).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::RepayExceedsDebt as u32));
 }
 
 // =============================================================================
@@ -582,7 +582,6 @@ fn test_repay_more_than_debt_fails() {
 // =============================================================================
 
 #[test]
-#[should_panic(expected = "oracle price is stale")]
 fn test_stale_price_reverts_borrow() {
     let h = setup();
     h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
@@ -592,17 +591,18 @@ fn test_stale_price_reverts_borrow() {
         &P_XLM,
         &(INITIAL_TIMESTAMP - MAX_PRICE_AGE - 1),
     );
-    h.ctrl.borrow(&h.borrower, &units(10));
+    let err = h.ctrl.try_borrow(&h.borrower, &units(10)).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::OraclePriceStale as u32));
 }
 
 #[test]
-#[should_panic(expected = "oracle returned no price")]
 fn test_missing_price_reverts_borrow() {
     let h = setup();
     h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
     mint_badge(&h, &h.borrower, 850, 1);
     h.price_oracle.clear_price(&Asset::Stellar(h.xlm_id.clone()));
-    h.ctrl.borrow(&h.borrower, &units(10));
+    let err = h.ctrl.try_borrow(&h.borrower, &units(10)).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::OracleNoPrice as u32));
 }
 
 // =============================================================================
@@ -610,7 +610,6 @@ fn test_missing_price_reverts_borrow() {
 // =============================================================================
 
 #[test]
-#[should_panic(expected = "position would become unhealthy")]
 fn test_withdraw_blocked_while_at_limit() {
     let h = setup();
     h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
@@ -618,7 +617,8 @@ fn test_withdraw_blocked_while_at_limit() {
     let max = h.ctrl.max_borrow(&h.borrower);
     h.ctrl.borrow(&h.borrower, &max);
     // Any withdrawal drops capacity below the debt.
-    h.ctrl.withdraw_collateral(&h.borrower, &h.xlm_id, &1);
+    let err = h.ctrl.try_withdraw_collateral(&h.borrower, &h.xlm_id, &1).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::PositionWouldBeUnhealthy as u32));
 }
 
 #[test]
@@ -676,22 +676,22 @@ fn test_liquidate_on_price_drop_seizes_and_slashes() {
 }
 
 #[test]
-#[should_panic(expected = "position is healthy")]
 fn test_liquidate_healthy_position_fails() {
     let h = setup();
     h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
     mint_badge(&h, &h.borrower, 850, 1);
     h.ctrl.borrow(&h.borrower, &units(50));
     let keeper = Address::generate(&h.env);
-    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1));
+    let err = h.ctrl.try_liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1)).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::PositionIsHealthy as u32));
 }
 
 #[test]
-#[should_panic(expected = "no debt to liquidate")]
 fn test_liquidate_without_debt_fails() {
     let h = setup();
     let keeper = Address::generate(&h.env);
-    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1));
+    let err = h.ctrl.try_liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1)).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::NoDebtToLiquidate as u32));
 }
 
 // =============================================================================
@@ -699,11 +699,11 @@ fn test_liquidate_without_debt_fails() {
 // =============================================================================
 
 #[test]
-#[should_panic(expected = "contract is paused")]
 fn test_pause_blocks_deposit() {
     let h = setup();
     h.ctrl.pause();
-    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(100));
+    let err = h.ctrl.try_deposit_collateral(&h.borrower, &h.xlm_id, &units(100)).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::ContractPaused as u32));
 }
 
 #[test]
@@ -716,13 +716,13 @@ fn test_unpause_restores_operations() {
 }
 
 #[test]
-#[should_panic(expected = "tier ltv out of range")]
 fn test_tier_ltv_above_c_factor_margin_rejected() {
     let h = setup();
     let mut tiers = Vec::new(&h.env);
     // 95% would sit above the Blend c_factor safety margin (max 90%).
     tiers.push_back(TierLevel { min_score: 300, ltv_bps: 9_500 });
-    h.ctrl.queue_set_tier_ltv(&tiers);
+    let err = h.ctrl.try_queue_set_tier_ltv(&tiers).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::TierLtvOutOfRange as u32));
 }
 
 #[test]
@@ -869,19 +869,19 @@ fn test_slash_grace_protects_healthy_position() {
 }
 
 #[test]
-#[should_panic(expected = "tier ltv below immutable floor")]
 fn test_queue_rejects_ltv_below_floor() {
     let h = setup();
     let mut tiers = Vec::new(&h.env);
     tiers.push_back(TierLevel { min_score: 300, ltv_bps: MIN_LTV_FLOOR - 1 });
-    h.ctrl.queue_set_tier_ltv(&tiers);
+    let err = h.ctrl.try_queue_set_tier_ltv(&tiers).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::TierLtvBelowFloor as u32));
 }
 
 #[test]
-#[should_panic(expected = "no pending tier change")]
 fn test_apply_without_pending_fails() {
     let h = setup();
-    h.ctrl.apply_tier_ltv();
+    let err = h.ctrl.try_apply_tier_ltv().err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::NoPendingTierChange as u32));
 }
 
 #[test]

@@ -32,7 +32,8 @@
 //! =============================================================================
 
 use soroban_sdk::{
-    contract, contractclient, contractimpl, contracttype, symbol_short, Address, Env, Symbol, Vec,
+    contract, contractclient, contracterror, contractimpl, contracttype, panic_with_error, symbol_short,
+    Address, Env, Symbol, Vec,
 };
 
 #[cfg(test)]
@@ -119,6 +120,55 @@ pub const MAX_DEVIATION_CEILING_BPS: u32 = 5_000;
 
 const TTL: u32 = 1_555_200; // ~90 days at 5s/ledger
 
+/// Por que este contrato tiene errores tipados y no `panic!` con string.
+///
+/// El agregador vive en el slot de oraculo **inmutable** del pool Blend. Cuando
+/// revierte, lo que revierte es una operacion de Blend, y un panic con string
+/// cruza la frontera del contrato como `UnreachableCodeReached`: ni Blend ni un
+/// integrador pueden distinguir "el precio esta rancio" --que se resuelve
+/// esperando al proximo latido-- de "este contrato se rompio".
+///
+/// Los codigos son ABI. Se apendan, nunca se renumeran.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    /// `init` sobre un contrato ya inicializado.
+    AlreadyInitialized = 1,
+    /// `decimals` fuera del rango admitido.
+    DecimalsOutOfRange = 2,
+    /// `route_grace_secs == 0` dejaria sin timelock el cambio de ruta, que es
+    /// justo la garantia que impide al admin re-rutear un precio al instante.
+    RouteGraceRequired = 3,
+    /// `set_initial_route` sobre un activo que ya tiene ruta. Cambiarla exige
+    /// pasar por `queue_set_route` y esperar la gracia.
+    RouteAlreadySet = 4,
+    /// El upstream no devolvio precio para el activo.
+    UpstreamNoPrice = 5,
+    /// El upstream devolvio un precio <= 0.
+    UpstreamInvalidPrice = 6,
+    /// El precio del upstream es mas viejo que el `max_age` de la ruta.
+    UpstreamPriceStale = 7,
+    /// `apply_set_route` antes de que venza la ventana de gracia.
+    StillInGracePeriod = 8,
+    /// `max_age == 0` aceptaria cualquier precio por rancio que fuese.
+    MaxAgeRequired = 9,
+    /// `max_deviation_bps` por encima del techo del contrato.
+    DeviationAboveCeiling = 10,
+    /// Al reescalar a los decimales de salida, el precio se redondearia a cero.
+    /// Se revierte en vez de servir un cero, que para el pool vale lo mismo que
+    /// "este colateral no vale nada".
+    PriceUnderflow = 11,
+    /// El salto contra la ultima referencia supera `max_deviation_bps`. Es la
+    /// guarda contra manipulacion: acota la TASA de movimiento, no lo impide
+    /// (ver H-03).
+    DeviationAboveLimit = 12,
+    /// `accept_admin` sin rotacion encolada.
+    NoPendingAdmin = 13,
+    /// `apply_set_route` sin ruta encolada.
+    NoPendingRoute = 14,
+}
+
 #[contract]
 pub struct OracleAggregator;
 
@@ -132,14 +182,14 @@ impl OracleAggregator {
     /// setter exists for either.
     pub fn init(env: Env, admin: Address, decimals: u32, route_grace_secs: u64) {
         if env.storage().instance().has(&DataKey::Admin) {
-            panic!("already initialized");
+            panic_with_error!(&env, Error::AlreadyInitialized);
         }
         admin.require_auth();
         if decimals == 0 || decimals > 18 {
-            panic!("decimals out of range");
+            panic_with_error!(&env, Error::DecimalsOutOfRange);
         }
         if route_grace_secs == 0 {
-            panic!("route grace must be positive");
+            panic_with_error!(&env, Error::RouteGraceRequired);
         }
         let s = env.storage().instance();
         s.set(&DataKey::Admin, &admin);
@@ -160,9 +210,9 @@ impl OracleAggregator {
         let admin = Self::require_admin(&env);
         admin.require_auth();
         if env.storage().instance().has(&DataKey::RouteOf(asset.clone())) {
-            panic!("route already set — use queue_set_route");
+            panic_with_error!(&env, Error::RouteAlreadySet);
         }
-        Self::validate_route(&route);
+        Self::validate_route(&env, &route);
         Self::store_route(&env, &asset, &route);
         env.events().publish((symbol_short!("route_in"),), asset);
     }
@@ -182,15 +232,15 @@ impl OracleAggregator {
         let upstream = PriceOracleClient::new(&env, &route.source);
         let raw = match upstream.lastprice(&route.upstream_asset) {
             Some(p) => p,
-            None => panic!("upstream returned no price"),
+            None => panic_with_error!(&env, Error::UpstreamNoPrice),
         };
         if raw.price <= 0 {
-            panic!("upstream returned non-positive price");
+            panic_with_error!(&env, Error::UpstreamInvalidPrice);
         }
 
         let now = env.ledger().timestamp();
         if now.saturating_sub(raw.timestamp) > route.max_age {
-            panic!("upstream price is stale");
+            panic_with_error!(&env, Error::UpstreamPriceStale);
         }
 
         let out_dec: u32 = env
@@ -198,7 +248,7 @@ impl OracleAggregator {
             .instance()
             .get(&DataKey::Decimals)
             .expect("not initialized");
-        let price = Self::rescale(raw.price, upstream.decimals(), out_dec);
+        let price = Self::rescale(&env, raw.price, upstream.decimals(), out_dec);
 
         Self::check_deviation(&env, &asset, price, route.max_deviation_bps);
 
@@ -234,7 +284,7 @@ impl OracleAggregator {
     pub fn queue_set_route(env: Env, asset: Asset, route: Route) {
         let admin = Self::require_admin(&env);
         admin.require_auth();
-        Self::validate_route(&route);
+        Self::validate_route(&env, &route);
         let grace: u64 = env
             .storage()
             .instance()
@@ -256,9 +306,9 @@ impl OracleAggregator {
             .storage()
             .instance()
             .get(&DataKey::Pending(asset.clone()))
-            .expect("no pending route");
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NoPendingRoute));
         if env.ledger().timestamp() < pending.effective_at {
-            panic!("route change still in grace period");
+            panic_with_error!(&env, Error::StillInGracePeriod);
         }
         Self::store_route(&env, &asset, &pending.route);
         env.storage().instance().remove(&DataKey::Pending(asset.clone()));
@@ -299,7 +349,7 @@ impl OracleAggregator {
             .storage()
             .instance()
             .get(&DataKey::PendingAdmin)
-            .expect("no pending admin");
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NoPendingAdmin));
         pending.require_auth();
         env.storage().instance().set(&DataKey::Admin, &pending);
         env.storage().instance().remove(&DataKey::PendingAdmin);
@@ -321,12 +371,12 @@ impl OracleAggregator {
             .expect("not initialized")
     }
 
-    fn validate_route(route: &Route) {
+    fn validate_route(env: &Env, route: &Route) {
         if route.max_age == 0 {
-            panic!("max_age must be positive");
+            panic_with_error!(&env, Error::MaxAgeRequired);
         }
         if route.max_deviation_bps > MAX_DEVIATION_CEILING_BPS {
-            panic!("max_deviation_bps above ceiling");
+            panic_with_error!(&env, Error::DeviationAboveCeiling);
         }
     }
 
@@ -347,7 +397,7 @@ impl OracleAggregator {
     }
 
     /// Convert `price` from `from_dec` to `to_dec`.
-    fn rescale(price: i128, from_dec: u32, to_dec: u32) -> i128 {
+    fn rescale(env: &Env, price: i128, from_dec: u32, to_dec: u32) -> i128 {
         if from_dec == to_dec {
             return price;
         }
@@ -369,7 +419,7 @@ impl OracleAggregator {
             // Never round a positive price down to zero: a pool reading 0 would
             // treat the collateral as worthless.
             if p == 0 {
-                panic!("price underflows target decimals");
+                panic_with_error!(&env, Error::PriceUnderflow);
             }
             p
         }
@@ -395,7 +445,7 @@ impl OracleAggregator {
         let diff = if price > last { price - last } else { last - price };
         // diff/last > max_bps/10_000, cross-multiplied to stay in integers.
         if diff.saturating_mul(10_000) > last.saturating_mul(max_bps as i128) {
-            panic!("price deviation above limit");
+            panic_with_error!(&env, Error::DeviationAboveLimit);
         }
     }
 }
