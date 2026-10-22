@@ -217,9 +217,17 @@ fn fresh_nonce(seed: u32) -> [u8; 32] {
 
 const INITIAL_TIMESTAMP: u64 = 1_700_000_000;
 const BADGE_EXPIRY: u64 = INITIAL_TIMESTAMP + 7_776_000; // +90 days
-const MAX_PRICE_AGE: u64 = 300; // 5 minutes, mirrors the testnet config
+/// 900 s = 15 min. Es el valor VIVO en el controller desplegado, leido del
+/// almacenamiento de instancia de `CAH2BHAE…` el 2026-10-21. Hasta esa fecha el
+/// fixture usaba 300 y el comentario afirmaba que "mirrors the testnet config",
+/// que era falso: produccion tolera un precio tres veces mas rancio que
+/// cualquier cosa que la suite probaba.
+const MAX_PRICE_AGE: u64 = 900;
 const MIN_LTV_FLOOR: u32 = 5_000; // immutable floor, below the Bronze tier
-const GRACE_SECS: u64 = 3_600; // parameter/slash grace window in tests
+/// 172.800 s = 48 h, el valor vivo en produccion (`ParamGraceSecs`). Antes eran
+/// 3.600: la suite probaba la ventana de gracia a 1/48 de su tamano real.
+/// Alinearlo no rompio ningun test, asi que la divergencia era gratuita.
+const GRACE_SECS: u64 = 172_800;
 
 /// Oracle prices at 14 decimals (Reflector's scale).
 const P_XLM: i128 = 19_000_000_000_000; // $0.19
@@ -235,6 +243,26 @@ const XLM_CAP: i128 = 0; // uncapped by default; cap tests use setup_with_cap
 /// Per-user cap del fixture. Deliberadamente generoso para no estorbar al resto
 /// de los tests, pero NO cero: `init` ya lo rechaza, que es justo el punto de
 /// que exista. Los tests de cap lo bajan con `set_user_cap`.
+/// DELIBERADAMENTE distinto de produccion, que hoy tiene **150 XLM**
+/// (`UserCap(XLM) = 1.500.000.000` stroops, medido el 2026-10-21).
+///
+/// No se alinea porque el tope por usuario es un limite de CONCENTRACION, no un
+/// parametro de correccion: bajarlo a 150 obligaria a reescribir 32 de los 43
+/// depositos de la suite y dejaria las cifras de liquidacion demasiado chicas
+/// para ser legibles. Pero la leccion de N-02 es que un test verde sobre un
+/// fixture que no existe en produccion no es cobertura, asi que el ciclo
+/// completo SI se prueba una vez en el tope real:
+/// `ciclo_completo_en_el_tope_real_de_produccion`.
+/// DELIBERADAMENTE distinto de produccion, que hoy tiene **150 XLM**
+/// (`UserCap(XLM) = 1.500.000.000` stroops, medido el 2026-10-21).
+///
+/// No se alinea porque el tope por usuario es un limite de CONCENTRACION, no un
+/// parametro de correccion: bajarlo a 150 obligaria a reescribir 32 de los 43
+/// depositos de la suite y dejaria las cifras de liquidacion demasiado chicas
+/// para ser legibles. Pero la leccion de N-02 es que un test verde sobre un
+/// fixture que no existe en produccion no es cobertura, asi que el ciclo
+/// completo SI se prueba una vez en el tope real:
+/// `ciclo_completo_en_el_tope_real_de_produccion`.
 const USER_CAP: i128 = 1_000_000_0000000; // 1M XLM
 
 struct Harness<'a> {
@@ -1334,6 +1362,50 @@ fn init_rechaza_un_tope_por_usuario_en_cero() {
         .unwrap()
         .unwrap();
     assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::UserCapRequired as u32));
+}
+
+/// El ciclo de credito completo en la configuracion EXACTA de produccion:
+/// tope por usuario de 150 XLM, que es el que gobierna hoy en `CAH2BHAE…`.
+///
+/// Existe por la leccion de N-02 -- un test verde sobre un fixture que no
+/// existe en produccion no es cobertura. El resto de la suite deposita entre
+/// 500 y 5.000 XLM, montos que produccion RECHAZA: 32 de los 43 depositos de
+/// este archivo estan por encima del tope real. La matematica es invariante de
+/// escala, asi que sus conclusiones transfieren, pero nadie habia ejercitado el
+/// ciclo en el techo que el usuario realmente tiene.
+#[test]
+fn ciclo_completo_en_el_tope_real_de_produccion() {
+    const TOPE_PRODUCCION: i128 = 150; // XLM; UserCap(XLM) = 1_500_000_000 stroops
+    let h = setup();
+    h.ctrl.set_user_cap(&h.xlm_id, &units(TOPE_PRODUCCION));
+
+    // Un XLM por encima del tope no entra.
+    let err = h
+        .ctrl
+        .try_deposit_collateral(&h.borrower, &h.xlm_id, &units(TOPE_PRODUCCION + 1))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::UserCapExceeded as u32));
+
+    // Justo en el tope, el ciclo entero funciona.
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(TOPE_PRODUCCION));
+    mint_badge(&h, &h.borrower, 850, 7);
+
+    // Que la cifra sea chica es el hallazgo, no un defecto del test: es el
+    // prestamo maximo que el producto concede hoy a un usuario Gold.
+    let max = h.ctrl.max_borrow(&h.borrower);
+    assert!(max > 0, "en el tope real de produccion no se puede pedir nada");
+
+    h.ctrl.borrow(&h.borrower, &max);
+    assert_eq!(h.ctrl.get_debt(&h.borrower), max);
+
+    h.ctrl.repay(&h.borrower, &max);
+    assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
+    assert_eq!(h.ctrl.health(&h.borrower), HEALTH_NO_DEBT);
+
+    h.ctrl.withdraw_collateral(&h.borrower, &h.xlm_id, &units(TOPE_PRODUCCION));
+    assert_eq!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id), 0);
 }
 
 /// La asercion del paso 2 de 4.8, como test: toda la configuracion que `init`

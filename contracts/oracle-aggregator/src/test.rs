@@ -62,7 +62,19 @@ const T0: u64 = 1_700_000_000;
 const GRACE: u64 = 172_800; // 48 h, igual que en producción
 const OUT_DECIMALS: u32 = 14;
 const MAX_AGE: u64 = 900;
-const DEV_BPS: u32 = 1_000; // 10%
+/// 10 %. NO coincide con produccion, y no puede: las dos rutas vivas usan
+/// valores distintos --XLM 2.000 bps (20 %) y USDC 500 bps (5 %), leidos de
+/// `CCG6EAGO…` el 2026-10-21-- y el fixture tiene un solo knob.
+///
+/// Los dos tests de desviacion que ya existian usan +58 % y +5 %, que caen
+/// fuera y dentro de los tres valores, asi que sus conclusiones transfieren.
+/// Lo que NO estaba cubierto es la banda entre 10 % y 20 %, donde produccion
+/// ACEPTA y este fixture rechazaria: eso lo prueba
+/// `banda_de_desviacion_de_la_ruta_viva_de_xlm`.
+const DEV_BPS: u32 = 1_000;
+
+/// Los bps de la ruta XLM desplegada. Es la guarda mas floja que corre hoy.
+const DEV_BPS_XLM_PRODUCCION: u32 = 2_000; // 20%
 
 struct H<'a> {
     env: Env,
@@ -425,4 +437,62 @@ fn rotacion_de_admin_en_dos_pasos() {
 fn no_se_puede_re_inicializar() {
     let h = setup();
     h.agg.init(&h.admin, &OUT_DECIMALS, &GRACE);
+}
+
+// =============================================================================
+// § LA GUARDA QUE DE VERDAD CORRE  (barrido de fixtures, Fase 5)
+// =============================================================================
+
+/// Donde esta el borde en la ruta XLM **desplegada**, no en la del fixture.
+///
+/// Produccion corre `max_deviation_bps = 2000`; la suite corria todo a 1.000.
+/// Un salto de +15 % --que este archivo habria dado por rechazado-- hoy se
+/// ACEPTA en testnet. Este test fija el borde real en los dos sentidos para que
+/// un cambio de la ruta viva rompa algo aca antes que en produccion.
+#[test]
+fn banda_de_desviacion_de_la_ruta_viva_de_xlm() {
+    let h = setup();
+    let xlm_prod = Asset::Stellar(Address::generate(&h.env));
+    h.agg.set_initial_route(
+        &xlm_prod,
+        &Route {
+            source: h.up_id.clone(),
+            upstream_asset: up_xlm(&h.env),
+            max_age: MAX_AGE,
+            max_deviation_bps: DEV_BPS_XLM_PRODUCCION,
+        },
+    );
+
+    // Fija la referencia en $0,19.
+    assert_eq!(h.agg.lastprice(&xlm_prod).unwrap().price, 19_000_000_000_000);
+
+    // +15 %: por encima del 10 % del fixture, por debajo del 20 % desplegado.
+    // Con DEV_BPS esto revertiria. Con la ruta real, pasa.
+    h.up.set_price(&up_xlm(&h.env), &21_850_000_000_000, &T0);
+    assert_eq!(
+        h.agg.lastprice(&xlm_prod).unwrap().price,
+        21_850_000_000_000,
+        "produccion acepta +15 % y la suite no lo estaba probando"
+    );
+}
+
+/// El otro lado del mismo borde: pasado el 20 % la ruta viva SI revierte.
+#[test]
+#[should_panic(expected = "deviation above limit")]
+fn pasado_el_veinte_por_ciento_la_ruta_viva_de_xlm_revierte() {
+    let h = setup();
+    let xlm_prod = Asset::Stellar(Address::generate(&h.env));
+    h.agg.set_initial_route(
+        &xlm_prod,
+        &Route {
+            source: h.up_id.clone(),
+            upstream_asset: up_xlm(&h.env),
+            max_age: MAX_AGE,
+            max_deviation_bps: DEV_BPS_XLM_PRODUCCION,
+        },
+    );
+    h.agg.lastprice(&xlm_prod);
+    // +21 %.
+    h.up.set_price(&up_xlm(&h.env), &22_990_000_000_000, &T0);
+    h.agg.lastprice(&xlm_prod);
 }
