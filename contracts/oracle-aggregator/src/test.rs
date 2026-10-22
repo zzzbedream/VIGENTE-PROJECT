@@ -12,7 +12,7 @@ extern crate std;
 
 use crate::{
     Asset, Error, OracleAggregator, OracleAggregatorClient, PriceData, Route,
-    MAX_DEVIATION_CEILING_BPS,
+    MAX_DEVIATION_CEILING_BPS, AccrualConfig, FxLeg, MAX_RATE_BPS,
 };
 use soroban_sdk::{
     contract, contractimpl, contracttype,
@@ -448,6 +448,275 @@ fn no_se_puede_re_inicializar() {
     let h = setup();
     let err = h.agg.try_init(&h.admin, &OUT_DECIMALS, &GRACE).err().unwrap().unwrap();
     assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::AlreadyInitialized as u32));
+}
+
+
+// =============================================================================
+// ACTIVOS QUE SE DEVENGAN  (Bloque C)
+// =============================================================================
+
+/// NAV de CETES medido el 2026-10-22 en el REST de Etherfuse:
+/// `token_cost_in_fiat = 1.187337` MXN, a 14 decimales.
+const NAV_CETES: i128 = 118_733_700_000_000;
+/// `current_basis_points = 555` -> 5,55 % anual.
+const RATE_CETES: u32 = 555;
+/// FX medido en el Fiat FX de Reflector: 0,05340442685235 USD/MXN.
+const FX_MXN: i128 = 5_340_442_685_235;
+/// NAV de USTRY, que ya esta en dolares: 1,077848.
+const NAV_USTRY: i128 = 107_784_800_000_000;
+
+fn cfg_base(nav: i128, rate: u32, fx: FxLeg, at: u64) -> AccrualConfig {
+    AccrualConfig {
+        nav_anchor: nav,
+        anchor_at: at,
+        rate_bps: rate,
+        fx_leg: fx,
+        max_reanchor_bps: 100,       // 1 %
+        min_reanchor_secs: 86_400,   // un dia
+    }
+}
+
+/// El caso de los instrumentos en DOLARES: `fx_asset: None`, el mismo codigo
+/// que precia CETES precia USTRY sin tocar nada.
+///
+/// Es la prueba de que el contrato no sabe que es CETES.
+#[test]
+fn devengo_sin_fx_precia_un_bono_ya_en_dolares() {
+    let h = setup();
+    let ustry = Asset::Stellar(Address::generate(&h.env));
+    h.agg
+        .set_initial_accrual(&ustry, &cfg_base(NAV_USTRY, 346, FxLeg::AlreadyInOutputCurrency, T0));
+
+    // En el ancla, el precio es el NAV.
+    assert_eq!(h.agg.lastprice(&ustry).unwrap().price, NAV_USTRY);
+
+    // A 360 dias, sube exactamente la tasa: 3,46 %.
+    advance(&h.env, 360 * 86_400);
+    let esperado = NAV_USTRY + NAV_USTRY * 346 / 10_000;
+    assert_eq!(h.agg.lastprice(&ustry).unwrap().price, esperado);
+}
+
+/// El caso de CETES: NAV en MXN compuesto con el FX de Reflector.
+///
+/// La pata volatil -- el FX -- viene de un tercero independiente del emisor del
+/// bono. Eso es el punto del diseno, no un detalle.
+#[test]
+fn devengo_con_fx_compone_nav_por_tipo_de_cambio() {
+    let h = setup();
+    let mxn = Asset::Other(Symbol::new(&h.env, "MXN"));
+    // El FX se resuelve por una ruta NORMAL, con sus propias guardas.
+    h.agg.set_initial_route(
+        &mxn,
+        &Route {
+            source: h.up_id.clone(),
+            upstream_asset: mxn.clone(),
+            max_age: MAX_AGE,
+            max_deviation_bps: DEV_BPS,
+        },
+    );
+    h.up.set_price(&mxn, &FX_MXN, &T0);
+
+    let cetes = Asset::Stellar(Address::generate(&h.env));
+    h.agg
+        .set_initial_accrual(&cetes, &cfg_base(NAV_CETES, RATE_CETES, FxLeg::Via(mxn.clone()), T0));
+
+    // 1,187337 MXN x 0,05340442685235 = 0,063409... USD
+    let escala: i128 = 100_000_000_000_000; // 1e14
+    let esperado = NAV_CETES * FX_MXN / escala;
+    assert_eq!(h.agg.lastprice(&cetes).unwrap().price, esperado);
+
+    // Y el orden de magnitud es el correcto: ~0,0634 USD a 14 decimales.
+    assert!(esperado > 6_300_000_000_000 && esperado < 6_400_000_000_000);
+}
+
+/// INVARIANTE: el NAV es monotono no decreciente. Un bono corto devenga; no se
+/// desploma. Que un NAV que baja no sea representable es la propiedad buscada.
+#[test]
+fn invariante_el_nav_nunca_baja() {
+    let h = setup();
+    let bono = Asset::Stellar(Address::generate(&h.env));
+    h.agg
+        .set_initial_accrual(&bono, &cfg_base(NAV_CETES, RATE_CETES, FxLeg::AlreadyInOutputCurrency, T0));
+
+    let mut previo = h.agg.get_nav_now(&bono);
+    for _ in 0..12 {
+        advance(&h.env, 30 * 86_400);
+        let actual = h.agg.get_nav_now(&bono);
+        assert!(actual >= previo, "el NAV bajo: {} -> {}", previo, actual);
+        previo = actual;
+    }
+    // Y a un ano, subio la tasa completa.
+    assert!(previo > NAV_CETES);
+}
+
+/// La cota diaria, medida: con 555 bps el NAV no puede subir mas de
+/// 0,015417 % por dia. Es lo que hace que la banda del re-ancla sea chica.
+#[test]
+fn el_incremento_diario_esta_acotado_por_la_tasa() {
+    let h = setup();
+    let bono = Asset::Stellar(Address::generate(&h.env));
+    h.agg
+        .set_initial_accrual(&bono, &cfg_base(NAV_CETES, RATE_CETES, FxLeg::AlreadyInOutputCurrency, T0));
+    let antes = h.agg.get_nav_now(&bono);
+    advance(&h.env, 86_400);
+    let despues = h.agg.get_nav_now(&bono);
+
+    let subida_bps = (despues - antes) * 1_000_000 / antes; // en millonesimas
+    // 555/360 = 1,5417 bps diarios = 154,17 millonesimas de 1 %.
+    assert!(subida_bps <= 160, "subio {} millonesimas en un dia", subida_bps);
+}
+
+/// Un activo tiene una ruta O un devengo, nunca las dos: dos caminos de precio
+/// para el mismo activo no tienen por que coincidir.
+#[test]
+fn un_activo_no_puede_tener_ruta_y_devengo() {
+    let h = setup();
+    // El XLM del fixture ya tiene ruta.
+    let err = h
+        .agg
+        .try_set_initial_accrual(&h.xlm, &cfg_base(NAV_CETES, RATE_CETES, FxLeg::AlreadyInOutputCurrency, T0))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::AssetAlreadyPriced as u32));
+
+    // Y al reves.
+    let bono = Asset::Stellar(Address::generate(&h.env));
+    h.agg
+        .set_initial_accrual(&bono, &cfg_base(NAV_CETES, RATE_CETES, FxLeg::AlreadyInOutputCurrency, T0));
+    let err2 = h
+        .agg
+        .try_set_initial_route(
+            &bono,
+            &Route {
+                source: h.up_id.clone(),
+                upstream_asset: up_xlm(&h.env),
+                max_age: MAX_AGE,
+                max_deviation_bps: DEV_BPS,
+            },
+        )
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err2, soroban_sdk::Error::from_contract_error(Error::AssetAlreadyPriced as u32));
+}
+
+// --- las cuatro guardas del re-ancla -----------------------------------------
+
+/// Un re-ancla legitimo funciona: corrige la deriva dentro de la banda.
+#[test]
+fn reanchor_dentro_de_la_banda_se_acepta() {
+    let h = setup();
+    let bono = Asset::Stellar(Address::generate(&h.env));
+    h.agg
+        .set_initial_accrual(&bono, &cfg_base(NAV_CETES, RATE_CETES, FxLeg::AlreadyInOutputCurrency, T0));
+
+    advance(&h.env, 30 * 86_400);
+    let predicho = h.agg.get_nav_now(&bono);
+    // +0,5 %, dentro del 1 % configurado.
+    let nuevo = predicho + predicho * 50 / 10_000;
+    h.agg.reanchor(&bono, &nuevo, &(T0 + 30 * 86_400), &RATE_CETES);
+    assert_eq!(h.agg.get_accrual(&bono).unwrap().nav_anchor, nuevo);
+}
+
+/// Guarda 2: antes de `min_reanchor_secs` se rechaza. Sin esto, varios
+/// re-anclas dentro de la banda escalarian el precio igual.
+#[test]
+fn reanchor_demasiado_pronto_revierte() {
+    let h = setup();
+    let bono = Asset::Stellar(Address::generate(&h.env));
+    h.agg
+        .set_initial_accrual(&bono, &cfg_base(NAV_CETES, RATE_CETES, FxLeg::AlreadyInOutputCurrency, T0));
+    advance(&h.env, 3_600); // una hora, menos que el dia exigido
+    let err = h
+        .agg
+        .try_reanchor(&bono, &NAV_CETES, &(T0 + 3_600), &RATE_CETES)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::ReanchorTooSoon as u32));
+}
+
+/// Guarda 3: un ancla que hace BAJAR el NAV se rechaza.
+#[test]
+fn reanchor_que_baja_el_nav_revierte() {
+    let h = setup();
+    let bono = Asset::Stellar(Address::generate(&h.env));
+    h.agg
+        .set_initial_accrual(&bono, &cfg_base(NAV_CETES, RATE_CETES, FxLeg::AlreadyInOutputCurrency, T0));
+    advance(&h.env, 30 * 86_400);
+    let err = h
+        .agg
+        .try_reanchor(&bono, &(NAV_CETES / 2), &(T0 + 30 * 86_400), &RATE_CETES)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::NavWouldDecrease as u32));
+}
+
+/// Guarda 4, **la que importa**: fuera de la banda se rechaza. Es lo que
+/// convierte el poder del admin de "fijar el precio" en "corregir la deriva".
+#[test]
+fn reanchor_fuera_de_la_banda_revierte() {
+    let h = setup();
+    let bono = Asset::Stellar(Address::generate(&h.env));
+    h.agg
+        .set_initial_accrual(&bono, &cfg_base(NAV_CETES, RATE_CETES, FxLeg::AlreadyInOutputCurrency, T0));
+    advance(&h.env, 30 * 86_400);
+    let predicho = h.agg.get_nav_now(&bono);
+    // +10 %, muy por encima del 1 % configurado.
+    let err = h
+        .agg
+        .try_reanchor(&bono, &(predicho * 110 / 100), &(T0 + 30 * 86_400), &RATE_CETES)
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::ReanchorOutOfBand as u32));
+}
+
+/// Una tasa absurda no es un bono: se rechaza al configurar.
+#[test]
+fn tasa_por_encima_del_techo_se_rechaza() {
+    let h = setup();
+    let bono = Asset::Stellar(Address::generate(&h.env));
+    let err = h
+        .agg
+        .try_set_initial_accrual(&bono, &cfg_base(NAV_CETES, MAX_RATE_BPS + 1, FxLeg::AlreadyInOutputCurrency, T0))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::RateAboveCeiling as u32));
+}
+
+/// La pata de FX hereda las guardas de su ruta: si el FX esta rancio, el precio
+/// del bono revierte en vez de servirse con un tipo de cambio viejo.
+///
+/// Importa porque el FX es la pata VOLATIL. Un NAV viejo se desvia despacio; un
+/// FX viejo puede estar muy lejos.
+#[test]
+fn si_el_fx_esta_rancio_el_bono_no_se_precia() {
+    let h = setup();
+    let mxn = Asset::Other(Symbol::new(&h.env, "MXN"));
+    h.agg.set_initial_route(
+        &mxn,
+        &Route {
+            source: h.up_id.clone(),
+            upstream_asset: mxn.clone(),
+            max_age: MAX_AGE,
+            max_deviation_bps: DEV_BPS,
+        },
+    );
+    h.up.set_price(&mxn, &FX_MXN, &T0);
+
+    let cetes = Asset::Stellar(Address::generate(&h.env));
+    h.agg
+        .set_initial_accrual(&cetes, &cfg_base(NAV_CETES, RATE_CETES, FxLeg::Via(mxn), T0));
+    assert!(h.agg.lastprice(&cetes).is_some());
+
+    // El FX envejece mas alla de su `max_age` y no se refresca.
+    advance(&h.env, MAX_AGE + 60);
+    let err = h.agg.try_lastprice(&cetes).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::UpstreamPriceStale as u32));
 }
 
 // =============================================================================
