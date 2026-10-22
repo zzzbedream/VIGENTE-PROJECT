@@ -5,6 +5,34 @@
 > answer one question honestly: **is there room for a credit reputation
 > primitive on Stellar, and is anyone already doing it?**
 
+> ### Correccion, 2026-10-22 - leer antes del analisis
+>
+> Este documento esta fechado en **junio 2026** y se conserva como registro fechado en vez
+> de reescribirse. Tres de sus afirmaciones ya no se sostienen, y una nunca fue correcta:
+>
+> **1. "Under-collateralized lending" no es lo que Vigente hace, y nunca lo fue en el
+> codigo desplegado.** La escalera vigente es **8500 / 7500 / 6000 bps**: todos los tramos
+> estan *sobre*colateralizados, verificable con `get_tier_ltv` sobre `CAH2BHAE...`. Lo que
+> el primitivo de reputacion desbloquea es **un limite de credito que el prestatario gana**,
+> de modo que quien tiene historial pone menos colateral que quien no lo tiene - no que
+> alguien no ponga nada. La conclusion de la seccion 7 lo exageraba; el encuadre correcto
+> esta en [`README.md`](../README.md).
+>
+> **2. "Nadie lo esta haciendo" quedo vencido.** **Templar Protocol** presta hoy contra RWA
+> tokenizados en Stellar (~US$ 8,4 M de TVL, aceptando `deJTRSY`, `deJAAA` y `USTRY`).
+> Vigente **no** es el primer prestamista contra RWA de la red. El hueco que queda es mas
+> estrecho y mas defendible: en Templar y en Blend el LTV es **el mismo para todos**.
+>
+> **3. Las cifras se movieron.** Aqui se cita a Blend con US$ 80 M+ de TVL; son **US$ 127
+> M** a agosto de 2026, con **poco mas de US$ 2 M** en pools que aceptan RWA, contra un
+> mercado de RWA tokenizados de **US$ 3.000 M+** en Stellar (fuente: RedStone, 2026-08-26).
+> Ese hueco - 0,07 % de utilizacion - es un argumento mas fuerte que el que este documento
+> construye.
+>
+> Abajo no se edito nada salvo las dos frases que afirman "under-collateralized lending"
+> como objetivo y la que delega la atestacion del mundo real al roadmap de pruebas de
+> conocimiento cero de SDF, que es una dependencia que no controlamos y no necesitamos.
+
 ## TL;DR
 
 There is **no native credit/reputation oracle on Stellar today**, and **no
@@ -108,15 +136,17 @@ contract, other protocols can occupy it too.
   reading it. Mitigation: the Sybil/airdrop wedge delivers value with **zero
   lenders involved** — it bootstraps usage before the lending flywheel.
 - **Thin on-chain data:** for borrowers with little Stellar history, the
-  score is weak today. Honest position: real-world attestation is a later
-  phase, on the ZK rails SDF is shipping; the MVP serves crypto-native
-  actors whose on-chain history is already sufficient.
+  score is weak today. Honest position: a thin history earns the **lowest**
+  tier (6000 bps), not a refusal - the ladder degrades gracefully instead of
+  excluding. Richer real-world attestation is a later phase and is
+  deliberately **not** tied to any third party roadmap.
 
 ## 7. Conclusion
 
-Stellar has a mature price-oracle layer and a growing, **fully
-over-collateralized** lending layer. The credit/reputation primitive that
-would unlock under-collateralized lending — and the Sybil-resistance tool
+Stellar has a mature price-oracle layer and a growing lending layer in
+which **every borrower posts the same collateral ratio regardless of
+history**. The credit/reputation primitive that
+would let that collateral ratio be **earned** — and the Sybil-resistance tool
 the ecosystem lacks entirely — **does not exist natively**. That is the
 whitespace. Vigente already has the hard part built and running on testnet:
 threshold oracle, on-chain scoring, the read interface, our own SEP-40 price

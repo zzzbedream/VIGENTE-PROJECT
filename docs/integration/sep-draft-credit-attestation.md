@@ -112,8 +112,11 @@ pub trait CreditAttestationOracle {
 - **`Option<u32>` over sentinel values.** "No signal" is a first-class
   state, not score 0 — a new wallet and a revoked borrower must be
   distinguishable from a merely bad one.
-- **Immutable defaults.** The credit memory that makes under-collateralized
-  lending possible at all. Without it, defaulting and re-minting is free.
+- **Immutable defaults.** The credit memory without which a reputation
+  score means nothing: if defaulting and re-minting were free, the score
+  would only measure how recently someone created a wallet. This is what
+  makes an *earned* collateral requirement possible - it does not imply
+  lending without collateral.
 
 ## Security Concerns
 

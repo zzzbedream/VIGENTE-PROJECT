@@ -69,7 +69,7 @@ not exist yet**.
 | **Reputation actually moves credit** — same collateral, score 650 vs 850 → `max_borrow` ratio exactly `8500/7500` | `max_borrow` on `CCZNOV65…` for the two demo accounts |
 | **Non-custodial under adversarial admin** — admin pauses, user still withdraws everything | [`d370b84a…`](https://stellar.expert/explorer/testnet/tx/d370b84aab83cce899a3d944e7f9916520a202bdc4a4258e4a465d6006b6ba32) |
 | Threshold mints with 3-of-5 ed25519 signatures verified **on-chain** | [`8b9fccfc…`](https://stellar.expert/explorer/testnet/tx/8b9fccfc9daaf594e457e19808ef9c0746e8e45f37aab8417b5fe8d59641bc85), [`c5a071e8…`](https://stellar.expert/explorer/testnet/tx/c5a071e88fd021fa8d9b1b9cdf2f53a464ca87762b0a05bfff8c0ee339cdee84), [`5bf78e25…`](https://stellar.expert/explorer/testnet/tx/5bf78e2590cdd83553183aaee17e09c23b032eda224dc6b8b69514ccc3859657) |
-| 97 Rust tests across three crates | `cargo test` in `contracts/{vigente-badge,margin-controller,oracle-aggregator}`; `npm run test:web` in `web/` |
+| **141 Rust tests + 5 smoke** across three crates (97 when this document was written - cite the command, not the number) | `cargo test -j 1` in each of `contracts/{vigente-badge,margin-controller,oracle-aggregator}`; there is no cargo workspace, so `--workspace` fails. `npm run test:web` in `web/` |
 | Production deployment any reviewer can use | [vigente-project.vercel.app/v3](https://vigente-project.vercel.app/v3) — connect any wallet, score, mint |
 | Versioned consumer interface + live ABI | [INTERFACE.md](../contracts/vigente-badge/INTERFACE.md) · [abi-v3.json](integration/abi-v3.json) |
 | Threat model with code-level mitigations | [THREAT_MODEL.md](THREAT_MODEL.md) — 6 STRIDE vectors, each mapped to a contract function and a named test |
