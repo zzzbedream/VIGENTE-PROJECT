@@ -41,10 +41,15 @@ mod test;
 // TYPED ERRORS
 // =============================================================================
 
-/// Errors a caller can branch on. Existing string `panic!`s are left as they
-/// are: rewriting them would churn every `should_panic` test for no gain. New
-/// guards use this enum so a test can assert *which* rule fired, not merely
-/// that the call failed.
+/// Errors a caller can branch on.
+///
+/// This comment used to say that the existing string `panic!`s were left alone
+/// because rewriting them "would churn every `should_panic` test for no gain".
+/// That was wrong on both counts and it is no longer true: the churn WAS the
+/// gain. A `should_panic(expected = "...")` has the same defect as the panic it
+/// tests -- if the contract breaks for an unrelated reason and the message
+/// happens to match, the test still passes. As of 2026-10-22 there are zero
+/// string panics here and every test asserts *which* rule fired.
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -197,6 +202,21 @@ pub enum Error {
     NothingToSweep = 39,
     /// `init` fue llamado sin direccion de tesoreria utilizable.
     TreasuryRequired = 40,
+
+    // ---------------------------------------------------------------------
+    // N-01. Blend lleva los pasivos en dTokens y nosotros `TotalDebt` en
+    // subyacente. La conversion redondea a favor del pool en los dos
+    // sentidos, asi que todo repago TOTAL deja un resto que nuestros libros
+    // no ven y que bloquea una salida completa.
+    // ---------------------------------------------------------------------
+    /// `sweep_interest` sin residuo que sanear.
+    NothingToSweepInterest = 41,
+    /// `sweep_interest` por encima del residuo real.
+    ///
+    /// **Es el tope que hace segura a la funcion.** Sin el, alguien podria
+    /// pagar deuda REAL de usuarios mientras nuestros libros la siguen
+    /// mostrando: la divergencia inversa a N-01, y creada por nosotros.
+    SweepExceedsResidual = 42,
 }
 
 // =============================================================================
@@ -263,7 +283,69 @@ pub const REQ_WITHDRAW_COLLATERAL: u32 = 3;
 pub const REQ_BORROW: u32 = 4;
 pub const REQ_REPAY: u32 = 5;
 
+/// Subconjunto del `ReserveConfig` de Blend. **Copiado campo por campo del
+/// wasm desplegado**, no de la documentacion: el XDR se decodifica por
+/// posicion y orden alfabetico, asi que un campo de menos o en otro lugar da
+/// un error de decodificacion en produccion y no en los tests.
+///
+/// Leido el 2026-10-22 con
+/// `stellar contract info interface --id CDYUHA3T... --network testnet`.
+#[contracttype]
+#[derive(Clone)]
+pub struct ReserveConfig {
+    pub c_factor: u32,
+    pub decimals: u32,
+    pub enabled: bool,
+    pub index: u32,
+    pub l_factor: u32,
+    pub max_util: u32,
+    pub r_base: u32,
+    pub r_one: u32,
+    pub r_three: u32,
+    pub r_two: u32,
+    pub reactivity: u32,
+    pub supply_cap: i128,
+    pub util: u32,
+}
+
+/// `ReserveData` de Blend. El campo que nos importa es **`d_rate`**: convierte
+/// dTokens a subyacente, y es lo que hace falta para acotar `sweep_interest`.
+#[contracttype]
+#[derive(Clone)]
+pub struct ReserveData {
+    pub b_rate: i128,
+    pub b_supply: i128,
+    pub backstop_credit: i128,
+    pub d_rate: i128,
+    pub d_supply: i128,
+    pub ir_mod: i128,
+    pub last_time: u64,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct Reserve {
+    pub asset: Address,
+    pub config: ReserveConfig,
+    pub data: ReserveData,
+    pub scalar: i128,
+}
+
 /// Subset of the Blend pool interface this controller calls.
+///
+/// **Verified against the deployed wasm, not the documentation.** Read on
+/// 2026-10-22 with `stellar contract info interface --id CDYUHA3T...
+/// --network testnet`, which prints the interface the binary actually exports:
+///
+/// ```text
+/// fn get_positions(env: soroban_sdk::Env, address: soroban_sdk::Address) -> Positions;
+/// fn get_reserve(env: soroban_sdk::Env, asset: soroban_sdk::Address) -> Reserve;
+/// ```
+///
+/// This matters for N-01. The whole finding is that our `TotalDebt` and
+/// Blend's liability ledger drift apart, and we had no way to read Blend's
+/// side: the trait only declared `submit`, so the only liability figure the
+/// contract could see was its own.
 #[contractclient(name = "BlendPoolClient")]
 pub trait BlendPool {
     fn submit(
@@ -273,6 +355,11 @@ pub trait BlendPool {
         to: Address,
         requests: Vec<Request>,
     ) -> Positions;
+    /// What Blend says this address owes and holds. The maps are keyed by the
+    /// reserve INDEX, not by asset address -- see `reserve_index`.
+    fn get_positions(env: Env, address: Address) -> Positions;
+    /// Needed only for `data.d_rate`, which converts dTokens to underlying.
+    fn get_reserve(env: Env, asset: Address) -> Reserve;
 }
 
 // =============================================================================
@@ -441,6 +528,9 @@ pub const PROTOCOL_PENALTY_SHARE_BPS: u32 = 2_000; // 20 % of 8 pts = 1.6 pts
 
 /// `health()` sentinel for a user with zero debt.
 pub const HEALTH_NO_DEBT: u32 = u32::MAX;
+
+/// Escala del `d_rate` de Blend: 9 decimales.
+const D_RATE_SCALAR: i128 = 1_000_000_000;
 
 const TTL_LEDGERS: u32 = 1_555_200; // ~90 days at 5s/ledger
 
@@ -1353,6 +1443,119 @@ impl MarginController {
             .unwrap_or(0);
         let reservado = if seized < pending { seized } else { pending };
         seized - reservado
+    }
+
+
+    /// Paga el residuo de interes que Blend nos cobra y nuestros libros no ven
+    /// — N-01.
+    ///
+    /// **El hallazgo, reproducido a proposito.** Blend guarda los pasivos en
+    /// **dTokens**; el controller lleva `TotalDebt` en **subyacente**. Pedir
+    /// prestado redondea los dTokens hacia arriba y repagar los redondea hacia
+    /// abajo: las dos reglas van a favor del pool. Repagar el monto exacto que
+    /// se pidio no lleva el pasivo de Blend a cero, y el resto es inalcanzable
+    /// porque `repay` aborta si el monto supera la deuda contabilizada. Medido
+    /// en produccion: el controller previo `CCZNOV65…` muestra
+    /// `liabilities: {"0": 6}` con `get_total_debt() == 0`.
+    ///
+    /// **Permissionless a proposito.** Cualquiera puede sanear la posicion, y
+    /// el destino no es parametrizable: es siempre un `Repay` contra el pool.
+    /// No hay forma de desviar el pago. El costo es que alguien tiene que
+    /// querer pagarlo; sin incentivo, nadie lo hace. Se eligio esto antes que
+    /// barrer dentro de `repay`, que encareceria **todo** repago para corregir
+    /// un residuo minimo.
+    ///
+    /// **El tope es la parte que importa.** `amount` no puede pasar de
+    /// `residual = Σ(pasivos de Blend en subyacente) − TotalDebt`. Sin ese
+    /// tope, alguien podria pagar deuda REAL de usuarios mientras nuestros
+    /// libros la siguen mostrando — la divergencia inversa a N-01, y esta vez
+    /// causada por nosotros.
+    ///
+    /// La deuda contabilizada de ningun usuario cambia aca. Esta funcion no
+    /// toca `Debt(user)` ni `TotalDebt`: solo salda con el pool lo que el pool
+    /// cree que le debemos de mas.
+    pub fn sweep_interest(env: Env, from: Address, amount: i128) {
+        from.require_auth();
+        if amount <= 0 {
+            panic_with_error!(&env, Error::AmountNotPositive);
+        }
+
+        let residual = Self::interest_residual(&env);
+        if residual <= 0 {
+            panic_with_error!(&env, Error::NothingToSweepInterest);
+        }
+        if amount > residual {
+            panic_with_error!(&env, Error::SweepExceedsResidual);
+        }
+
+        let borrow_asset: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::BorrowAsset)
+            .expect("not initialized");
+
+        let me = env.current_contract_address();
+        TokenClient::new(&env, &borrow_asset).transfer(&from, &me, &amount);
+        Self::authorize_pool_pull(&env, &borrow_asset, amount);
+        let mut reqs: Vec<Request> = Vec::new(&env);
+        reqs.push_back(Request {
+            address: borrow_asset.clone(),
+            amount,
+            request_type: REQ_REPAY,
+        });
+        Self::pool_client(&env).submit(&me, &me, &me, &reqs);
+
+        env.events()
+            .publish((symbol_short!("swpint"), from), amount);
+    }
+
+    /// Cuanto mas cree Blend que le debemos, comparado con nuestros libros, en
+    /// unidades del activo de deuda.
+    ///
+    /// Devuelve 0 si no hay residuo. Un valor **negativo** seria la
+    /// divergencia inversa —nuestros libros mostrando mas deuda que Blend— y
+    /// tambien se devuelve como 0: no hay nada que sanear pagando.
+    ///
+    /// **La conversion es la parte delicada.** `get_positions` devuelve
+    /// dTokens; `d_rate` los lleva a subyacente y cambia entre bloques. Se
+    /// redondea **hacia abajo** a proposito: un residuo subestimado deja algo
+    /// sin sanear, que es molesto; uno sobrestimado deja pagar deuda real, que
+    /// es el bug que el tope existe para impedir.
+    pub fn get_interest_residual(env: Env) -> i128 {
+        Self::interest_residual(&env)
+    }
+
+    fn interest_residual(env: &Env) -> i128 {
+        let borrow_asset: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::BorrowAsset)
+            .expect("not initialized");
+        let me = env.current_contract_address();
+        let pool = Self::pool_client(env);
+
+        let reserve = pool.get_reserve(&borrow_asset);
+        let idx = reserve.config.index;
+        let d_rate = reserve.data.d_rate;
+        if d_rate <= 0 {
+            return 0;
+        }
+
+        let positions = pool.get_positions(&me);
+        let d_tokens = positions.liabilities.get(idx).unwrap_or(0);
+        if d_tokens <= 0 {
+            return 0;
+        }
+        // Hacia abajo: subestimar es seguro, sobrestimar no.
+        let en_subyacente = d_tokens * d_rate / D_RATE_SCALAR;
+
+        let total_debt: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalDebt)
+            .unwrap_or(0);
+        let residual = en_subyacente - total_debt;
+        if residual > 0 { residual } else { 0 }
     }
 
     /// Circuit breaker — NON-CUSTODIAL INVARIANT: `pause` only freezes the

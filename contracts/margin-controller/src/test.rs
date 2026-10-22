@@ -22,7 +22,7 @@ extern crate std;
 use crate::{
     Asset, Error, InitConfig, MarginController, MarginControllerClient, Positions, PriceData, Request,
     TierLevel, HEALTH_NO_DEBT, REQ_BORROW, REQ_REPAY, REQ_SUPPLY_COLLATERAL,
-    REQ_WITHDRAW_COLLATERAL,
+    REQ_WITHDRAW_COLLATERAL, Reserve, ReserveConfig, ReserveData,
 };
 use ed25519_dalek::{Signer, SigningKey};
 use mock_usdc::{MockUsdc, MockUsdcClient};
@@ -83,11 +83,61 @@ impl MockOracle {
 #[contract]
 pub struct MockPool;
 
+/// Escala de `d_rate`, como en Blend: 9 decimales.
+const D_SCALAR: i128 = 1_000_000_000;
+
+#[contracttype]
+#[derive(Clone)]
+pub enum MockKey {
+    /// activo -> indice de reserva. Blend indexa las posiciones por indice,
+    /// no por direccion.
+    Index(Address),
+    NextIndex,
+    /// (usuario, indice) -> colateral en SUBYACENTE.
+    Coll(Address, u32),
+    /// (usuario, indice) -> pasivo en **dTokens**, no en subyacente. Es la
+    /// distincion que produce N-01.
+    Liab(Address, u32),
+    /// indice -> `d_rate`, escalado por `D_SCALAR`. Arranca en 1,0 y sube
+    /// cuando se devenga interes.
+    DRate(u32),
+}
+
+/// Pool Blend de prueba **con libro**.
+///
+/// El doble anterior devolvia `Positions` vacio, y eso es exactamente por lo
+/// que N-01 pudo vivir meses sin que un test lo tocara: si el pool de prueba
+/// no lleva cuentas, no puede discrepar de las nuestras.
+///
+/// Lo que este modela, y es lo unico que importa para N-01:
+///
+/// - Los pasivos se guardan en **dTokens**, como Blend. El controller lleva su
+///   `TotalDebt` en subyacente. Son unidades distintas y la conversion es
+///   `subyacente = dTokens x d_rate / D_SCALAR`.
+/// - Al **pedir prestado**, los dTokens se redondean HACIA ARRIBA: el usuario
+///   nunca queda debiendo menos de lo que recibio.
+/// - Al **repagar**, se redondean HACIA ABAJO: nunca se quema mas deuda de la
+///   que el pago cubre.
+///
+/// Las dos reglas van a favor del pool, y juntas dejan un resto: repagar el
+/// monto exacto que se pidio no lleva el pasivo a cero. Eso es N-01.
 #[contractimpl]
 impl MockPool {
+    /// `submit(from, spender, to, requests)` con la semantica de Blend, que
+    /// importa y es facil de errar: **`from` es la direccion cuya POSICION se
+    /// modifica**; `spender` paga lo que entra; `to` recibe lo que sale. No
+    /// son lo mismo: `borrow` del controller llama
+    /// `submit(me, me, user, ...)` -- el pasivo es del controller y los tokens
+    /// van al usuario.
+    ///
+    /// El mock anterior ignoraba `from` (lo tenia como `_from`) y no llevaba
+    /// libro, asi que esta distincion no podia manifestarse. La primera
+    /// version de este mock la erro: uso `to` para el libro, y con eso N-01
+    /// dejaba de reproducirse porque el pasivo se anotaba contra el usuario y
+    /// el repago lo buscaba contra el controller.
     pub fn submit(
         env: Env,
-        _from: Address,
+        from: Address,
         spender: Address,
         to: Address,
         requests: Vec<Request>,
@@ -95,21 +145,141 @@ impl MockPool {
         let me = env.current_contract_address();
         for req in requests.iter() {
             let token = TokenClient::new(&env, &req.address);
+            let idx = Self::index_of(&env, &req.address);
+            let rate = Self::d_rate(&env, idx);
             match req.request_type {
-                REQ_SUPPLY_COLLATERAL | REQ_REPAY => {
+                REQ_SUPPLY_COLLATERAL => {
                     token.transfer(&spender, &me, &req.amount);
+                    let k = MockKey::Coll(from.clone(), idx);
+                    let prev: i128 = env.storage().persistent().get(&k).unwrap_or(0);
+                    env.storage().persistent().set(&k, &(prev + req.amount));
                 }
-                REQ_WITHDRAW_COLLATERAL | REQ_BORROW => {
+                REQ_WITHDRAW_COLLATERAL => {
+                    let k = MockKey::Coll(from.clone(), idx);
+                    let prev: i128 = env.storage().persistent().get(&k).unwrap_or(0);
+                    env.storage().persistent().set(&k, &(prev - req.amount));
                     token.transfer(&me, &to, &req.amount);
+                }
+                REQ_BORROW => {
+                    // Redondeo HACIA ARRIBA contra el usuario.
+                    let d = (req.amount * D_SCALAR + rate - 1) / rate;
+                    let k = MockKey::Liab(from.clone(), idx);
+                    let prev: i128 = env.storage().persistent().get(&k).unwrap_or(0);
+                    env.storage().persistent().set(&k, &(prev + d));
+                    token.transfer(&me, &to, &req.amount);
+                }
+                REQ_REPAY => {
+                    token.transfer(&spender, &me, &req.amount);
+                    // Redondeo HACIA ABAJO: el resto queda a favor del pool.
+                    let d = req.amount * D_SCALAR / rate;
+                    let k = MockKey::Liab(from.clone(), idx);
+                    let prev: i128 = env.storage().persistent().get(&k).unwrap_or(0);
+                    let nuevo = if d > prev { 0 } else { prev - d };
+                    env.storage().persistent().set(&k, &nuevo);
                 }
                 _ => panic!("unsupported request type"),
             }
         }
-        Positions {
-            collateral: Map::new(&env),
-            liabilities: Map::new(&env),
-            supply: Map::new(&env),
+        Self::get_positions(env.clone(), from)
+    }
+
+    /// Lo que el pool dice que esta direccion debe y tiene. Pasivos en
+    /// **dTokens**; colateral en subyacente.
+    pub fn get_positions(env: Env, address: Address) -> Positions {
+        let mut collateral: Map<u32, i128> = Map::new(&env);
+        let mut liabilities: Map<u32, i128> = Map::new(&env);
+        let n: u32 = env.storage().instance().get(&MockKey::NextIndex).unwrap_or(0);
+        for idx in 0..n {
+            let c: i128 = env
+                .storage()
+                .persistent()
+                .get(&MockKey::Coll(address.clone(), idx))
+                .unwrap_or(0);
+            if c != 0 {
+                collateral.set(idx, c);
+            }
+            let l: i128 = env
+                .storage()
+                .persistent()
+                .get(&MockKey::Liab(address.clone(), idx))
+                .unwrap_or(0);
+            if l != 0 {
+                liabilities.set(idx, l);
+            }
         }
+        Positions { collateral, liabilities, supply: Map::new(&env) }
+    }
+
+    /// Lo que Blend expone de una reserva. Solo `config.index` y
+    /// `data.d_rate` llevan valores con sentido; el resto va en cero porque
+    /// el controller no los lee, y poner numeros inventados ahi haria creer
+    /// que el mock modela mas de lo que modela.
+    pub fn get_reserve(env: Env, asset: Address) -> Reserve {
+        let idx = Self::index_of(&env, &asset);
+        Reserve {
+            asset: asset.clone(),
+            config: ReserveConfig {
+                c_factor: 0,
+                decimals: 7,
+                enabled: true,
+                index: idx,
+                l_factor: 0,
+                max_util: 0,
+                r_base: 0,
+                r_one: 0,
+                r_three: 0,
+                r_two: 0,
+                reactivity: 0,
+                supply_cap: 0,
+                util: 0,
+            },
+            data: ReserveData {
+                b_rate: D_SCALAR,
+                b_supply: 0,
+                backstop_credit: 0,
+                d_rate: Self::d_rate(&env, idx),
+                d_supply: 0,
+                ir_mod: 0,
+                last_time: 0,
+            },
+            scalar: 10_000_000,
+        }
+    }
+
+    /// Solo para tests: sube el `d_rate` de un activo, que es lo que hace el
+    /// interes en Blend. No existe en el pool real.
+    pub fn accrue(env: Env, asset: Address, bps: u32) {
+        let idx = Self::index_of(&env, &asset);
+        let rate = Self::d_rate(&env, idx);
+        let nuevo = rate + rate * (bps as i128) / 10_000;
+        env.storage().instance().set(&MockKey::DRate(idx), &nuevo);
+    }
+
+    /// Solo para tests: el `d_rate` vigente, para poder convertir dTokens a
+    /// subyacente desde el lado del test.
+    pub fn get_d_rate(env: Env, asset: Address) -> i128 {
+        let idx = Self::index_of(&env, &asset);
+        Self::d_rate(&env, idx)
+    }
+
+    /// Solo para tests: el indice de reserva que el mock asigno a un activo.
+    pub fn reserve_index(env: Env, asset: Address) -> u32 {
+        Self::index_of(&env, &asset)
+    }
+
+    fn index_of(env: &Env, asset: &Address) -> u32 {
+        let k = MockKey::Index(asset.clone());
+        if let Some(i) = env.storage().instance().get::<MockKey, u32>(&k) {
+            return i;
+        }
+        let n: u32 = env.storage().instance().get(&MockKey::NextIndex).unwrap_or(0);
+        env.storage().instance().set(&k, &n);
+        env.storage().instance().set(&MockKey::NextIndex, &(n + 1));
+        n
+    }
+
+    fn d_rate(env: &Env, idx: u32) -> i128 {
+        env.storage().instance().get(&MockKey::DRate(idx)).unwrap_or(D_SCALAR)
     }
 }
 
@@ -1510,6 +1680,213 @@ fn add_collateral_asset_deja_el_tope_vivo_sin_llamar_a_set_user_cap() {
 }
 
 
+
+
+// =============================================================================
+// N-01 — EL RESIDUO DE INTERES QUE BLEND COBRA Y NUESTROS LIBROS NO VEN
+// =============================================================================
+
+/// El fenomeno, antes que la funcion.
+///
+/// Blend lleva los pasivos en dTokens; el controller lleva `TotalDebt` en
+/// subyacente. Pedir prestado redondea los dTokens hacia arriba y repagar los
+/// redondea hacia abajo, las dos a favor del pool. Repagar el monto exacto no
+/// lleva el pasivo de Blend a cero.
+///
+/// Este test falla si el `MockPool` vuelve a devolver mapas vacios, que es
+/// como N-01 pudo vivir meses sin que ningun test lo tocara.
+#[test]
+fn n01_el_repago_total_deja_pasivo_en_blend() {
+    let h = setup();
+    let pool = MockPoolClient::new(&h.env, &h.pool_id);
+
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 61);
+    let prestamo = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &prestamo);
+
+    // Interes devengado: el d_rate sube y la conversion deja de ser exacta.
+    pool.accrue(&h.usdc_id, &250); // +2,5 %
+
+    // Repago TOTAL segun nuestros libros.
+    h.ctrl.repay(&h.borrower, &prestamo);
+    assert_eq!(h.ctrl.get_debt(&h.borrower), 0, "nuestros libros dicen 0");
+    assert_eq!(h.ctrl.get_total_debt(), 0);
+
+    // Y Blend sigue diciendo que debemos algo.
+    let idx = pool.reserve_index(&h.usdc_id);
+    let pasivo = pool
+        .get_positions(&h.ctrl_id)
+        .liabilities
+        .get(idx)
+        .unwrap_or(0);
+    assert!(
+        pasivo > 0,
+        "N-01 no se reprodujo: Blend deberia conservar pasivo tras el repago total"
+    );
+}
+
+/// El residuo se lee por la ABI y coincide con la conversion de dTokens a
+/// subyacente. Es lo que acota `sweep_interest`.
+#[test]
+fn n01_el_residuo_se_puede_leer_y_cuadra_con_la_conversion() {
+    let h = setup();
+    let pool = MockPoolClient::new(&h.env, &h.pool_id);
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 62);
+    let prestamo = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &prestamo);
+    pool.accrue(&h.usdc_id, &250);
+    h.ctrl.repay(&h.borrower, &prestamo);
+
+    let idx = pool.reserve_index(&h.usdc_id);
+    let d_tokens = pool.get_positions(&h.ctrl_id).liabilities.get(idx).unwrap_or(0);
+    let d_rate = pool.get_d_rate(&h.usdc_id);
+    let esperado = d_tokens * d_rate / 1_000_000_000;
+
+    assert_eq!(h.ctrl.get_interest_residual(), esperado);
+    assert!(esperado > 0);
+}
+
+/// El caso normal: alguien paga el residuo y el pasivo de Blend baja.
+///
+/// Es permissionless: lo paga un tercero cualquiera, no el admin ni el deudor.
+#[test]
+fn n01_sweep_interest_sanea_la_posicion() {
+    let h = setup();
+    let pool = MockPoolClient::new(&h.env, &h.pool_id);
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 63);
+    let prestamo = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &prestamo);
+    pool.accrue(&h.usdc_id, &250);
+    h.ctrl.repay(&h.borrower, &prestamo);
+
+    let residuo = h.ctrl.get_interest_residual();
+    assert!(residuo > 0);
+
+    // Un tercero sin ningun rol en el protocolo.
+    let samaritano = Address::generate(&h.env);
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&samaritano, &units(10));
+
+    let idx = pool.reserve_index(&h.usdc_id);
+    let antes = pool.get_positions(&h.ctrl_id).liabilities.get(idx).unwrap_or(0);
+    h.ctrl.sweep_interest(&samaritano, &residuo);
+    let despues = pool.get_positions(&h.ctrl_id).liabilities.get(idx).unwrap_or(0);
+
+    assert!(despues < antes, "el pasivo de Blend no bajo");
+}
+
+/// **El test que el ADR marca como el que importa:** la deuda contabilizada
+/// del usuario NO cambia tras el barrido. `sweep_interest` salda con el pool,
+/// no toca los libros de nadie.
+#[test]
+fn n01_el_barrido_no_toca_la_deuda_de_ningun_usuario() {
+    let h = setup();
+    let pool = MockPoolClient::new(&h.env, &h.pool_id);
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 64);
+    let prestamo = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &prestamo);
+    pool.accrue(&h.usdc_id, &250);
+
+    // Se repaga solo la MITAD: el usuario queda con deuda real en los libros.
+    let mitad = prestamo / 2;
+    h.ctrl.repay(&h.borrower, &mitad);
+    let deuda_antes = h.ctrl.get_debt(&h.borrower);
+    let total_antes = h.ctrl.get_total_debt();
+    assert!(deuda_antes > 0, "el usuario deberia conservar deuda");
+
+    let residuo = h.ctrl.get_interest_residual();
+    if residuo > 0 {
+        let samaritano = Address::generate(&h.env);
+        MockUsdcClient::new(&h.env, &h.usdc_id).mint(&samaritano, &units(1_000));
+        h.ctrl.sweep_interest(&samaritano, &residuo);
+    }
+
+    assert_eq!(h.ctrl.get_debt(&h.borrower), deuda_antes, "la deuda del usuario cambio");
+    assert_eq!(h.ctrl.get_total_debt(), total_antes, "TotalDebt cambio");
+}
+
+/// Por encima del residuo revierte TIPADO. Es el tope que impide pagar deuda
+/// REAL de usuarios mientras nuestros libros la siguen mostrando — la
+/// divergencia inversa a N-01, y creada por nosotros.
+#[test]
+fn n01_sweep_por_encima_del_residuo_revierte() {
+    let h = setup();
+    let pool = MockPoolClient::new(&h.env, &h.pool_id);
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 65);
+    let prestamo = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &prestamo);
+    pool.accrue(&h.usdc_id, &250);
+    h.ctrl.repay(&h.borrower, &prestamo);
+
+    let residuo = h.ctrl.get_interest_residual();
+    let samaritano = Address::generate(&h.env);
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&samaritano, &units(100));
+
+    let err = h
+        .ctrl
+        .try_sweep_interest(&samaritano, &(residuo + 1))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::SweepExceedsResidual as u32));
+}
+
+/// Sin residuo revierte TIPADO en vez de aceptar un pago que no corresponde.
+#[test]
+fn n01_sweep_sin_residuo_revierte() {
+    let h = setup();
+    assert_eq!(h.ctrl.get_interest_residual(), 0);
+    let samaritano = Address::generate(&h.env);
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&samaritano, &units(10));
+    let err = h
+        .ctrl
+        .try_sweep_interest(&samaritano, &units(1))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::NothingToSweepInterest as u32)
+    );
+}
+
+/// INVARIANTE del plan: el pasivo en Blend menos `TotalDebt` queda **acotado y
+/// es recuperable**. Tras barrer el residuo completo, lo que Blend cree que
+/// debemos no supera lo que nuestros libros dicen.
+#[test]
+fn n01_invariante_tras_barrer_blend_no_cobra_mas_que_nuestros_libros() {
+    let h = setup();
+    let pool = MockPoolClient::new(&h.env, &h.pool_id);
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 66);
+    let prestamo = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &prestamo);
+
+    // Varias rondas de interes y repagos parciales, para que el redondeo se
+    // acumule en vez de medirse una sola vez.
+    for i in 0..3 {
+        pool.accrue(&h.usdc_id, &150);
+        h.ctrl.repay(&h.borrower, &(prestamo / 4));
+        let _ = i;
+    }
+
+    let residuo = h.ctrl.get_interest_residual();
+    if residuo > 0 {
+        let samaritano = Address::generate(&h.env);
+        MockUsdcClient::new(&h.env, &h.usdc_id).mint(&samaritano, &units(1_000));
+        h.ctrl.sweep_interest(&samaritano, &residuo);
+    }
+
+    assert_eq!(
+        h.ctrl.get_interest_residual(),
+        0,
+        "quedo residuo sin sanear despues de barrerlo entero"
+    );
+}
 
 // =============================================================================
 // FASE 1.3 — UN ACTIVO TIPO CETES COMO COLATERAL, DEUDA EN USDC
