@@ -35,19 +35,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "7f3c36d5942136d10cc89830783b8ea8463990a10a1bac98a7ebad2dde1a798d"
+                      "bytes": "56a2a019ca20275634d135b7e601672a70189a75dc848bb341970d02487602b3"
                     },
                     {
-                      "bytes": "72f474f46c70adfc228a4a6a40b7cb704932edf2cd3ab52756d8b65f114afbb3"
+                      "bytes": "4b59b79c33b57e60026413b5f95e301368587a461065519e532900ff8eb5f564"
                     },
                     {
-                      "bytes": "b0f44f619c1545f695eed7fe885892f7cec20a302c4a3b4b0be6b8b88ee4cf47"
+                      "bytes": "24b25967a5fff900f953bfa33a3617a7bb37373dce4770ee3e587fbdac313878"
                     },
                     {
-                      "bytes": "24062a151f24a33d5f0229e7c33b329f2278fff4338f96dbc3b3d8a8272fe501"
+                      "bytes": "479024744c27eb662eee807a2dc76ee792c63e2f9e0dce2e175389ae6cd097ea"
                     },
                     {
-                      "bytes": "5e4bc293ca580b8645478147d84cff0770136870861f9068462faf9ec9b0d679"
+                      "bytes": "e24dd48c068152789f6bf34fcd9a5b8f67ec93c0aa7da399bacce0357ad1e867"
                     }
                   ]
                 },
@@ -166,19 +166,19 @@
                         "val": {
                           "vec": [
                             {
-                              "bytes": "7f3c36d5942136d10cc89830783b8ea8463990a10a1bac98a7ebad2dde1a798d"
+                              "bytes": "56a2a019ca20275634d135b7e601672a70189a75dc848bb341970d02487602b3"
                             },
                             {
-                              "bytes": "72f474f46c70adfc228a4a6a40b7cb704932edf2cd3ab52756d8b65f114afbb3"
+                              "bytes": "4b59b79c33b57e60026413b5f95e301368587a461065519e532900ff8eb5f564"
                             },
                             {
-                              "bytes": "b0f44f619c1545f695eed7fe885892f7cec20a302c4a3b4b0be6b8b88ee4cf47"
+                              "bytes": "24b25967a5fff900f953bfa33a3617a7bb37373dce4770ee3e587fbdac313878"
                             },
                             {
-                              "bytes": "24062a151f24a33d5f0229e7c33b329f2278fff4338f96dbc3b3d8a8272fe501"
+                              "bytes": "479024744c27eb662eee807a2dc76ee792c63e2f9e0dce2e175389ae6cd097ea"
                             },
                             {
-                              "bytes": "5e4bc293ca580b8645478147d84cff0770136870861f9068462faf9ec9b0d679"
+                              "bytes": "e24dd48c068152789f6bf34fcd9a5b8f67ec93c0aa7da399bacce0357ad1e867"
                             }
                           ]
                         }
@@ -433,19 +433,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "7f3c36d5942136d10cc89830783b8ea8463990a10a1bac98a7ebad2dde1a798d"
+                      "bytes": "56a2a019ca20275634d135b7e601672a70189a75dc848bb341970d02487602b3"
                     },
                     {
-                      "bytes": "72f474f46c70adfc228a4a6a40b7cb704932edf2cd3ab52756d8b65f114afbb3"
+                      "bytes": "4b59b79c33b57e60026413b5f95e301368587a461065519e532900ff8eb5f564"
                     },
                     {
-                      "bytes": "b0f44f619c1545f695eed7fe885892f7cec20a302c4a3b4b0be6b8b88ee4cf47"
+                      "bytes": "24b25967a5fff900f953bfa33a3617a7bb37373dce4770ee3e587fbdac313878"
                     },
                     {
-                      "bytes": "24062a151f24a33d5f0229e7c33b329f2278fff4338f96dbc3b3d8a8272fe501"
+                      "bytes": "479024744c27eb662eee807a2dc76ee792c63e2f9e0dce2e175389ae6cd097ea"
                     },
                     {
-                      "bytes": "5e4bc293ca580b8645478147d84cff0770136870861f9068462faf9ec9b0d679"
+                      "bytes": "e24dd48c068152789f6bf34fcd9a5b8f67ec93c0aa7da399bacce0357ad1e867"
                     }
                   ]
                 },
@@ -623,7 +623,7 @@
                           "u32": 0
                         },
                         {
-                          "bytes": "cde8a3465fed1b4ed671ea8c1b32fcfee3486b34e7a3d21b0780303fcbbca3f59fa1828365bb7dd8c422e849a1210ea4d46f01a138923d5b7c37937460e7bf04"
+                          "bytes": "aec090e13730e5054174346311ceeaa37f7140a2f70f89015e71a672b179fb5a98674e4f4ab82a781de25d1f06a66503f5c5e58609fff8f7d40ba8d3f550e00b"
                         }
                       ]
                     },
@@ -633,7 +633,7 @@
                           "u32": 1
                         },
                         {
-                          "bytes": "f5755a39cdfa4706138918bb6606a000974a46727da862a65dc91c3f2f730c4913c656a51e3aed8f0577ee13a9fed0d5da38c96cc1da90cc189bce03695f3803"
+                          "bytes": "b5c1e726199bc8906e7e24f90427840a9eb26fa159e5e86eeef0e5592028a9aa02583ea306729d786dd77f7d0c2d7ed667acbd143a0bd6cf66f39ff15f26a806"
                         }
                       ]
                     },
@@ -643,7 +643,7 @@
                           "u32": 2
                         },
                         {
-                          "bytes": "c070b9fc3dc480cff93c212f9ad8831bb02101d0ced7f2c43d97b5760ba6465fac1616cb8cae458d570c9620031fe62c05feb56778f2cf1bbb713be45213c40e"
+                          "bytes": "1daebd2df82537545130e47a9ec783ceae7bf17e4de5ff692f53913d887d95fc4ea5a7a634f4d3c12999ef243a402873d2f7cc7da846019283cf8595e0941a06"
                         }
                       ]
                     }
@@ -665,62 +665,21 @@
           "v0": {
             "topics": [
               {
-                "symbol": "log"
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 9
+                }
               }
             ],
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'wallet age below minimum' from contract function 'Symbol(mint)'"
+                  "string": "failing with contract error"
                 },
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                },
-                {
-                  "u32": 750
-                },
-                {
-                  "u64": 1707776000
-                },
-                {
-                  "u32": 15
-                },
-                {
-                  "bytes": "5a000000000000000000000000000000000000000000000000000000000000b4"
-                },
-                {
-                  "vec": [
-                    {
-                      "vec": [
-                        {
-                          "u32": 0
-                        },
-                        {
-                          "bytes": "cde8a3465fed1b4ed671ea8c1b32fcfee3486b34e7a3d21b0780303fcbbca3f59fa1828365bb7dd8c422e849a1210ea4d46f01a138923d5b7c37937460e7bf04"
-                        }
-                      ]
-                    },
-                    {
-                      "vec": [
-                        {
-                          "u32": 1
-                        },
-                        {
-                          "bytes": "f5755a39cdfa4706138918bb6606a000974a46727da862a65dc91c3f2f730c4913c656a51e3aed8f0577ee13a9fed0d5da38c96cc1da90cc189bce03695f3803"
-                        }
-                      ]
-                    },
-                    {
-                      "vec": [
-                        {
-                          "u32": 2
-                        },
-                        {
-                          "bytes": "c070b9fc3dc480cff93c212f9ad8831bb02101d0ced7f2c43d97b5760ba6465fac1616cb8cae458d570c9620031fe62c05feb56778f2cf1bbb713be45213c40e"
-                        }
-                      ]
-                    }
-                  ]
+                  "u32": 9
                 }
               ]
             }
@@ -742,7 +701,32 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 9
+                }
+              }
+            ],
+            "data": {
+              "string": "escalating error to panic"
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 9
                 }
               }
             ],
@@ -767,14 +751,14 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 9
                 }
               }
             ],
             "data": {
               "vec": [
                 {
-                  "string": "contract call failed"
+                  "string": "contract try_call failed"
                 },
                 {
                   "symbol": "mint"
@@ -804,7 +788,7 @@
                               "u32": 0
                             },
                             {
-                              "bytes": "cde8a3465fed1b4ed671ea8c1b32fcfee3486b34e7a3d21b0780303fcbbca3f59fa1828365bb7dd8c422e849a1210ea4d46f01a138923d5b7c37937460e7bf04"
+                              "bytes": "aec090e13730e5054174346311ceeaa37f7140a2f70f89015e71a672b179fb5a98674e4f4ab82a781de25d1f06a66503f5c5e58609fff8f7d40ba8d3f550e00b"
                             }
                           ]
                         },
@@ -814,7 +798,7 @@
                               "u32": 1
                             },
                             {
-                              "bytes": "f5755a39cdfa4706138918bb6606a000974a46727da862a65dc91c3f2f730c4913c656a51e3aed8f0577ee13a9fed0d5da38c96cc1da90cc189bce03695f3803"
+                              "bytes": "b5c1e726199bc8906e7e24f90427840a9eb26fa159e5e86eeef0e5592028a9aa02583ea306729d786dd77f7d0c2d7ed667acbd143a0bd6cf66f39ff15f26a806"
                             }
                           ]
                         },
@@ -824,7 +808,7 @@
                               "u32": 2
                             },
                             {
-                              "bytes": "c070b9fc3dc480cff93c212f9ad8831bb02101d0ced7f2c43d97b5760ba6465fac1616cb8cae458d570c9620031fe62c05feb56778f2cf1bbb713be45213c40e"
+                              "bytes": "1daebd2df82537545130e47a9ec783ceae7bf17e4de5ff692f53913d887d95fc4ea5a7a634f4d3c12999ef243a402873d2f7cc7da846019283cf8595e0941a06"
                             }
                           ]
                         }
@@ -833,31 +817,6 @@
                   ]
                 }
               ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": null,
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "error"
-              },
-              {
-                "error": {
-                  "wasm_vm": "invalid_action"
-                }
-              }
-            ],
-            "data": {
-              "string": "escalating error to panic"
             }
           }
         }

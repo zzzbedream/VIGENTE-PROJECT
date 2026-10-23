@@ -898,66 +898,21 @@
           "v0": {
             "topics": [
               {
-                "symbol": "log"
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 10
+                }
               }
             ],
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'max_deviation_bps above ceiling' from contract function 'Symbol(obj#129)'"
+                  "string": "failing with contract error"
                 },
                 {
-                  "vec": [
-                    {
-                      "symbol": "Stellar"
-                    },
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                    }
-                  ]
-                },
-                {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "max_age"
-                      },
-                      "val": {
-                        "u64": 900
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "max_deviation_bps"
-                      },
-                      "val": {
-                        "u32": 5001
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "source"
-                      },
-                      "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "upstream_asset"
-                      },
-                      "val": {
-                        "vec": [
-                          {
-                            "symbol": "Other"
-                          },
-                          {
-                            "symbol": "XLM"
-                          }
-                        ]
-                      }
-                    }
-                  ]
+                  "u32": 10
                 }
               ]
             }
@@ -979,7 +934,32 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 10
+                }
+              }
+            ],
+            "data": {
+              "string": "escalating error to panic"
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000003",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 10
                 }
               }
             ],
@@ -1004,14 +984,14 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 10
                 }
               }
             ],
             "data": {
               "vec": [
                 {
-                  "string": "contract call failed"
+                  "string": "contract try_call failed"
                 },
                 {
                   "symbol": "set_initial_route"
@@ -1074,31 +1054,6 @@
                   ]
                 }
               ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": null,
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "error"
-              },
-              {
-                "error": {
-                  "wasm_vm": "invalid_action"
-                }
-              }
-            ],
-            "data": {
-              "string": "escalating error to panic"
             }
           }
         }

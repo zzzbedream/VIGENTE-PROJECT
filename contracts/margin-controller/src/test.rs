@@ -1682,6 +1682,206 @@ fn add_collateral_asset_deja_el_tope_vivo_sin_llamar_a_set_user_cap() {
 
 
 
+
+// =============================================================================
+// T20 — COLATERAL QUE NUESTROS LIBROS CUENTAN Y EL POOL NO TIENE
+// =============================================================================
+
+/// Simula el clawback del hallazgo de T20: se saca el colateral del pool por
+/// detras, sin que el controller se entere.
+///
+/// `MockUsdc` tiene `burn`, que es lo que hace un clawback desde el punto de
+/// vista del tenedor: el saldo desaparece y nadie le avisa a nadie.
+fn clawback_simulado(h: &Harness, asset: &Address, amount: &i128) {
+    MockUsdcClient::new(&h.env, asset).burn(&h.pool_id, amount);
+}
+
+/// Sin faltante, el shortfall es cero y todo funciona normal.
+#[test]
+fn t20_sin_faltante_el_shortfall_es_cero() {
+    let h = setup();
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    assert_eq!(h.ctrl.get_collateral_shortfall(&h.xlm_id), 0);
+    // Y se puede seguir operando.
+    mint_badge(&h, &h.borrower, 850, 71);
+    assert!(h.ctrl.max_borrow(&h.borrower) > 0);
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1));
+}
+
+/// **El test que cierra T20.** Tras un clawback, el faltante se detecta y es
+/// exactamente lo que se saco.
+#[test]
+fn t20_el_faltante_se_detecta_y_se_mide() {
+    let h = setup();
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    assert_eq!(h.ctrl.get_collateral_shortfall(&h.xlm_id), 0);
+
+    clawback_simulado(&h, &h.xlm_id, &units(400));
+
+    assert_eq!(
+        h.ctrl.get_collateral_shortfall(&h.xlm_id),
+        units(400),
+        "el faltante no coincide con lo que se saco"
+    );
+    // Y nuestros libros siguen diciendo lo viejo, que es el problema que la
+    // guarda existe para que no se pueda usar.
+    assert_eq!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id), units(1_000));
+}
+
+/// `borrow` se bloquea TIPADO. Es el daño que importa: prestar contra colateral
+/// que no existe.
+#[test]
+fn t20_borrow_se_bloquea_si_falta_colateral() {
+    let h = setup();
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 72);
+    // Antes del clawback se puede pedir.
+    let max = h.ctrl.max_borrow(&h.borrower);
+    assert!(max > 0);
+
+    clawback_simulado(&h, &h.xlm_id, &units(400));
+
+    let err = h
+        .ctrl
+        .try_borrow(&h.borrower, &(max / 10))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::CollateralNotBacked as u32));
+}
+
+/// `deposit_collateral` también se bloquea: no se mete más riesgo en un activo
+/// que ya está descuadrado.
+#[test]
+fn t20_deposito_se_bloquea_si_falta_colateral() {
+    let h = setup();
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    clawback_simulado(&h, &h.xlm_id, &units(400));
+
+    let err = h
+        .ctrl
+        .try_deposit_collateral(&h.borrower, &h.xlm_id, &units(10))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::CollateralNotBacked as u32));
+}
+
+/// **INVARIANTE NO CUSTODIAL, y es la mitad que importa de esta mitigación.**
+///
+/// El faltante frena la ENTRADA de riesgo, nunca las salidas. Si bloqueara
+/// `withdraw` o `repay`, un clawback del emisor dejaría a los usuarios
+/// atrapados — exactamente el modo de fallo que el protocolo promete no tener.
+#[test]
+fn t20_invariante_el_faltante_nunca_bloquea_las_salidas() {
+    let h = setup();
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 73);
+    let prestamo = h.ctrl.max_borrow(&h.borrower) / 4;
+    h.ctrl.borrow(&h.borrower, &prestamo);
+
+    clawback_simulado(&h, &h.xlm_id, &units(100));
+    assert!(h.ctrl.get_collateral_shortfall(&h.xlm_id) > 0);
+
+    // (a) repay funciona
+    h.ctrl.repay(&h.borrower, &prestamo);
+    assert_eq!(h.ctrl.get_debt(&h.borrower), 0);
+
+    // (b) withdraw funciona, hasta lo que el pool todavia tiene
+    h.ctrl.withdraw_collateral(&h.borrower, &h.xlm_id, &units(500));
+    assert_eq!(h.ctrl.get_collateral(&h.borrower, &h.xlm_id), units(500));
+}
+
+/// La guarda se acota a los activos que el usuario TIENE. Un faltante en un
+/// activo que no toca no deberia impedirle pedir prestado contra el que si.
+#[test]
+fn t20_un_faltante_en_otro_activo_no_bloquea_al_usuario() {
+    let h = setup();
+    let cetes = listar_cetes(&h);
+
+    // Otro usuario deposita CETES; nuestro prestatario solo tiene XLM.
+    let otro = Address::generate(&h.env);
+    MockUsdcClient::new(&h.env, &cetes).mint(&otro, &units(500));
+    h.ctrl.deposit_collateral(&otro, &cetes, &units(500));
+
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 74);
+
+    // Faltante en CETES, que el prestatario no tiene.
+    clawback_simulado(&h, &cetes, &units(200));
+    assert!(h.ctrl.get_collateral_shortfall(&cetes) > 0);
+    assert_eq!(h.ctrl.get_collateral_shortfall(&h.xlm_id), 0);
+
+    // Y sigue pudiendo pedir contra su XLM.
+    let max = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &(max / 10));
+}
+
+/// **El limite de la guarda, probado y no solo documentado.**
+///
+/// Sobre el ACTIVO DE DEUDA la deteccion no sirve: el saldo del pool incluye la
+/// liquidez prestable de terceros, que nunca aparece en nuestros libros. Asi que
+/// `TotalCollateral(USDC)` es mucho menor que el balance y un faltante real
+/// queda tapado.
+///
+/// No es un defecto que se pueda arreglar comparando numeros: haria falta que
+/// Blend distinguiera nuestro colateral del resto de su reserva. Se deja
+/// medido para que nadie suponga que el activo de deuda esta cubierto.
+#[test]
+fn t20_sobre_el_activo_de_deuda_la_deteccion_no_cubre() {
+    let h = setup();
+    h.ctrl.add_collateral_asset(
+        &h.usdc_id,
+        &Asset::Stellar(h.usdc_id.clone()),
+        &0_i128,
+        &USER_CAP,
+    );
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&h.borrower, &units(1_000));
+    h.ctrl.deposit_collateral(&h.borrower, &h.usdc_id, &units(500));
+
+    // Se saca MAS de lo que nuestros libros cuentan como colateral de USDC...
+    clawback_simulado(&h, &h.usdc_id, &units(600));
+
+    // ...y la deteccion no lo ve, porque el pool todavia tiene millones de
+    // liquidez prestable por encima de nuestro TotalCollateral.
+    assert_eq!(
+        h.ctrl.get_collateral_shortfall(&h.usdc_id),
+        0,
+        "si esto deja de ser 0, la cobertura mejoro y el comentario hay que actualizarlo"
+    );
+}
+
+/// **El invariante que ningún test cubría, y que encontró un bug mío.**
+///
+/// Tras el ciclo completo —depósito, liquidación, barrido— `TotalCollateral`
+/// tiene que seguir igualando lo que el pool realmente tiene. Antes de este
+/// arreglo no lo hacía: `sweep_seized` descontaba `Seized` y no
+/// `TotalCollateral`, aunque el corte del protocolo estaba contado dentro.
+#[test]
+fn t20_invariante_total_collateral_iguala_el_saldo_del_pool() {
+    let h = setup();
+    posicion_insana_pero_solvente(&h);
+    let keeper = liquidador_financiado(&h);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(10));
+
+    // Tras liquidar, debe cuadrar.
+    assert_eq!(
+        h.ctrl.get_collateral_shortfall(&h.xlm_id),
+        0,
+        "descuadre tras la liquidacion"
+    );
+
+    // Y tras barrer el corte del protocolo, tambien.
+    let incautado = h.ctrl.get_seized(&h.xlm_id);
+    assert!(incautado > 0);
+    h.ctrl.sweep_seized(&h.xlm_id);
+    assert_eq!(
+        h.ctrl.get_collateral_shortfall(&h.xlm_id),
+        0,
+        "descuadre tras sweep_seized: TotalCollateral quedo sobrestimado"
+    );
+}
+
 // =============================================================================
 // N-01 — EL RESIDUO DE INTERES QUE BLEND COBRA Y NUESTROS LIBROS NO VEN
 // =============================================================================

@@ -211,6 +211,20 @@ pub enum Error {
     // ---------------------------------------------------------------------
     /// `sweep_interest` sin residuo que sanear.
     NothingToSweepInterest = 41,
+    /// El pool tiene MENOS de este activo de lo que nuestros libros cuentan.
+    ///
+    /// Es la mitigacion del hallazgo de T20, medido en testnet el 2026-10-23:
+    /// el emisor de un activo con `auth_clawback_enabled` puede vaciar el saldo
+    /// de un contrato firmando solo con su llave (tx `fbdcac21b7aac3cc...`), y
+    /// **nada le avisa al controller**. Sin esta guarda, `health` devolveria una
+    /// posicion sana y `max_borrow` autorizaria prestamo contra colateral que ya
+    /// no existe.
+    ///
+    /// Frena la ENTRADA de riesgo nuevo -- `deposit_collateral` y `borrow` --
+    /// igual que el cortacircuitos. **Las salidas nunca la consultan**:
+    /// `withdraw_collateral`, `repay` y `liquidate` siguen funcionando, porque un
+    /// descuadre es exactamente cuando hace falta poder salir y liquidar.
+    CollateralNotBacked = 43,
     /// `sweep_interest` por encima del residuo real.
     ///
     /// **Es el tope que hace segura a la funcion.** Sin el, alguien podria
@@ -666,6 +680,11 @@ impl MarginController {
             panic_with_error!(&env, Error::AssetCapExceeded);
         }
 
+        // T20: si el pool ya tiene menos de este activo de lo que contamos,
+        // no se aceptan depositos nuevos. Se comprueba ANTES de transferir,
+        // porque el propio deposito cambiaria el balance que se compara.
+        Self::require_backed(&env, &asset);
+
         let me = env.current_contract_address();
         TokenClient::new(&env, &asset).transfer(&user, &me, &amount);
 
@@ -790,6 +809,11 @@ impl MarginController {
         if ltv == 0 {
             panic_with_error!(&env, Error::ScoreBelowMinimumTier);
         }
+
+        // T20: no prestar contra colateral que el pool ya no tiene. Va ANTES
+        // de calcular el limite, porque `max_borrow` se computa sobre nuestros
+        // libros y esos son justamente los que pueden estar mintiendo.
+        Self::require_user_collateral_backed(&env, &user);
 
         let allowed = Self::max_borrow(env.clone(), user.clone());
         if amount > allowed {
@@ -1164,6 +1188,18 @@ impl MarginController {
         env.storage()
             .instance()
             .set(&DataKey::Seized(asset.clone()), &(seized - amount));
+        // Mismo razonamiento que en `sweep_seized`: lo que sale del pool deja
+        // de estar contado. Aplica cuando el activo de deuda esta tambien
+        // listado como colateral; si no lo esta, el `min` deja esto en cero.
+        let total_coll: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalCollateral(asset.clone()))
+            .unwrap_or(0);
+        let bajar = if amount > total_coll { total_coll } else { amount };
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalCollateral(asset.clone()), &(total_coll - bajar));
         env.storage()
             .instance()
             .set(&DataKey::PendingSettlement, &(pending - amount));
@@ -1406,6 +1442,26 @@ impl MarginController {
         env.storage()
             .instance()
             .set(&DataKey::Seized(asset.clone()), &(seized - amount));
+        // `TotalCollateral` tambien baja, y esto faltaba.
+        //
+        // El corte del protocolo estaba contado DENTRO de `TotalCollateral`
+        // --`liquidate` solo le descuenta `to_liquidator`-- asi que sacarlo del
+        // pool sin descontarlo aca dejaba el contador sobrestimado para
+        // siempre. El hueco venia de `2252756` y no lo detecto ningun test
+        // porque ninguno miraba `TotalCollateral` despues de un barrido; lo
+        // encontro la guarda de T20 al comparar contra el balance real.
+        //
+        // Se acota por abajo: si el activo barrido no esta listado como
+        // colateral, su `TotalCollateral` es 0 y no debe volverse negativo.
+        let total_coll: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalCollateral(asset.clone()))
+            .unwrap_or(0);
+        let bajar = if amount > total_coll { total_coll } else { amount };
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalCollateral(asset.clone()), &(total_coll - bajar));
         env.events()
             .publish((symbol_short!("sweep"), asset), amount);
     }
@@ -1507,6 +1563,97 @@ impl MarginController {
 
         env.events()
             .publish((symbol_short!("swpint"), from), amount);
+    }
+
+
+    /// Cuanto colateral de este activo cuentan nuestros libros y el pool no
+    /// tiene. Cero si cuadra o si el pool tiene de mas.
+    ///
+    /// **Por que se compara contra el saldo de TOKENS y no contra
+    /// `get_positions`.** Si el emisor hace clawback sobre la direccion del
+    /// pool, la contabilidad interna de Blend tampoco se entera: su mapa de
+    /// colateral sigue diciendo el monto viejo. El unico testigo del faltante es
+    /// el balance real del token.
+    ///
+    /// Lo que nuestros libros afirman que deberia haber en el pool es
+    /// **`TotalCollateral(asset)` y nada mas**.
+    ///
+    /// **`Seized` NO se suma, y la intuicion dice lo contrario.** La primera
+    /// version de esta funcion lo sumaba y el fuzz
+    /// `m03_fuzz_la_liquidacion_nunca_incauta_mas_de_lo_que_hay` la rechazo.
+    /// La razon esta en la contabilidad de `liquidate`:
+    ///
+    /// ```text
+    /// Collateral(user, asset)  -= seize_amount    // todo lo incautado
+    /// TotalCollateral(asset)   -= to_liquidator   // SOLO lo que sale del pool
+    /// Seized(asset)            += el corte del protocolo
+    /// ```
+    ///
+    /// Es decir: **el corte del protocolo sigue contado dentro de
+    /// `TotalCollateral`**, porque nunca salio del pool. Sumarle `Seized`
+    /// lo cuenta dos veces y produce un faltante que no existe.
+    ///
+    /// Si alguien "arregla" esto volviendo a sumar `Seized`, el fuzz vuelve a
+    /// fallar. Es a proposito.
+    ///
+    /// **Solo tiene sentido para activos de COLATERAL.** Sobre el activo de
+    /// deuda el saldo del pool incluye liquidez prestable de terceros, que no
+    /// tiene por que aparecer en nuestros libros.
+    ///
+    /// Devuelve 0 cuando el pool tiene MAS de lo esperado: eso es interes
+    /// devengado a favor, no un faltante.
+    pub fn get_collateral_shortfall(env: Env, asset: Address) -> i128 {
+        let total: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalCollateral(asset.clone()))
+            .unwrap_or(0);
+        let esperado = total;
+        if esperado <= 0 {
+            return 0;
+        }
+        let pool: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Pool)
+            .expect("not initialized");
+        let real = TokenClient::new(&env, &asset).balance(&pool);
+        if real >= esperado {
+            0
+        } else {
+            esperado - real
+        }
+    }
+
+    /// Revierte si el pool tiene menos de este activo de lo que contamos.
+    fn require_backed(env: &Env, asset: &Address) {
+        if Self::get_collateral_shortfall(env.clone(), asset.clone()) > 0 {
+            panic_with_error!(env, Error::CollateralNotBacked);
+        }
+    }
+
+    /// Lo mismo, para cada activo en el que el usuario tiene colateral.
+    ///
+    /// Se acota a los activos del usuario y no a todos los listados: un faltante
+    /// en un activo que este usuario no tiene no deberia impedirle pedir
+    /// prestado contra el que si tiene. El costo es una lectura de balance por
+    /// activo con saldo, que para un usuario tipico es una.
+    fn require_user_collateral_backed(env: &Env, user: &Address) {
+        let assets: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::CollateralAssets)
+            .unwrap_or(Vec::new(env));
+        for asset in assets.iter() {
+            let held: i128 = env
+                .storage()
+                .persistent()
+                .get(&DataKey::Collateral(user.clone(), asset.clone()))
+                .unwrap_or(0);
+            if held > 0 {
+                Self::require_backed(env, &asset);
+            }
+        }
     }
 
     /// Cuanto mas cree Blend que le debemos, comparado con nuestros libros, en

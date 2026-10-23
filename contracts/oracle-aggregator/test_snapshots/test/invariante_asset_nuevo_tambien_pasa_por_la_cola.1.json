@@ -1419,23 +1419,21 @@
           "v0": {
             "topics": [
               {
-                "symbol": "log"
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 8
+                }
               }
             ],
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'route change still in grace period' from contract function 'Symbol(obj#361)'"
+                  "string": "failing with contract error"
                 },
                 {
-                  "vec": [
-                    {
-                      "symbol": "Stellar"
-                    },
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                    }
-                  ]
+                  "u32": 8
                 }
               ]
             }
@@ -1457,7 +1455,32 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 8
+                }
+              }
+            ],
+            "data": {
+              "string": "escalating error to panic"
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000003",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 8
                 }
               }
             ],
@@ -1482,7 +1505,7 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 8
                 }
               }
             ],

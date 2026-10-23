@@ -1542,23 +1542,21 @@
           "v0": {
             "topics": [
               {
-                "symbol": "log"
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 8
+                }
               }
             ],
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'route change still in grace period' from contract function 'Symbol(obj#391)'"
+                  "string": "failing with contract error"
                 },
                 {
-                  "vec": [
-                    {
-                      "symbol": "Stellar"
-                    },
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                    }
-                  ]
+                  "u32": 8
                 }
               ]
             }
@@ -1580,7 +1578,32 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 8
+                }
+              }
+            ],
+            "data": {
+              "string": "escalating error to panic"
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000003",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 8
                 }
               }
             ],
@@ -1605,7 +1628,7 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 8
                 }
               }
             ],
@@ -1727,66 +1750,21 @@
           "v0": {
             "topics": [
               {
-                "symbol": "log"
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 4
+                }
               }
             ],
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'route already set \\xe2\\x80\\x94 use queue_set_route' from contract function 'Symbol(obj#461)'"
+                  "string": "failing with contract error"
                 },
                 {
-                  "vec": [
-                    {
-                      "symbol": "Stellar"
-                    },
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                    }
-                  ]
-                },
-                {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "max_age"
-                      },
-                      "val": {
-                        "u64": 900
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "max_deviation_bps"
-                      },
-                      "val": {
-                        "u32": 1000
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "source"
-                      },
-                      "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "upstream_asset"
-                      },
-                      "val": {
-                        "vec": [
-                          {
-                            "symbol": "Other"
-                          },
-                          {
-                            "symbol": "XLM"
-                          }
-                        ]
-                      }
-                    }
-                  ]
+                  "u32": 4
                 }
               ]
             }
@@ -1808,7 +1786,32 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 4
+                }
+              }
+            ],
+            "data": {
+              "string": "escalating error to panic"
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000003",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 4
                 }
               }
             ],
@@ -1833,7 +1836,7 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 4
                 }
               }
             ],

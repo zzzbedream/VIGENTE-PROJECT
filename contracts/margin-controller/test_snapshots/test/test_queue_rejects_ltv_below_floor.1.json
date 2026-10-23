@@ -1,6 +1,6 @@
 {
   "generators": {
-    "address": 8,
+    "address": 9,
     "nonce": 0
   },
   "auth": [
@@ -91,19 +91,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "701305cce63d2e5fd5b9836f754c44da9510f3205c842785c5320ea9447fef35"
+                      "bytes": "9b31fac0d60442fefc084929a1ffc5852a25a7ca88eb26931aa4ea5b30feb02c"
                     },
                     {
-                      "bytes": "811b94fda12499809ac8c3a6b36a01cba9dffdbad75fa8b9a212de58618ccc5e"
+                      "bytes": "6f6e7bc2da7991537ab91d412554016cd4a72ac1cd213a013df2f7477aedba38"
                     },
                     {
-                      "bytes": "8cfbd81d9899898986fa2d9fade035d7d59ee530b13b8c71d38e22e78693923e"
+                      "bytes": "0006d4576aa7097bf0eaae6208a907cb626d90a341f82d2604539dcdae38a3a2"
                     },
                     {
-                      "bytes": "6b6ecae5c0a11717ec7f18398cfd8c454635d10e1772430c717f42ea401a655b"
+                      "bytes": "406647e4c76e9689f1341822d8e6584738dfeed8abf163239000e7f9636d0305"
                     },
                     {
-                      "bytes": "85c69aebdc54a39398e8440835c946457ab67fcc81172ba67f2823601e5a26a0"
+                      "bytes": "03d9ea09f4a4964eafdf69bfaadeb5260c88f3607c4fbb64729d6a13ce5bcb2d"
                     }
                   ]
                 },
@@ -151,7 +151,7 @@
         {
           "function": {
             "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5",
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON",
               "function_name": "init",
               "args": [
                 {
@@ -234,7 +234,7 @@
                         "symbol": "max_price_age"
                       },
                       "val": {
-                        "u64": 300
+                        "u64": 900
                       }
                     },
                     {
@@ -258,7 +258,7 @@
                         "symbol": "param_grace_secs"
                       },
                       "val": {
-                        "u64": 3600
+                        "u64": 172800
                       }
                     },
                     {
@@ -337,6 +337,25 @@
                           }
                         ]
                       }
+                    },
+                    {
+                      "key": {
+                        "symbol": "treasury"
+                      },
+                      "val": {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "user_cap"
+                      },
+                      "val": {
+                        "i128": {
+                          "hi": 0,
+                          "lo": 10000000000000
+                        }
+                      }
                     }
                   ]
                 }
@@ -357,7 +376,7 @@
               "function_name": "add_vault",
               "args": [
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
                 }
               ]
             }
@@ -971,7 +990,7 @@
                         "val": {
                           "vec": [
                             {
-                              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
+                              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
                             }
                           ]
                         }
@@ -999,19 +1018,19 @@
                         "val": {
                           "vec": [
                             {
-                              "bytes": "701305cce63d2e5fd5b9836f754c44da9510f3205c842785c5320ea9447fef35"
+                              "bytes": "9b31fac0d60442fefc084929a1ffc5852a25a7ca88eb26931aa4ea5b30feb02c"
                             },
                             {
-                              "bytes": "811b94fda12499809ac8c3a6b36a01cba9dffdbad75fa8b9a212de58618ccc5e"
+                              "bytes": "6f6e7bc2da7991537ab91d412554016cd4a72ac1cd213a013df2f7477aedba38"
                             },
                             {
-                              "bytes": "8cfbd81d9899898986fa2d9fade035d7d59ee530b13b8c71d38e22e78693923e"
+                              "bytes": "0006d4576aa7097bf0eaae6208a907cb626d90a341f82d2604539dcdae38a3a2"
                             },
                             {
-                              "bytes": "6b6ecae5c0a11717ec7f18398cfd8c454635d10e1772430c717f42ea401a655b"
+                              "bytes": "406647e4c76e9689f1341822d8e6584738dfeed8abf163239000e7f9636d0305"
                             },
                             {
-                              "bytes": "85c69aebdc54a39398e8440835c946457ab67fcc81172ba67f2823601e5a26a0"
+                              "bytes": "03d9ea09f4a4964eafdf69bfaadeb5260c88f3607c4fbb64729d6a13ce5bcb2d"
                             }
                           ]
                         }
@@ -1288,7 +1307,7 @@
       [
         {
           "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5",
+            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON",
             "key": "ledger_key_contract_instance",
             "durability": "persistent"
           }
@@ -1299,7 +1318,7 @@
             "data": {
               "contract_data": {
                 "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5",
+                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON",
                 "key": "ledger_key_contract_instance",
                 "durability": "persistent",
                 "val": {
@@ -1419,7 +1438,7 @@
                           ]
                         },
                         "val": {
-                          "u64": 300
+                          "u64": 900
                         }
                       },
                       {
@@ -1455,7 +1474,7 @@
                           ]
                         },
                         "val": {
-                          "u64": 3600
+                          "u64": 172800
                         }
                       },
                       {
@@ -1594,6 +1613,36 @@
                           "i128": {
                             "hi": 0,
                             "lo": 0
+                          }
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "Treasury"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "UserCap"
+                            },
+                            {
+                              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "i128": {
+                            "hi": 0,
+                            "lo": 10000000000000
                           }
                         }
                       }
@@ -1844,19 +1893,19 @@
                 {
                   "vec": [
                     {
-                      "bytes": "701305cce63d2e5fd5b9836f754c44da9510f3205c842785c5320ea9447fef35"
+                      "bytes": "9b31fac0d60442fefc084929a1ffc5852a25a7ca88eb26931aa4ea5b30feb02c"
                     },
                     {
-                      "bytes": "811b94fda12499809ac8c3a6b36a01cba9dffdbad75fa8b9a212de58618ccc5e"
+                      "bytes": "6f6e7bc2da7991537ab91d412554016cd4a72ac1cd213a013df2f7477aedba38"
                     },
                     {
-                      "bytes": "8cfbd81d9899898986fa2d9fade035d7d59ee530b13b8c71d38e22e78693923e"
+                      "bytes": "0006d4576aa7097bf0eaae6208a907cb626d90a341f82d2604539dcdae38a3a2"
                     },
                     {
-                      "bytes": "6b6ecae5c0a11717ec7f18398cfd8c454635d10e1772430c717f42ea401a655b"
+                      "bytes": "406647e4c76e9689f1341822d8e6584738dfeed8abf163239000e7f9636d0305"
                     },
                     {
-                      "bytes": "85c69aebdc54a39398e8440835c946457ab67fcc81172ba67f2823601e5a26a0"
+                      "bytes": "03d9ea09f4a4964eafdf69bfaadeb5260c88f3607c4fbb64729d6a13ce5bcb2d"
                     }
                   ]
                 },
@@ -2197,7 +2246,7 @@
                 "symbol": "fn_call"
               },
               {
-                "bytes": "0000000000000000000000000000000000000000000000000000000000000008"
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000009"
               },
               {
                 "symbol": "init"
@@ -2283,7 +2332,7 @@
                     "symbol": "max_price_age"
                   },
                   "val": {
-                    "u64": 300
+                    "u64": 900
                   }
                 },
                 {
@@ -2307,7 +2356,7 @@
                     "symbol": "param_grace_secs"
                   },
                   "val": {
-                    "u64": 3600
+                    "u64": 172800
                   }
                 },
                 {
@@ -2386,6 +2435,25 @@
                       }
                     ]
                   }
+                },
+                {
+                  "key": {
+                    "symbol": "treasury"
+                  },
+                  "val": {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "user_cap"
+                  },
+                  "val": {
+                    "i128": {
+                      "hi": 0,
+                      "lo": 10000000000000
+                    }
+                  }
                 }
               ]
             }
@@ -2397,7 +2465,7 @@
     {
       "event": {
         "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000008",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000009",
         "type_": "diagnostic",
         "body": {
           "v0": {
@@ -2444,7 +2512,7 @@
     {
       "event": {
         "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000008",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000009",
         "type_": "diagnostic",
         "body": {
           "v0": {
@@ -2491,7 +2559,7 @@
     {
       "event": {
         "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000008",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000009",
         "type_": "contract",
         "body": {
           "v0": {
@@ -2512,7 +2580,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM"
                 },
                 {
-                  "u64": 300
+                  "u64": 900
                 }
               ]
             }
@@ -2524,7 +2592,7 @@
     {
       "event": {
         "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000008",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000009",
         "type_": "diagnostic",
         "body": {
           "v0": {
@@ -2561,7 +2629,7 @@
               }
             ],
             "data": {
-              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
+              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
             }
           }
         }
@@ -2584,7 +2652,7 @@
               }
             ],
             "data": {
-              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
+              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
             }
           }
         }
@@ -2707,7 +2775,7 @@
                 "symbol": "fn_call"
               },
               {
-                "bytes": "0000000000000000000000000000000000000000000000000000000000000008"
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000009"
               },
               {
                 "symbol": "queue_set_tier_ltv"
@@ -2745,43 +2813,27 @@
     {
       "event": {
         "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000008",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000009",
         "type_": "diagnostic",
         "body": {
           "v0": {
             "topics": [
               {
-                "symbol": "log"
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 33
+                }
               }
             ],
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'tier ltv below immutable floor' from contract function 'Symbol(obj#491)'"
+                  "string": "failing with contract error"
                 },
                 {
-                  "vec": [
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "ltv_bps"
-                          },
-                          "val": {
-                            "u32": 4999
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "min_score"
-                          },
-                          "val": {
-                            "u32": 300
-                          }
-                        }
-                      ]
-                    }
-                  ]
+                  "u32": 33
                 }
               ]
             }
@@ -2793,7 +2845,7 @@
     {
       "event": {
         "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000008",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000009",
         "type_": "diagnostic",
         "body": {
           "v0": {
@@ -2803,7 +2855,32 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 33
+                }
+              }
+            ],
+            "data": {
+              "string": "escalating error to panic"
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000009",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 33
                 }
               }
             ],
@@ -2828,14 +2905,14 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 33
                 }
               }
             ],
             "data": {
               "vec": [
                 {
-                  "string": "contract call failed"
+                  "string": "contract try_call failed"
                 },
                 {
                   "symbol": "queue_set_tier_ltv"
@@ -2869,31 +2946,6 @@
                   ]
                 }
               ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": null,
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "error"
-              },
-              {
-                "error": {
-                  "wasm_vm": "invalid_action"
-                }
-              }
-            ],
-            "data": {
-              "string": "escalating error to panic"
             }
           }
         }
