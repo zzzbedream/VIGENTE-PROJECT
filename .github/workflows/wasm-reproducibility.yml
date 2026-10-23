@@ -8,11 +8,39 @@
 # deterministic. All three should fail loudly rather than be discovered at deploy time.
 name: wasm reproducibility
 
+# =============================================================================
+# DISPARADORES AUTOMATICOS DESACTIVADOS el 2026-10-22. Se corre A MANO.
+#
+# POR QUE. Este job lleva rojo desde el 2026-09-08 y la causa raiz esta
+# diagnosticada: `rustc` graba la ubicacion de cada archivo fuente usando el
+# SEPARADOR DE RUTAS DEL SISTEMA ANFITRION, y `--remap-path-prefix` solo
+# reescribe el prefijo. El wasm construido en Windows contiene
+# `/cargo\registry\...\ledger.rs` y el de Linux `/cargo/registry/.../ledger.rs`.
+# Bytes distintos, hash distinto. No se arregla con mas flags de remapeo, porque
+# lo que queda despues del prefijo no es un prefijo.
+#
+# Detalle completo: `audit/12_FINDINGS_CLOSED.md`, seccion "M-05 - root cause
+# found, 2026-10-21", con el dump de cadenas del wasm.
+#
+# Un job rojo permanente no detecta nada: entrena a no mirarlo. Ya nos paso con
+# el keeper de TTL, que estuvo cinco semanas en rojo abriendo issues que nadie
+# leyo. Mientras la causa no se arregle, este job informa un hecho conocido en
+# cada push, en un repositorio publico.
+#
+# QUE LO REACTIVA, y es una sola cosa: construir la v4 en un CONTENEDOR Linux
+# fijado, hacer de ese el unico camino de build sancionado, y re-basar
+# `contracts/deployed-wasm-hashes.json` desde ahi. Con eso el hash es el mismo
+# en CI y en cualquier maquina, y el job vuelve a tener sentido.
+#
+# Plan y responsable: `docs/private/pilot/TECH_DEBT.md`, seccion 3.
+#
+# COMO SE REACTIVA: descomentar las cuatro lineas de `push` y `pull_request`.
+# =============================================================================
 on:
-  push:
-    paths: ['contracts/**', 'rust-toolchain.toml', '.github/workflows/wasm-reproducibility.yml']
-  pull_request:
-    paths: ['contracts/**', 'rust-toolchain.toml']
+  # push:
+  #   paths: ['contracts/**', 'rust-toolchain.toml', '.github/workflows/wasm-reproducibility.yml']
+  # pull_request:
+  #   paths: ['contracts/**', 'rust-toolchain.toml']
   workflow_dispatch:
 
 jobs:
