@@ -55,6 +55,22 @@
       "reproducible_optimized": null,
       "matches_deployed": false,
       "note": "Superseded 2026-09-02. Built before the toolchain pin, so not reproducible. Kept live: published evidence links to it, and 10 XLM remain locked in it (see audit/12_FINDINGS_CLOSED.md, finding N-01)."
+    },
+    "oracle-aggregator-accrual": {
+      "address": "CCJK4TIJYOR7FIIAP5GDI6K76JVJBU35JH3TIJCHATSUZV4IA7LHYVS4",
+      "deployed": "ea2f767e7656add030fc9b1625bb3bd509be74928739ce43d5852f43d5a33cb2",
+      "reproducible_raw": "58a7eaff9b986f5d695471009c0a7aa1e1274ad6220bb65c4da62a44e96ccb7a",
+      "reproducible_optimized": "ea2f767e7656add030fc9b1625bb3bd509be74928739ce43d5852f43d5a33cb2",
+      "matches_deployed": true,
+      "note": "Deployed 2026-10-23 (tx 346c1d79db2ef42e). Accrual-based pricing adapter for bonds whose NAV is published off-chain: it computes NAV(t) and converts via an INDEPENDENT fiat-FX feed. The pool's immutable oracle slot (oracle-aggregator above) cannot price by accrual -- its binary predates AccrualConfig and cannot be replaced without a new pool -- so that slot DELEGATES to this contract through a Route whose 'source' field accepts any SEP-40 contract. The ledger hash equals the optimized reproducible hash WHEN REBUILT ON THE MACHINE THAT PRODUCED IT, verified 2026-10-23. It does NOT reproduce in CI; see the CORRECTION in _comment. Same caveat as margin-controller: this is not 'anyone can rebuild and compare'."
+    },
+    "margin-controller-gen3": {
+      "address": "CCQDYAINLCBYBVMU4TAESACSMX4KTMSK3UFTHYIOLBIFBFPF2LCYNYJ6",
+      "deployed": "d6b5add0aaa22979c1a50fa6fd5baa03bcee95505954be89592bb68a3badf097",
+      "reproducible_raw": "cc2652c69961977f50aae91d88f24532a9ccc5594cd6334d587d864fb4093c8b",
+      "reproducible_optimized": "d6b5add0aaa22979c1a50fa6fd5baa03bcee95505954be89592bb68a3badf097",
+      "matches_deployed": true,
+      "note": "Deployed 2026-10-28 (tx 71b9a2df8934787c). Adds: mandatory per-user cap at listing time (Error 7 UserCapRequired), 38 typed error variants with zero string panics, get_collateral_shortfall (the T20 clawback-detection guard), get_config/get_cap/is_paused, and sweep_seized/sweep_interest which close findings N-02 and N-01. It is a NEW GENERATION, not an upgrade: Soroban contracts here are not upgradeable by design, so migration is voluntary and the previous generation CAH2BHAE... stays live. First generation to hold a tokenized sovereign-debt asset as collateral (CETES, reserve index 2 of pool CDYUHA3T...). The ledger hash equals the optimized reproducible hash WHEN REBUILT ON THE MACHINE THAT PRODUCED IT. It does NOT reproduce in CI; see the CORRECTION in _comment."
     }
   }
 }
