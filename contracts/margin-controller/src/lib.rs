@@ -31,7 +31,9 @@
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
     contract, contractclient, contracterror, contractimpl, contracttype, panic_with_error,
-    symbol_short, token::TokenClient, vec, Address, Env, IntoVal, Map, Symbol, Vec,
+    symbol_short,
+    token::{StellarAssetClient, TokenClient},
+    vec, Address, Env, IntoVal, Map, Symbol, Vec,
 };
 
 #[cfg(test)]
@@ -231,6 +233,18 @@ pub enum Error {
     /// pagar deuda REAL de usuarios mientras nuestros libros la siguen
     /// mostrando: la divergencia inversa a N-01, y creada por nosotros.
     SweepExceedsResidual = 42,
+    /// El emisor congelo el saldo del pool para este activo. Frena entradas.
+    AssetFrozen = 44,
+    /// Se reporto congelamiento de un activo que esta autorizado. Anti-grifeo.
+    AssetNotFrozen = 45,
+    /// El activo no expone `authorized`: no es un SAC clasico y este
+    /// mecanismo de congelamiento no le aplica.
+    AssetHasNoAuthFlag = 46,
+    /// No hay descubierto que cubrir. Si hay incautado del activo de deuda,
+    /// lo que corresponde es `settle_seized`, no pagar de nuevo.
+    NothingUncovered = 47,
+    /// Se intento cubrir mas de lo que el protocolo debe sin respaldo.
+    CoverExceedsUncovered = 48,
 }
 
 // =============================================================================
@@ -441,6 +455,9 @@ pub enum DataKey {
     LtvAtBorrow(Address),
     /// Two-step admin rotation: proposed new admin awaiting acceptance.
     PendingAdmin,
+    /// El emisor congelo el saldo del pool para este activo. Bandera barata:
+    /// la deteccion cara la hace `report_frozen`, la guarda solo lee esto.
+    Frozen(Address),
 }
 
 /// A tier-ladder change queued behind the grace-period timelock.
@@ -1142,6 +1159,71 @@ impl MarginController {
     /// the debt asset first, and this contract deliberately contains no swap:
     /// that is a Tranche 2 deliverable with its own slippage bounds. Until then
     /// a non-debt asset reverts and says so, instead of pretending.
+    /// **Pagar el descubierto. La fuente de pago que faltaba.**
+    ///
+    /// `get_uncovered()` volvio visible cuanto le debe el protocolo al pool sin
+    /// respaldo, pero **no habia forma de pagarlo**: `settle_seized` solo sabe
+    /// usar colateral incautado del activo de deuda, y la diferencia no tenia
+    /// pagador. Un protocolo que no puede aceptar el pago de su propia deuda
+    /// mala esta incompleto, no solo poco elegante.
+    ///
+    /// **Quien paga es `from`, y firma.** Puede ser el treasury, el equipo, un
+    /// backstop o un tercero que quiera dejar el pool entero. No es un poder
+    /// del admin: sin la firma de `from` no sale un centavo, asi que el
+    /// invariante no custodial no se toca.
+    ///
+    /// **No se pausa y no consulta el oraculo**, a proposito y por la misma
+    /// razon que `repay`: desapalancar nunca se bloquea. Si el protocolo esta
+    /// pausado o el precio caido, pagar lo que se debe tiene que seguir
+    /// siendo posible.
+    ///
+    /// Se acota a `get_uncovered()`: la parte que el incautado ya cubre tiene
+    /// su propio camino y pagarla aca seria pagar dos veces.
+    pub fn cover_shortfall(env: Env, from: Address, amount: i128) {
+        from.require_auth();
+        if amount <= 0 {
+            panic_with_error!(&env, Error::AmountNotPositive);
+        }
+        let descubierto = Self::get_uncovered(env.clone());
+        if descubierto <= 0 {
+            panic_with_error!(&env, Error::NothingUncovered);
+        }
+        if amount > descubierto {
+            panic_with_error!(&env, Error::CoverExceedsUncovered);
+        }
+
+        let me = env.current_contract_address();
+        let borrow_asset: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::BorrowAsset)
+            .expect("not initialized");
+        TokenClient::new(&env, &borrow_asset).transfer(&from, &me, &amount);
+
+        Self::authorize_pool_pull(&env, &borrow_asset, amount);
+        let mut reqs: Vec<Request> = Vec::new(&env);
+        reqs.push_back(Request {
+            address: borrow_asset,
+            amount,
+            request_type: REQ_REPAY,
+        });
+        Self::pool_client(&env).submit(&me, &me, &me, &reqs);
+
+        let pending: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingSettlement)
+            .unwrap_or(0);
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingSettlement, &(pending - amount));
+
+        // `BadDebt` NO se toca: es el acumulado historico y nunca baja. Que el
+        // faltante se pague no borra que ocurrio.
+        env.events()
+            .publish((symbol_short!("covered"), from), (amount, pending - amount));
+    }
+
     pub fn settle_seized(env: Env, asset: Address) {
         let borrow_asset: Address = env
             .storage()
@@ -1627,9 +1709,83 @@ impl MarginController {
 
     /// Revierte si el pool tiene menos de este activo de lo que contamos.
     fn require_backed(env: &Env, asset: &Address) {
+        // Congelamiento: lectura de almacenamiento, barata. La llamada cara
+        // entre contratos la hace `report_frozen`, una sola vez.
+        if env.storage().instance().has(&DataKey::Frozen(asset.clone())) {
+            panic_with_error!(env, Error::AssetFrozen);
+        }
         if Self::get_collateral_shortfall(env.clone(), asset.clone()) > 0 {
             panic_with_error!(env, Error::CollateralNotBacked);
         }
+    }
+
+    /// **Reporta que el emisor congelo el saldo del pool para este activo.**
+    ///
+    /// Es la mitigacion de T20-B, y acota el daño en vez de evitarlo: **un
+    /// congelamiento no se puede impedir ni revertir desde el contrato**. Lo
+    /// que si se puede es dejar de acumular exposicion en el instante en que
+    /// alguien lo nota.
+    ///
+    /// **Por que haciamos falta esto.** La guarda de T20 compara `TotalCollateral`
+    /// contra el balance real, y **un saldo congelado se ve perfectamente sano**:
+    /// esta ahi, solo que no se mueve. Eramos ciegos a este caso.
+    ///
+    /// **Permissionless a proposito.** Si solo el admin pudiera reportarlo, el
+    /// protocolo seguiria prestando contra un activo inmovil hasta que el admin
+    /// se diera cuenta. Cualquiera que lo note puede cortar la entrada.
+    ///
+    /// No se puede grifear: solo prende la bandera si el emisor **de verdad**
+    /// desautorizo al pool, verificado contra el activo.
+    pub fn report_frozen(env: Env, asset: Address) {
+        Self::require_collateral_asset(&env, &asset);
+        let pool: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Pool)
+            .expect("not initialized");
+
+        match StellarAssetClient::new(&env, &asset).try_authorized(&pool) {
+            Ok(Ok(true)) => panic_with_error!(&env, Error::AssetNotFrozen),
+            Ok(Ok(false)) => {
+                env.storage()
+                    .instance()
+                    .set(&DataKey::Frozen(asset.clone()), &true);
+                env.events()
+                    .publish((symbol_short!("frozen"), asset), env.ledger().timestamp());
+            }
+            // Un token Soroban que no es SAC no expone `authorized`. Este
+            // mecanismo no le aplica, y decirlo tipado es mejor que un panico
+            // sin nombre.
+            _ => panic_with_error!(&env, Error::AssetHasNoAuthFlag),
+        }
+    }
+
+    /// Levanta la bandera cuando el emisor vuelve a autorizar al pool.
+    ///
+    /// Tambien permissionless: el protocolo se recupera solo, sin esperar al
+    /// admin. Y solo funciona si el activo **esta** autorizado de verdad.
+    pub fn clear_frozen(env: Env, asset: Address) {
+        let pool: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Pool)
+            .expect("not initialized");
+
+        match StellarAssetClient::new(&env, &asset).try_authorized(&pool) {
+            Ok(Ok(true)) => {
+                env.storage().instance().remove(&DataKey::Frozen(asset.clone()));
+                env.events()
+                    .publish((symbol_short!("unfrozen"), asset), env.ledger().timestamp());
+            }
+            Ok(Ok(false)) => panic_with_error!(&env, Error::AssetFrozen),
+            _ => panic_with_error!(&env, Error::AssetHasNoAuthFlag),
+        }
+    }
+
+    /// Si el activo esta marcado como congelado. Lectura barata, sin llamadas
+    /// entre contratos: sirve para que un LP o un keeper lo consulten seguido.
+    pub fn is_frozen(env: Env, asset: Address) -> bool {
+        env.storage().instance().has(&DataKey::Frozen(asset))
     }
 
     /// Lo mismo, para cada activo en el que el usuario tiene colateral.
@@ -1814,8 +1970,59 @@ impl MarginController {
         env.storage().instance().get(&DataKey::Seized(asset)).unwrap_or(0)
     }
 
+    /// Faltante **ACUMULADO HISTORICO** de todas las liquidaciones insolventes.
+    ///
+    /// **Nunca baja.** Cuando el protocolo recupera valor con `settle_seized`,
+    /// este contador queda igual. Quien lo lea buscando "cuanto se debe hoy"
+    /// **sobrestima la perdida**. Para eso esta `get_uncovered`.
+    ///
+    /// Se mantiene porque responde otra pregunta, que tambien importa: cuanto
+    /// faltante genero el protocolo en toda su historia.
     pub fn get_bad_debt(env: Env) -> i128 {
         env.storage().instance().get(&DataKey::BadDebt).unwrap_or(0)
+    }
+
+    /// **Cuanto le debe el protocolo al pool que hoy NO puede cubrir.**
+    ///
+    /// Es el numero que un proveedor de liquidez necesita y que hasta ahora no
+    /// se podia obtener: `get_bad_debt` es historico y nunca baja, y combinar
+    /// `get_pending_settlement` con `get_seized` a mano exige saber que solo el
+    /// activo de deuda puede saldar.
+    ///
+    /// ```text
+    /// descubierto = PendingSettlement - Seized(activo_de_deuda)     , piso 0
+    /// ```
+    ///
+    /// **Por que solo el activo de deuda, y por que eso es lo honesto.**
+    /// `settle_seized` rechaza cualquier activo distinto del de deuda
+    /// (`SettleAssetNotDebtAsset`), porque este contrato **no tiene swap, a
+    /// proposito**. Entonces el colateral incautado en otros activos **no puede
+    /// saldar nada hoy**, por mucho que valga. Contarlo aqui daria un numero mas
+    /// lindo y menos cierto.
+    ///
+    /// **No consulta el oraculo**, asi que sigue respondiendo durante una caida
+    /// de precio — que es justo cuando un LP mas quiere mirarlo.
+    pub fn get_uncovered(env: Env) -> i128 {
+        let pending: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingSettlement)
+            .unwrap_or(0);
+        let borrow_asset: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::BorrowAsset)
+            .expect("not initialized");
+        let cubierto: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::Seized(borrow_asset))
+            .unwrap_or(0);
+        if pending > cubierto {
+            pending - cubierto
+        } else {
+            0
+        }
     }
 
     pub fn get_pending_settlement(env: Env) -> i128 {

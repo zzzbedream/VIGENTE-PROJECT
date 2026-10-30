@@ -30,8 +30,8 @@ use rand::rngs::{OsRng, StdRng};
 use rand::{Rng, SeedableRng};
 use soroban_sdk::{
     contract, contractimpl, contracttype,
-    testutils::{Address as _, Ledger, LedgerInfo},
-    token::TokenClient,
+    testutils::{Address as _, IssuerFlags, Ledger, LedgerInfo},
+    token::{StellarAssetClient, TokenClient},
     xdr::ToXdr,
     Address, Bytes, BytesN, Env, Map, String, Vec,
 };
@@ -2649,5 +2649,595 @@ fn m03_fuzz_la_liquidacion_nunca_incauta_mas_de_lo_que_hay() {
             h.ctrl.get_debt(&user) <= deuda,
             "iter {i}: la deuda nunca crece al liquidar"
         );
+    }
+}
+
+#[test]
+/// **El numero que un proveedor de liquidez necesita, y que antes no existia.**
+///
+/// `get_bad_debt` es un acumulado historico que **nunca baja**: un LP que lo lea
+/// buscando "cuanto se debe hoy" sobrestima la perdida. `get_uncovered` responde
+/// la pregunta real, y al no consultar el oraculo sigue respondiendo durante una
+/// caida de precio, que es justo cuando un LP mas quiere mirarlo.
+fn lp_puede_auditar_la_exposicion_descubierta() {
+    let h = setup();
+    assert_eq!(h.ctrl.get_uncovered(), 0, "sin liquidaciones no hay nada descubierto");
+
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 91);
+    h.ctrl.borrow(&h.borrower, &units(100));
+
+    // Derrumbe: el colateral pasa a valer MENOS que la deuda -> insolvente.
+    h.price_oracle.set_price(
+        &Asset::Stellar(h.xlm_id.clone()),
+        &(P_XLM * 40 / 100),
+        &INITIAL_TIMESTAMP,
+    );
+    let keeper = liquidador_financiado(&h);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1));
+
+    let historico = h.ctrl.get_bad_debt();
+    let descubierto = h.ctrl.get_uncovered();
+    assert!(historico > 0, "una liquidacion insolvente debe registrar faltante");
+
+    // El colateral se incauto en XLM, que NO puede saldar nada: settle_seized
+    // solo acepta el activo de deuda, porque este contrato no tiene swap.
+    // Por eso lo descubierto es la obligacion COMPLETA, no solo el faltante.
+    assert_eq!(descubierto, units(100), "lo descubierto debe ser toda la obligacion");
+    assert!(
+        descubierto > historico,
+        "descubierto {} debe superar al faltante historico {}",
+        descubierto,
+        historico
+    );
+
+    // Y una caida del oraculo no lo oculta.
+    h.price_oracle.clear_price(&Asset::Stellar(h.xlm_id.clone()));
+    assert_eq!(
+        h.ctrl.get_uncovered(),
+        descubierto,
+        "get_uncovered dejo de responder sin precio"
+    );
+}
+
+// =============================================================================
+// CONGELAMIENTO DEL EMISOR — ACOTAR EL DAÑO, QUE ES TODO LO QUE SE PUEDE
+// =============================================================================
+//
+// Un `set_authorized(pool, false)` del emisor **no se puede evitar ni revertir**
+// desde el contrato. Lo que si se puede es **dejar de acumular exposicion** en
+// cuanto alguien lo nota, y eso es lo que se prueba aca.
+//
+// Estos tests corren contra un **SAC de verdad** del SDK, no contra `MockUsdc`:
+// la pregunta es si el flag real de autorizacion se lee bien, y un mock que lo
+// simule no responde eso.
+
+/// Lista un **Stellar Asset Contract real** como colateral, con precio.
+fn listar_sac(h: &Harness) -> Address {
+    let sac = h.env.register_stellar_asset_contract_v2(h.admin.clone());
+    // **Un SAC solo puede congelar si su emisor tiene AUTH_REVOCABLE.** Es
+    // condicion del protocolo Stellar, no nuestra, y es observable antes de
+    // listar un activo: si el emisor no la tiene, este vector no existe.
+    sac.issuer().set_flag(IssuerFlags::RevocableFlag);
+    let sac = sac.address();
+    StellarAssetClient::new(&h.env, &sac).mint(&h.borrower, &units(100_000));
+    h.price_oracle.set_price(
+        &Asset::Stellar(sac.clone()),
+        &P_CETES,
+        &INITIAL_TIMESTAMP,
+    );
+    h.ctrl
+        .add_collateral_asset(&sac, &Asset::Stellar(sac.clone()), &0_i128, &USER_CAP);
+    sac
+}
+
+/// El ciclo entero: sano -> congelado -> recuperado, con el emisor real
+/// moviendo el flag y sin que el admin del protocolo intervenga nunca.
+#[test]
+fn freeze_el_ciclo_completo_contra_un_sac_real() {
+    let h = setup();
+    let sac = listar_sac(&h);
+    let emisor = StellarAssetClient::new(&h.env, &sac);
+
+    h.ctrl.deposit_collateral(&h.borrower, &sac, &units(1_000));
+    assert!(!h.ctrl.is_frozen(&sac));
+
+    // No se puede grifear: reportar un activo sano revierte contra el activo.
+    let err = h.ctrl.try_report_frozen(&sac).err().unwrap().unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::AssetNotFrozen as u32)
+    );
+
+    // El emisor desautoriza al pool. ANTES de esto eramos ciegos: la guarda de
+    // T20 compara saldos, y un saldo congelado se ve perfectamente sano.
+    emisor.set_authorized(&h.pool_id, &false);
+    assert_eq!(h.ctrl.get_collateral_shortfall(&sac), 0, "el balance no delata el congelamiento");
+
+    // Cualquiera puede cortar la entrada. No hace falta el admin.
+    h.ctrl.report_frozen(&sac);
+    assert!(h.ctrl.is_frozen(&sac));
+
+    let err = h
+        .ctrl
+        .try_deposit_collateral(&h.borrower, &sac, &units(1))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::AssetFrozen as u32)
+    );
+
+    // El emisor vuelve atras y el protocolo se recupera solo.
+    emisor.set_authorized(&h.pool_id, &true);
+    h.ctrl.clear_frozen(&sac);
+    assert!(!h.ctrl.is_frozen(&sac));
+    h.ctrl.deposit_collateral(&h.borrower, &sac, &units(1));
+}
+
+/// **La invariante que importa: la bandera NUNCA bloquea una salida.**
+///
+/// Se la deja prendida a proposito —se congela, se reporta, el emisor revierte
+/// y nadie llama a `clear_frozen`— que es el peor caso para la guarda. Con la
+/// bandera arriba y el token sano, la entrada tiene que estar cerrada y
+/// **repagar y retirar tienen que seguir funcionando**.
+///
+/// Es la misma invariante de `t20_invariante_el_faltante_nunca_bloquea_las_salidas`:
+/// una guarda de seguridad que atrapa al usuario adentro no es una proteccion.
+#[test]
+fn freeze_invariante_la_bandera_nunca_bloquea_las_salidas() {
+    let h = setup();
+    let sac = listar_sac(&h);
+    let emisor = StellarAssetClient::new(&h.env, &sac);
+
+    h.ctrl.deposit_collateral(&h.borrower, &sac, &units(10_000));
+    mint_badge(&h, &h.borrower, 850, 77);
+    let max = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &(max / 10));
+
+    emisor.set_authorized(&h.pool_id, &false);
+    h.ctrl.report_frozen(&sac);
+    emisor.set_authorized(&h.pool_id, &true);
+    assert!(h.ctrl.is_frozen(&sac), "la bandera queda vieja a proposito");
+
+    // Entrada cerrada.
+    assert!(h
+        .ctrl
+        .try_deposit_collateral(&h.borrower, &sac, &units(1))
+        .is_err());
+
+    // Y las dos salidas, abiertas.
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&h.borrower, &units(1_000));
+    h.ctrl.repay(&h.borrower, &h.ctrl.get_debt(&h.borrower));
+    h.ctrl
+        .withdraw_collateral(&h.borrower, &sac, &units(10_000));
+}
+
+/// Un congelamiento en OTRO activo no le cierra la entrada al que el usuario
+/// si tiene. La bandera es por activo, no global.
+#[test]
+fn freeze_un_activo_congelado_no_cierra_los_demas() {
+    let h = setup();
+    let sac = listar_sac(&h);
+    StellarAssetClient::new(&h.env, &sac).set_authorized(&h.pool_id, &false);
+    h.ctrl.report_frozen(&sac);
+
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 78);
+    let max = h.ctrl.max_borrow(&h.borrower);
+    h.ctrl.borrow(&h.borrower, &(max / 10));
+}
+
+// =============================================================================
+// COSTO DE `require_user_collateral_backed` — MEDIDO, NO SUPUESTO
+// =============================================================================
+//
+// La guarda de gen3 itera **todos los activos listados** y, por cada uno con
+// saldo del usuario, hace una llamada `balance()` entre contratos. El STRIDE lo
+// tenia como MEDIA **no medida**. Esto lo mide.
+//
+// **Lo que este test NO prueba, y hay que decirlo:** el SDK avisa que el costo
+// de CPU medido corriendo Rust nativo **subestima** al del wasm equivalente. El
+// numero absoluto de aca es un **piso**, no el costo real en red. Lo que si es
+// identico entre nativo y wasm es la **forma**: cuantas lecturas de
+// almacenamiento y cuantas llamadas entre contratos se hacen por activo. Eso es
+// lo que se mide y se asegura.
+
+/// Deja al prestatario con saldo en `n` activos de colateral y devuelve el
+/// costo (cpu, mem) de un `borrow`.
+fn costo_de_borrow_con_n_activos(n: u32) -> (u64, u64) {
+    let h = setup();
+
+    // El activo 1 es el XLM que `init` ya listo.
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    for _ in 1..n {
+        let extra = listar_cetes(&h);
+        h.ctrl.deposit_collateral(&h.borrower, &extra, &units(1_000));
+    }
+
+    mint_badge(&h, &h.borrower, 850, 90 + n);
+    let monto = h.ctrl.max_borrow(&h.borrower) / 10;
+
+    let mut presupuesto = h.env.budget();
+    presupuesto.reset_default();
+    h.ctrl.borrow(&h.borrower, &monto);
+
+    let b = h.env.budget();
+    (b.cpu_instruction_cost(), b.memory_bytes_cost())
+}
+
+/// **El costo crece LINEAL con los activos del usuario, no cuadratico.**
+///
+/// Es la propiedad que importa: con crecimiento lineal hay un N maximo y se
+/// puede acotar con el tope de activos listados. Con crecimiento cuadratico, un
+/// `borrow` se vuelve imposible mucho antes y el protocolo se bloquea solo.
+#[test]
+fn costo_de_la_guarda_crece_lineal_en_los_activos_del_usuario() {
+    let medidas: std::vec::Vec<(u32, u64, u64)> = [1_u32, 3, 6, 10]
+        .iter()
+        .map(|&n| {
+            let (cpu, mem) = costo_de_borrow_con_n_activos(n);
+            (n, cpu, mem)
+        })
+        .collect();
+
+    std::println!("\n  activos |         cpu |        mem | cpu marginal/activo");
+    std::println!("  --------|-------------|------------|--------------------");
+    let base = medidas[0];
+    for &(n, cpu, mem) in medidas.iter() {
+        let marginal = if n > base.0 {
+            std::format!("{}", (cpu - base.1) / (n - base.0) as u64)
+        } else {
+            std::string::String::from("-")
+        };
+        std::println!("  {:>7} | {:>11} | {:>10} | {:>18}", n, cpu, mem, marginal);
+    }
+
+    let marg_bajo = (medidas[1].1 - medidas[0].1) / 2; // de 1 a 3 activos
+    let marg_alto = (medidas[3].1 - medidas[2].1) / 4; // de 6 a 10 activos
+    std::println!(
+        "  marginal 1->3: {} cpu/activo · marginal 6->10: {} cpu/activo\n",
+        marg_bajo,
+        marg_alto
+    );
+
+    // Si fuera cuadratico, el marginal de arriba creceria con N. Se tolera 2x
+    // de holgura por el ruido de las lecturas de instancia compartidas.
+    assert!(
+        marg_alto < marg_bajo * 2,
+        "el costo marginal por activo crece con N: la guarda no es lineal \
+         ({} -> {} cpu/activo)",
+        marg_bajo,
+        marg_alto
+    );
+
+    // Y la cota absoluta, como piso nativo: un borrow con 10 activos tiene que
+    // caber en el presupuesto por defecto. Si esto falla, falla en red seguro.
+    assert!(
+        medidas[3].1 < 100_000_000,
+        "un borrow con 10 activos ya no cabe en el presupuesto nativo"
+    );
+}
+
+/// **El hallazgo que el costo marginal tapaba: el bucle itera los activos
+/// LISTADOS, no los que el usuario tiene.**
+///
+/// Un prestatario con un solo activo paga la lectura persistente de todos los
+/// activos del protocolo. Y listar un activo es una accion **del admin**, asi
+/// que el admin encarece el `borrow` de todo el mundo sin tocar su posicion.
+#[test]
+fn costo_de_la_guarda_lo_paga_el_usuario_que_no_tiene_esos_activos() {
+    fn costo_con_n_listados_y_uno_tenido(n: u32) -> u64 {
+        let h = setup();
+        h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+        // Se listan n-1 activos extra y el prestatario NO deposita en ninguno.
+        for _ in 1..n {
+            listar_cetes(&h);
+        }
+        mint_badge(&h, &h.borrower, 850, 120 + n);
+        let monto = h.ctrl.max_borrow(&h.borrower) / 10;
+
+        let mut presupuesto = h.env.budget();
+        presupuesto.reset_default();
+        h.ctrl.borrow(&h.borrower, &monto);
+        h.env.budget().cpu_instruction_cost()
+    }
+
+    let c1 = costo_con_n_listados_y_uno_tenido(1);
+    let c10 = costo_con_n_listados_y_uno_tenido(10);
+    let por_listado = (c10 - c1) / 9;
+
+    std::println!(
+        "\n  tiene 1 activo · 1 listado:  {:>9} cpu\n  \
+           tiene 1 activo · 10 listados: {:>9} cpu\n  \
+           costo por activo LISTADO que no tiene: {} cpu\n",
+        c1,
+        c10,
+        por_listado
+    );
+
+    // Que crezca es el hallazgo. Se asegura que crece, para que nadie suponga
+    // que el bucle se acota a la posicion del usuario.
+    assert!(
+        c10 > c1,
+        "si esto deja de crecer, el bucle se acoto a los activos del usuario \
+         y este test documenta un comportamiento que ya no existe"
+    );
+    // Y que sea MUCHO mas barato que un activo tenido: la llamada `balance()`
+    // entre contratos solo ocurre si `held > 0`.
+    assert!(
+        por_listado < 100_000,
+        "un activo listado que el usuario no tiene cuesta {} cpu: demasiado \
+         cerca del costo de uno tenido",
+        por_listado
+    );
+}
+
+// =============================================================================
+// `cover_shortfall` — LA FUENTE DE PAGO QUE FALTABA
+// =============================================================================
+
+/// Deja al protocolo con descubierto y devuelve (harness, monto descubierto).
+fn con_descubierto(h: &Harness) -> i128 {
+    h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+    mint_badge(&h, &h.borrower, 850, 95);
+    h.ctrl.borrow(&h.borrower, &units(100));
+    h.price_oracle.set_price(
+        &Asset::Stellar(h.xlm_id.clone()),
+        &(P_XLM * 40 / 100),
+        &INITIAL_TIMESTAMP,
+    );
+    let keeper = liquidador_financiado(&h);
+    h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1));
+    h.ctrl.get_uncovered()
+}
+
+/// **Alguien puede dejar al pool entero, y queda medible que lo hizo.**
+#[test]
+fn cubrir_el_descubierto_lo_baja_a_cero_y_el_historico_queda() {
+    let h = setup();
+    let descubierto = con_descubierto(&h);
+    assert!(descubierto > 0);
+    let historico = h.ctrl.get_bad_debt();
+
+    // Un tercero cualquiera -- no el admin, no el deudor -- paga.
+    let mecenas = Address::generate(&h.env);
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&mecenas, &descubierto);
+
+    // Un pago parcial baja lo descubierto exactamente en lo pagado.
+    h.ctrl.cover_shortfall(&mecenas, &(descubierto / 4));
+    assert_eq!(h.ctrl.get_uncovered(), descubierto - descubierto / 4);
+
+    // Y el resto lo lleva a cero.
+    h.ctrl
+        .cover_shortfall(&mecenas, &h.ctrl.get_uncovered());
+    assert_eq!(h.ctrl.get_uncovered(), 0);
+
+    // **El historico NO se borra.** Que el faltante se haya pagado no borra
+    // que ocurrio, y es lo que un auditor necesita poder ver.
+    assert_eq!(h.ctrl.get_bad_debt(), historico);
+
+    // Y ya no hay nada que cubrir.
+    let err = h
+        .ctrl
+        .try_cover_shortfall(&mecenas, &units(1))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::NothingUncovered as u32)
+    );
+}
+
+/// No se puede pagar de mas: el excedente se rechaza tipado en vez de quedar
+/// como credito perdido dentro del contrato.
+#[test]
+fn cubrir_mas_que_el_descubierto_revierte() {
+    let h = setup();
+    let descubierto = con_descubierto(&h);
+    let mecenas = Address::generate(&h.env);
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&mecenas, &(descubierto * 2));
+
+    let err = h
+        .ctrl
+        .try_cover_shortfall(&mecenas, &(descubierto + 1))
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::CoverExceedsUncovered as u32)
+    );
+}
+
+/// **Pagar funciona con el protocolo pausado y con el oraculo caido.**
+///
+/// Es la misma razon que hace que `repay` no sea pausable: si el unico momento
+/// en que alguien quiere dejar al pool entero es una crisis, y en la crisis
+/// esta pausado y sin precio, la fuente de pago no sirve para nada.
+#[test]
+fn cubrir_el_descubierto_funciona_pausado_y_sin_oraculo() {
+    let h = setup();
+    let descubierto = con_descubierto(&h);
+    let mecenas = Address::generate(&h.env);
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&mecenas, &descubierto);
+
+    h.ctrl.pause();
+    h.price_oracle.clear_price(&Asset::Stellar(h.xlm_id.clone()));
+    h.price_oracle.clear_price(&Asset::Stellar(h.usdc_id.clone()));
+    assert!(h.ctrl.is_paused());
+
+    h.ctrl.cover_shortfall(&mecenas, &descubierto);
+    assert_eq!(h.ctrl.get_uncovered(), 0);
+}
+
+/// **Sin la firma de quien paga, no sale un centavo.**
+///
+/// Es la afirmacion que sostiene que `cover_shortfall` no es un poder del
+/// admin, y el resto de la suite no la puede probar: corre con
+/// `mock_all_auths`, donde toda firma se da por buena. Aca se apagan las
+/// autorizaciones mockeadas para medirlo de verdad.
+#[test]
+fn cubrir_el_descubierto_exige_la_firma_de_quien_paga() {
+    let h = setup();
+    let descubierto = con_descubierto(&h);
+    let victima = Address::generate(&h.env);
+    MockUsdcClient::new(&h.env, &h.usdc_id).mint(&victima, &descubierto);
+    let saldo_antes = h.usdc.balance(&victima);
+
+    // Se apagan las firmas mockeadas: ahora `require_auth` se exige de verdad.
+    h.env.set_auths(&[]);
+    assert!(
+        h.ctrl
+            .try_cover_shortfall(&victima, &descubierto)
+            .is_err(),
+        "se pudo pagar con fondos de un tercero que no firmo"
+    );
+    assert_eq!(
+        h.usdc.balance(&victima),
+        saldo_antes,
+        "salieron fondos de alguien que no firmo"
+    );
+
+    // Y con la firma puesta, pasa.
+    h.env.mock_all_auths();
+    h.ctrl.cover_shortfall(&victima, &descubierto);
+    assert_eq!(h.ctrl.get_uncovered(), 0);
+}
+
+// =============================================================================
+// INVARIANTES ALEATORIZADOS DEL CODIGO NUEVO
+// =============================================================================
+
+/// **I9 — pagar el descubierto conserva la cuenta, con cualquier partición.**
+///
+/// Secuencias aleatorias de pagos parciales: lo descubierto baja exactamente en
+/// lo pagado, nunca queda negativo, y el **histórico no se mueve**. Esa última
+/// es la que importa para un auditor: pagar la deuda mala no puede borrar que
+/// existió.
+#[test]
+fn prop_i9_cubrir_el_descubierto_conserva_la_cuenta() {
+    let mut rng = StdRng::seed_from_u64(0xC0FFEE);
+
+    for ronda in 0..12_u32 {
+        let h = setup();
+        h.env.budget().reset_unlimited();
+
+        h.ctrl.deposit_collateral(&h.borrower, &h.xlm_id, &units(1_000));
+        mint_badge(&h, &h.borrower, rng.gen_range(700..=1_000), 8_000 + ronda);
+        let max = h.ctrl.max_borrow(&h.borrower);
+        if max <= units(10) {
+            continue;
+        }
+        h.ctrl.borrow(&h.borrower, &(max / 2));
+
+        // Derrumbe + liquidación: queda descubierto.
+        h.price_oracle.set_price(
+            &Asset::Stellar(h.xlm_id.clone()),
+            &(P_XLM * rng.gen_range(20..=45) as i128 / 100),
+            &INITIAL_TIMESTAMP,
+        );
+        let keeper = liquidador_financiado(&h);
+        h.ctrl.liquidate(&keeper, &h.borrower, &h.xlm_id, &units(1));
+
+        let inicial = h.ctrl.get_uncovered();
+        if inicial <= 0 {
+            continue;
+        }
+        let historico = h.ctrl.get_bad_debt();
+
+        let mecenas = Address::generate(&h.env);
+        MockUsdcClient::new(&h.env, &h.usdc_id).mint(&mecenas, &inicial);
+
+        let mut pagado: i128 = 0;
+        while h.ctrl.get_uncovered() > 0 {
+            let resta = h.ctrl.get_uncovered();
+            // Un pago aleatorio, y el último cierra exacto.
+            let pago = if resta <= 2 {
+                resta
+            } else {
+                rng.gen_range(1..=resta)
+            };
+            h.ctrl.cover_shortfall(&mecenas, &pago);
+            pagado += pago;
+
+            let ahora = h.ctrl.get_uncovered();
+            assert_eq!(ahora, inicial - pagado, "lo descubierto no bajó en lo pagado");
+            assert!(ahora >= 0, "lo descubierto quedó negativo");
+            assert!(
+                h.ctrl.get_pending_settlement() >= 0,
+                "la obligación pendiente quedó negativa"
+            );
+            assert_eq!(h.ctrl.get_bad_debt(), historico, "pagar movió el histórico");
+        }
+
+        assert_eq!(pagado, inicial, "la suma de pagos no cierra con lo descubierto");
+        assert!(h
+            .ctrl
+            .try_cover_shortfall(&mecenas, &1)
+            .is_err());
+    }
+}
+
+/// **I10 — ninguna combinación de banderas de congelamiento atrapa al usuario.**
+///
+/// Subconjuntos aleatorios de activos quedan con la bandera **prendida y vieja**
+/// —congelo, reporto, el emisor revierte, nadie limpia—, que es el peor caso.
+/// El usuario tiene que poder sacar **todo** su colateral de **todos** los
+/// activos, siempre.
+#[test]
+fn prop_i10_ninguna_bandera_de_congelamiento_atrapa_al_usuario() {
+    let mut rng = StdRng::seed_from_u64(0xFEED);
+
+    for _ in 0..10_u32 {
+        let h = setup();
+        h.env.budget().reset_unlimited();
+
+        // Tres SAC reales, cada uno con su emisor capaz de congelar.
+        let mut activos: std::vec::Vec<(Address, i128)> = std::vec::Vec::new();
+        for _ in 0..3 {
+            let sac = listar_sac(&h);
+            let monto: i128 = rng.gen_range(units(100)..=units(900));
+            h.ctrl.deposit_collateral(&h.borrower, &sac, &monto);
+            activos.push((sac, monto));
+        }
+
+        // Un subconjunto aleatorio queda con la bandera prendida y vieja.
+        let mut marcados = 0_u32;
+        for (sac, _) in activos.iter() {
+            if rng.gen_bool(0.6) {
+                let emisor = StellarAssetClient::new(&h.env, sac);
+                emisor.set_authorized(&h.pool_id, &false);
+                h.ctrl.report_frozen(sac);
+                emisor.set_authorized(&h.pool_id, &true); // token sano, bandera vieja
+                assert!(h.ctrl.is_frozen(sac));
+                marcados += 1;
+            }
+        }
+
+        // Entradas cerradas solo donde corresponde.
+        for (sac, _) in activos.iter() {
+            let r = h.ctrl.try_deposit_collateral(&h.borrower, sac, &units(1));
+            if h.ctrl.is_frozen(sac) {
+                assert!(r.is_err(), "un activo con la bandera prendida aceptó un depósito");
+            } else {
+                assert!(r.is_ok(), "un activo sano rechazó un depósito");
+            }
+        }
+
+        // **La invariante: todas las salidas abiertas, marcadas o no.**
+        for (sac, monto) in activos.iter() {
+            let tiene = h.ctrl.get_collateral(&h.borrower, sac);
+            h.ctrl.withdraw_collateral(&h.borrower, sac, &tiene);
+            assert_eq!(
+                h.ctrl.get_collateral(&h.borrower, sac),
+                0,
+                "quedó colateral atrapado (depositado {})",
+                monto
+            );
+        }
+        assert!(marcados <= 3);
     }
 }
