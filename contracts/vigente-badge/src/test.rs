@@ -163,6 +163,21 @@ fn setup(env: &Env) -> (Address, Address, Address, VigenteBadgeClient, OracleSet
     (admin, vault, borrower, client, oracles)
 }
 
+/// Avanza el reloj del ledger conservando el resto de la configuracion.
+fn avanzar(env: &Env, secs: u64) {
+    let t = env.ledger().timestamp();
+    env.ledger().set(LedgerInfo {
+        timestamp: t + secs,
+        protocol_version: 21,
+        sequence_number: 100,
+        network_id: Default::default(),
+        base_reserve: 10,
+        min_temp_entry_ttl: 10,
+        min_persistent_entry_ttl: 10,
+        max_entry_ttl: 12_614_400,
+    });
+}
+
 /// Convenience wrapper: build threshold-signed mint call with k=threshold
 /// signatures and `account_age_days = DEFAULT_AGE_DAYS`.
 fn mint_default(
@@ -296,20 +311,106 @@ fn test_initialize_twice_fails() {
 // =============================================================================
 
 #[test]
-fn test_set_oracle_keys_replaces_set() {
+/// `set_oracle_keys` configura el conjunto INICIAL y nada mas.
+fn test_set_oracle_keys_solo_configura_una_vez() {
     let env = Env::default();
-    let (_, _, borrower, client, _oracles) = setup(&env);
+    let (_, _, _, client, _oracles) = setup(&env);
 
-    let new_oracles = OracleSet::generate(&env, 4, 2);
-    client.set_oracle_keys(&new_oracles.pubkeys_vec(&env), &new_oracles.threshold);
+    let otro = OracleSet::generate(&env, 4, 3);
+    let err = client
+        .try_set_oracle_keys(&otro.pubkeys_vec(&env), &otro.threshold)
+        .err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::OracleKeysAlreadySet as u32));
+}
 
-    assert_eq!(client.get_oracle_keys().len(), 4);
-    assert_eq!(client.get_oracle_threshold(), 2);
+#[test]
+/// **EL ARREGLO, y el test que cierra el hallazgo critico del 2026-10-29.**
+///
+/// Antes esto era posible en UNA transaccion, firmada por una sola llave:
+/// `set_oracle_keys([llave_atacante], 1)` y despues `mint(cualquiera, 1000)`.
+/// El 3-de-5 estaba protegido por un 1-de-1. El piso inmutable lo impide.
+fn test_el_umbral_no_puede_bajar_del_piso() {
+    let env = Env::default();
+    let (_, _, _, client, _oracles) = setup(&env);
 
-    let nonce = fresh_nonce(99);
-    let sigs = new_oracles.sign_with_first(&env, &borrower, 600, DEFAULT_EXPIRATION, DEFAULT_AGE_DAYS, &nonce, 2);
-    let badge = client.mint(&borrower, &600, &DEFAULT_EXPIRATION, &DEFAULT_AGE_DAYS, &BytesN::from_array(&env, &nonce), &sigs);
-    assert_eq!(badge.score, 600);
+    // El ataque exacto: colapsar a una sola llave con umbral 1.
+    let atacante = OracleSet::generate(&env, 1, 1);
+    let err = client
+        .try_queue_set_oracle_keys(&atacante.pubkeys_vec(&env), &1u32)
+        .err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::ThresholdBelowFloor as u32));
+
+    // Y tampoco 2 sobre 5: sigue por debajo del piso.
+    let dos = OracleSet::generate(&env, 5, 2);
+    let err2 = client
+        .try_queue_set_oracle_keys(&dos.pubkeys_vec(&env), &2u32)
+        .err().unwrap().unwrap();
+    assert_eq!(err2, soroban_sdk::Error::from_contract_error(Error::ThresholdBelowFloor as u32));
+
+    // El conjunto vigente quedo intacto.
+    assert_eq!(client.get_oracle_threshold(), 3);
+}
+
+#[test]
+/// Un cambio de oraculos es publico 48 h antes de tomar efecto.
+fn test_cambio_de_oraculos_respeta_la_gracia() {
+    let env = Env::default();
+    let (_, _, _, client, _oracles) = setup(&env);
+
+    let nuevo = OracleSet::generate(&env, 5, 4);
+    client.queue_set_oracle_keys(&nuevo.pubkeys_vec(&env), &4u32);
+
+    // Auditable por cualquiera sin leer eventos historicos.
+    let pend = client.get_pending_oracle_keys().unwrap();
+    assert_eq!(pend.threshold, 4);
+    assert_eq!(pend.effective_at, 1_700_000_000 + 172_800);
+
+    // Antes de la gracia no se aplica...
+    let err = client.try_apply_oracle_keys().err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::StillInOracleGrace as u32));
+    // ...y el conjunto viejo sigue gobernando.
+    assert_eq!(client.get_oracle_threshold(), 3);
+
+    avanzar(&env, 172_800);
+    client.apply_oracle_keys();
+    assert_eq!(client.get_oracle_threshold(), 4);
+    assert!(client.get_pending_oracle_keys().is_none());
+}
+
+#[test]
+/// **Aplicar es PERMISSIONLESS, y es la mitad que importa de la gracia.**
+///
+/// Si solo el admin pudiera aplicar, podria encolar y consumar en el instante
+/// que le conviniera, y la ventana seria decorativa. `apply_oracle_keys` no
+/// tiene `require_auth` de nadie: a proposito.
+fn test_aplicar_el_cambio_es_permissionless() {
+    let env = Env::default();
+    let (_, _, _, client, _oracles) = setup(&env);
+
+    let nuevo = OracleSet::generate(&env, 6, 5);
+    client.queue_set_oracle_keys(&nuevo.pubkeys_vec(&env), &5u32);
+    avanzar(&env, 172_800);
+
+    client.apply_oracle_keys();
+    assert_eq!(client.get_oracle_threshold(), 5);
+    assert_eq!(client.get_oracle_keys().len(), 6);
+}
+
+#[test]
+/// El admin puede cancelar lo que encolo, pero solo antes de que se aplique.
+fn test_cancelar_cambio_encolado() {
+    let env = Env::default();
+    let (_, _, _, client, _oracles) = setup(&env);
+
+    let nuevo = OracleSet::generate(&env, 5, 4);
+    client.queue_set_oracle_keys(&nuevo.pubkeys_vec(&env), &4u32);
+    client.cancel_oracle_keys();
+    assert!(client.get_pending_oracle_keys().is_none());
+
+    avanzar(&env, 172_800);
+    let err = client.try_apply_oracle_keys().err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::NoPendingOracleChange as u32));
+    assert_eq!(client.get_oracle_threshold(), 3);
 }
 
 #[test]
@@ -831,10 +932,9 @@ fn test_set_oracle_keys_threshold_too_high() {
     let (_, _, _, client, _oracles) = setup(&env);
 
     let new_set = OracleSet::generate(&env, 3, 5);
-    let err = client.try_set_oracle_keys(&new_set.pubkeys_vec(&env), &new_set.threshold)
-        .err()
-        .unwrap()
-        .unwrap();
+    let err = client
+        .try_queue_set_oracle_keys(&new_set.pubkeys_vec(&env), &new_set.threshold)
+        .err().unwrap().unwrap();
     assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::ThresholdExceedsKeyCount as u32));
 }
 
@@ -843,12 +943,11 @@ fn test_set_oracle_keys_rejects_duplicates() {
     let env = Env::default();
     let (_, _, _, client, _oracles) = setup(&env);
 
-    let n = OracleSet::generate(&env, 3, 2);
+    let n = OracleSet::generate(&env, 3, 3);
     let mut keys = n.pubkeys_vec(&env);
     keys.push_back(keys.get(0).unwrap());
-    let err = client.try_set_oracle_keys(&keys, &2u32)
-        .err()
-        .unwrap()
-        .unwrap();
+    let err = client
+        .try_queue_set_oracle_keys(&keys, &3u32)
+        .err().unwrap().unwrap();
     assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::DuplicateOracleKey as u32));
 }

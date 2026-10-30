@@ -36,6 +36,15 @@ mod test;
 // STORAGE KEYS
 // =============================================================================
 
+/// Un cambio del conjunto de oraculos esperando su gracia.
+#[derive(Clone, Debug, PartialEq)]
+#[contracttype]
+pub struct PendingOracleChange {
+    pub keys: Vec<BytesN<32>>,
+    pub threshold: u32,
+    pub effective_at: u64,
+}
+
 #[derive(Clone)]
 #[contracttype]
 pub enum DataKey {
@@ -64,11 +73,33 @@ pub enum DataKey {
     Default(Address),
     /// Whether the contract is paused (circuit breaker)
     Paused,
+    /// Cambio del conjunto de oraculos encolado, con su instante de efecto.
+    PendingOracleKeys,
 }
 
 /// Default wallet age floor. Chosen to be hostile to throw-away bot wallets
 /// without locking out real PyMEs who just discovered Stellar last month.
 const DEFAULT_MIN_WALLET_AGE_DAYS: u32 = 30;
+
+/// Piso INMUTABLE del umbral de oraculos.
+///
+/// Existe por un hallazgo propio del 2026-10-29: `set_oracle_keys` era solo-admin
+/// e instantaneo, asi que **una sola llave podia reemplazar las cinco y bajar el
+/// umbral a 1**, y desde ahi acunar cualquier score a cualquier direccion. El
+/// 3-de-5 estaba protegido por un 1-de-1.
+///
+/// Es una constante y NO un parametro de `initialize`, a proposito: un piso que
+/// existe para acotar al admin no puede quedar a merced de como el admin
+/// despliega. No hay setter. Cambiarlo es una generacion nueva.
+const MIN_ORACLE_THRESHOLD: u32 = 3;
+
+/// Gracia obligatoria antes de que un cambio del conjunto de oraculos tome
+/// efecto. Mismo valor que `param_grace_secs` del controller: 48 h.
+///
+/// Durante la ventana cualquiera lee el cambio pendiente y decide. Y
+/// `apply_oracle_keys` es **permissionless**, asi que el admin no puede
+/// aplicarlo antes ni retenerlo despues.
+const ORACLE_GRACE_SECS: u64 = 172_800;
 
 // =============================================================================
 // CREDIT BADGE STRUCTURE
@@ -167,6 +198,14 @@ pub enum Error {
     ContractPaused = 19,
     /// `slash` sobre un usuario sin badge vigente.
     NoActiveBadge = 20,
+    /// El umbral propuesto esta por debajo de `MIN_ORACLE_THRESHOLD`.
+    ThresholdBelowFloor = 21,
+    /// `set_oracle_keys` solo configura el conjunto inicial. Despues va por cola.
+    OracleKeysAlreadySet = 22,
+    /// No hay cambio de oraculos encolado.
+    NoPendingOracleChange = 23,
+    /// El cambio encolado sigue en periodo de gracia.
+    StillInOracleGrace = 24,
 }
 
 #[contract]
@@ -228,36 +267,29 @@ impl VigenteBadge {
     /// Atomic replacement (vs add/remove individual keys) prevents the bricked-contract
     /// failure mode where keys.len() drops below threshold mid-rotation. The admin
     /// must always present a self-consistent set in a single transaction.
+    /// Configura el conjunto INICIAL de oraculos. **Solo funciona una vez.**
+    ///
+    /// Antes esta funcion reemplazaba el conjunto completo de forma instantanea,
+    /// y como es solo-admin eso volvia decorativo el umbral k-de-n: una llave
+    /// podia poner `([llave_atacante], 1)` y acunar cualquier score en la
+    /// transaccion siguiente. Un cambio posterior ahora va por
+    /// `queue_set_oracle_keys` + `apply_oracle_keys`, con 48 h de gracia.
     pub fn set_oracle_keys(env: Env, keys: Vec<BytesN<32>>, threshold: u32) {
         let admin: Address = Self::require_admin(&env);
         admin.require_auth();
 
+        let existing: Vec<BytesN<32>> = env
+            .storage()
+            .instance()
+            .get(&DataKey::OracleKeys)
+            .unwrap_or(Vec::new(&env));
+        if !existing.is_empty() {
+            panic_with_error!(&env, Error::OracleKeysAlreadySet);
+        }
+
+        Self::validate_oracle_set(&env, &keys, threshold);
+
         let n = keys.len();
-        if n == 0 {
-            panic_with_error!(&env, Error::EmptyOracleKeySet);
-        }
-        if threshold == 0 {
-            panic_with_error!(&env, Error::ThresholdNotPositive);
-        }
-        if threshold > n {
-            panic_with_error!(&env, Error::ThresholdExceedsKeyCount);
-        }
-
-        // Reject duplicates — every pubkey must be unique in the set.
-        let mut i: u32 = 0;
-        while i < n {
-            let key_i = keys.get(i).unwrap();
-            let mut j: u32 = i + 1;
-            while j < n {
-                let key_j = keys.get(j).unwrap();
-                if key_i == key_j {
-                    panic_with_error!(&env, Error::DuplicateOracleKey);
-                }
-                j += 1;
-            }
-            i += 1;
-        }
-
         env.storage().instance().set(&DataKey::OracleKeys, &keys);
         env.storage().instance().set(&DataKey::OracleThreshold, &threshold);
 
@@ -265,6 +297,96 @@ impl VigenteBadge {
             (symbol_short!("acl"), symbol_short!("oracles")),
             (n, threshold),
         );
+    }
+
+    /// Encola un cambio del conjunto de oraculos. Toma efecto en 48 h.
+    pub fn queue_set_oracle_keys(env: Env, keys: Vec<BytesN<32>>, threshold: u32) {
+        let admin: Address = Self::require_admin(&env);
+        admin.require_auth();
+        Self::validate_oracle_set(&env, &keys, threshold);
+
+        let effective_at = env.ledger().timestamp() + ORACLE_GRACE_SECS;
+        let pending = PendingOracleChange { keys, threshold, effective_at };
+        env.storage().instance().set(&DataKey::PendingOracleKeys, &pending);
+        env.events().publish((symbol_short!("orac_q"),), effective_at);
+    }
+
+    /// Aplica el cambio encolado. **PERMISSIONLESS, y es el punto.**
+    ///
+    /// Si solo el admin pudiera aplicarlo, podria encolar un cambio y aplicarlo
+    /// en el instante que le conviniera. Siendo permissionless, la gracia es
+    /// real: el cambio es publico 48 h antes y cualquiera puede consumarlo
+    /// despues. El admin no decide **cuando**, solo **que**.
+    pub fn apply_oracle_keys(env: Env) {
+        let pending: PendingOracleChange = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingOracleKeys)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NoPendingOracleChange));
+        if env.ledger().timestamp() < pending.effective_at {
+            panic_with_error!(&env, Error::StillInOracleGrace);
+        }
+        // Se revalida al APLICAR, no solo al encolar: el piso tiene que valer en
+        // el instante en que toma efecto.
+        Self::validate_oracle_set(&env, &pending.keys, pending.threshold);
+
+        env.storage().instance().set(&DataKey::OracleKeys, &pending.keys);
+        env.storage()
+            .instance()
+            .set(&DataKey::OracleThreshold, &pending.threshold);
+        env.storage().instance().remove(&DataKey::PendingOracleKeys);
+        env.events()
+            .publish((symbol_short!("orac_ok"),), pending.effective_at);
+    }
+
+    /// Cancela un cambio encolado. Solo el admin, y solo antes de aplicarse.
+    pub fn cancel_oracle_keys(env: Env) {
+        let admin: Address = Self::require_admin(&env);
+        admin.require_auth();
+        if !env.storage().instance().has(&DataKey::PendingOracleKeys) {
+            panic_with_error!(&env, Error::NoPendingOracleChange);
+        }
+        env.storage().instance().remove(&DataKey::PendingOracleKeys);
+        env.events()
+            .publish((symbol_short!("orac_x"),), env.ledger().timestamp());
+    }
+
+    /// El cambio encolado, si lo hay. Existe para que la gracia sea auditable
+    /// por cualquiera sin leer eventos historicos.
+    pub fn get_pending_oracle_keys(env: Env) -> Option<PendingOracleChange> {
+        env.storage().instance().get(&DataKey::PendingOracleKeys)
+    }
+
+    /// Reglas compartidas entre la configuracion inicial y la encolada, para
+    /// que no puedan divergir.
+    fn validate_oracle_set(env: &Env, keys: &Vec<BytesN<32>>, threshold: u32) {
+        let n = keys.len();
+        if n == 0 {
+            panic_with_error!(env, Error::EmptyOracleKeySet);
+        }
+        if threshold == 0 {
+            panic_with_error!(env, Error::ThresholdNotPositive);
+        }
+        if threshold > n {
+            panic_with_error!(env, Error::ThresholdExceedsKeyCount);
+        }
+        // El piso que impide colapsar el umbral a 1.
+        if threshold < MIN_ORACLE_THRESHOLD {
+            panic_with_error!(env, Error::ThresholdBelowFloor);
+        }
+        let mut i: u32 = 0;
+        while i < n {
+            let key_i = keys.get(i).unwrap();
+            let mut j: u32 = i + 1;
+            while j < n {
+                let key_j = keys.get(j).unwrap();
+                if key_i == key_j {
+                    panic_with_error!(env, Error::DuplicateOracleKey);
+                }
+                j += 1;
+            }
+            i += 1;
+        }
     }
 
     /// Read-only: current oracle pubkey set.
