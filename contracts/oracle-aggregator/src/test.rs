@@ -12,7 +12,7 @@ extern crate std;
 
 use crate::{
     Asset, Error, OracleAggregator, OracleAggregatorClient, PriceData, Route,
-    MAX_DEVIATION_CEILING_BPS, AccrualConfig, FxLeg, MAX_RATE_BPS,
+    MAX_DEVIATION_CEILING_BPS, AccrualConfig, FxLeg, MAX_RATE_BPS, VaultNav,
 };
 use soroban_sdk::{
     contract, contractimpl, contracttype,
@@ -832,4 +832,311 @@ fn pasado_el_veinte_por_ciento_la_ruta_viva_de_xlm_revierte() {
     h.up.set_price(&up_xlm(&h.env), &22_990_000_000_000, &T0);
     let err = h.agg.try_lastprice(&xlm_prod).err().unwrap().unwrap();
     assert_eq!(err, soroban_sdk::Error::from_contract_error(Error::DeviationAboveLimit as u32));
+}
+
+// =============================================================================
+// `LastGood` VIEJO — LA GUARDA DE DESVIACION NO TIENE BASE DE TIEMPO
+// =============================================================================
+//
+// `check_deviation` compara contra `LastGood`, que guarda **solo el precio, sin
+// marca de tiempo**. Asi que la guarda no puede distinguir una referencia de un
+// minuto de una de un mes, y trata un movimiento legitimo acumulado en semanas
+// igual que un salto instantaneo.
+//
+// Y `LastGood` **solo avanza en una lectura que no revierte**: una simulacion
+// no persiste. Entonces una vez que la referencia queda vieja, cada lectura
+// revierte, y al revertir no actualiza la referencia. Se cierra sobre si misma.
+
+/// **Una referencia vieja bloquea el precio, y leer no lo destraba.**
+///
+/// El unico camino de salida es un cambio de ruta, que cuesta el grace period
+/// completo. Durante esas 48 h el activo **no tiene precio**: no se puede
+/// depositar, ni pedir, ni retirar con deuda, ni liquidar.
+#[test]
+fn lastgood_viejo_bloquea_el_precio_y_solo_sale_por_un_cambio_de_ruta() {
+    let h = setup();
+
+    // Una lectura confirmada fija la referencia.
+    let p0 = h.agg.lastprice(&h.xlm).unwrap().price;
+
+    // Un mes sin operaciones, y el upstream se movio 30 %. El precio nuevo es
+    // LEGITIMO y esta FRESCO: el movimiento se acumulo en treinta dias.
+    advance(&h.env, 30 * 86_400);
+    let legitimo = p0 * 130 / 100;
+    h.up
+        .set_price(&up_xlm(&h.env), &legitimo, &h.env.ledger().timestamp());
+
+    let err = h.agg.try_lastprice(&h.xlm).err().unwrap().unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::DeviationAboveLimit as u32)
+    );
+
+    // Y no se destraba leyendo: la referencia solo avanza si la lectura NO
+    // revierte, asi que queda en bucle. Esto es el bloqueo, no un tropiezo.
+    for _ in 0..3 {
+        assert!(
+            h.agg.try_lastprice(&h.xlm).is_err(),
+            "la referencia se destrabo sola: este test documenta un \
+             comportamiento que ya no existe"
+        );
+    }
+
+    // La unica salida: encolar un cambio de ruta y esperar la gracia completa.
+    h.agg.queue_set_route(
+        &h.xlm,
+        &Route {
+            source: h.up_id.clone(),
+            upstream_asset: up_xlm(&h.env),
+            max_age: MAX_AGE,
+            max_deviation_bps: DEV_BPS,
+        },
+    );
+
+    // Encolar NO alcanza: durante la gracia el activo sigue sin precio.
+    assert!(
+        h.agg.try_lastprice(&h.xlm).is_err(),
+        "encolar la ruta destrabo el precio antes de la gracia"
+    );
+
+    advance(&h.env, GRACE + 1);
+    h.up
+        .set_price(&up_xlm(&h.env), &legitimo, &h.env.ledger().timestamp());
+    h.agg.apply_route(&h.xlm);
+
+    // `apply_route` borra la referencia, y recien ahi vuelve el precio.
+    assert_eq!(h.agg.lastprice(&h.xlm).unwrap().price, legitimo);
+}
+
+/// **El movimiento gradual NO se bloquea**, y es lo que hace que el defecto
+/// anterior sea tolerable en un protocolo con actividad.
+///
+/// Importa medirlo: si la guarda rechazara tambien la deriva lenta, no seria
+/// un riesgo de liveness condicionado a la inactividad — seria un bloqueo
+/// garantizado, y la guarda habria que sacarla.
+#[test]
+fn lastgood_la_deriva_lenta_con_actividad_no_bloquea_nada() {
+    let h = setup();
+    let mut p = h.agg.lastprice(&h.xlm).unwrap().price;
+
+    // Treinta subidas de 1 %: +34 % acumulado, mucho mas que el tope de la
+    // guarda, y ninguna lectura revierte porque cada paso cabe.
+    for _ in 0..30 {
+        advance(&h.env, 86_400);
+        p = p * 101 / 100;
+        h.up.set_price(&up_xlm(&h.env), &p, &h.env.ledger().timestamp());
+        assert_eq!(h.agg.lastprice(&h.xlm).unwrap().price, p);
+    }
+    assert!(p > 13_000_000_000_000 * 130 / 100 / 10, "el precio no se movio");
+}
+
+// =============================================================================
+// WP-1 · MODO `VaultNav` — NAV ATESTIGUADO POR UN TERCERO
+// =============================================================================
+//
+// La interfaz del mock espeja la del `nav_oracle` REAL de Strata, leida de su
+// contrato en testnet (`CBKVMUMI…63CO`) el 2026-10-30:
+//
+//   nav_per_share() -> i128     1000000000000000000  = 1,0 a 18 decimales
+//   attested_at()   -> u64      1792783222
+//   is_stale()      -> bool     true     state() -> "Stale"
+//   ensure_consumable()         revierte HOY con Error(Contract, #3007)
+//   config() -> cooldown 60 · freshness 86400 · max_up_bps 1000 · max_down_bps null
+
+#[derive(Clone)]
+#[contracttype]
+pub enum VKey {
+    Nav,
+    At,
+    Consumible,
+}
+
+#[contract]
+pub struct MockVaultOracle;
+
+#[contractimpl]
+impl MockVaultOracle {
+    pub fn poner(env: Env, nav: i128, at: u64) {
+        env.storage().instance().set(&VKey::Nav, &nav);
+        env.storage().instance().set(&VKey::At, &at);
+    }
+    pub fn set_consumible(env: Env, ok: bool) {
+        env.storage().instance().set(&VKey::Consumible, &ok);
+    }
+    pub fn nav_per_share(env: Env) -> i128 {
+        env.storage().instance().get(&VKey::Nav).unwrap_or(0)
+    }
+    pub fn attested_at(env: Env) -> u64 {
+        env.storage().instance().get(&VKey::At).unwrap_or(0)
+    }
+    pub fn ensure_consumable(env: Env) {
+        let ok: bool = env.storage().instance().get(&VKey::Consumible).unwrap_or(true);
+        if !ok {
+            // Asi se ve desde afuera un Error(Contract, 3007) de Strata: una
+            // reversion del tercero que nosotros tenemos que traducir.
+            panic!("not consumable");
+        }
+    }
+}
+
+const NAV_UNO: i128 = 1_000_000_000_000_000_000; // 1,0 a 18 decimales
+const PRECIO_UNO: i128 = 100_000_000_000_000; // 1,0 a 14 decimales
+
+/// Monta el agregador con un share de vault listado contra un oraculo de NAV.
+fn con_vault(
+    max_age: u64,
+    max_up_bps: u32,
+) -> (H<'static>, MockVaultOracleClient<'static>, Asset) {
+    let h = setup();
+    let nav_id = h.env.register_contract(None, MockVaultOracle);
+    let nav = MockVaultOracleClient::new(&h.env, &nav_id);
+    nav.poner(&NAV_UNO, &T0);
+
+    let share = Asset::Stellar(Address::generate(&h.env));
+    h.agg.set_initial_vault_nav(
+        &share,
+        &VaultNav {
+            oracle: nav_id.clone(),
+            decimals_in: 18,
+            max_age,
+            max_up_bps,
+        },
+    );
+    (h, nav, share)
+}
+
+/// **KPI-1.1 — el NAV se sirve reescalado, con desvio CERO.**
+#[test]
+fn vault_nav_sirve_el_nav_reescalado_con_desvio_cero() {
+    let (h, _nav, share) = con_vault(900, 1_000);
+
+    let pd = h.agg.lastprice(&share).unwrap();
+    assert_eq!(pd.price, PRECIO_UNO, "el reescalado 18->14 no da 1,0");
+
+    let bp = (pd.price - PRECIO_UNO).abs() * 10_000 / PRECIO_UNO;
+    assert_eq!(bp, 0, "desvio {} bp, se exige 0,0000", bp);
+
+    // El timestamp es el de la ATESTIGUACION, no el de ahora.
+    assert_eq!(pd.timestamp, T0, "se reporto una edad que no es la real");
+}
+
+/// **KPI-1.2 — si el tercero dice que no es consumible, revertimos TIPADO.**
+///
+/// Es el caso que hoy da el contrato real de Strata. Lo traducimos a un codigo
+/// propio: el consumidor es nuestro y no tiene por que leer codigos ajenos.
+#[test]
+fn vault_nav_no_consumible_revierte_tipado() {
+    let (h, nav, share) = con_vault(900, 1_000);
+    nav.set_consumible(&false);
+
+    let err = h.agg.try_lastprice(&share).err().unwrap().unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::VaultNotConsumable as u32),
+        "un panico del tercero tiene que salir como error tipado nuestro"
+    );
+}
+
+/// **Nuestra frescura rige sobre la del tercero.**
+///
+/// El oraculo se declara consumible —su ventana es de 86.400 s— y el NAV igual
+/// se rechaza porque pasa NUESTRO `max_age`.
+#[test]
+fn vault_nav_nuestra_frescura_rige_sobre_la_del_tercero() {
+    let (h, nav, share) = con_vault(900, 1_000);
+
+    nav.poner(&NAV_UNO, &(T0 - 3_600));
+    nav.set_consumible(&true);
+
+    let err = h.agg.try_lastprice(&share).err().unwrap().unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::VaultNavStale as u32)
+    );
+
+    nav.poner(&NAV_UNO, &(T0 - 800));
+    assert!(h.agg.lastprice(&share).is_some());
+}
+
+/// **INVARIANTE A.1.3 #1 — ninguna caida del NAV puede ser censurada.**
+///
+/// Si el activo vale menos, el protocolo tiene que enterarse. Siempre.
+#[test]
+fn vault_nav_invariante_ninguna_caida_se_censura() {
+    for pct in [99_i128, 90, 50, 20, 5, 1] {
+        let (h, nav, share) = con_vault(900, 1_000);
+        assert_eq!(h.agg.lastprice(&share).unwrap().price, PRECIO_UNO);
+
+        nav.poner(&(NAV_UNO * pct / 100), &T0);
+        let pd = h
+            .agg
+            .lastprice(&share)
+            .unwrap_or_else(|| panic!("se censuro una caida al {} %", pct));
+        assert_eq!(
+            pd.price,
+            PRECIO_UNO * pct / 100,
+            "la caida al {} % no se sirvio tal cual",
+            pct
+        );
+    }
+}
+
+/// La otra mitad de la asimetria: una SUBIDA mayor al tope se rechaza.
+#[test]
+fn vault_nav_una_subida_mayor_al_tope_revierte() {
+    let (h, nav, share) = con_vault(900, 1_000); // 10 %
+    assert_eq!(h.agg.lastprice(&share).unwrap().price, PRECIO_UNO);
+
+    nav.poner(&(NAV_UNO * 111 / 100), &T0);
+    let err = h.agg.try_lastprice(&share).err().unwrap().unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::VaultNavAboveUpBand as u32)
+    );
+
+    nav.poner(&(NAV_UNO * 109 / 100), &T0);
+    assert!(h.agg.lastprice(&share).is_some());
+}
+
+/// Un NAV no positivo no se sirve nunca.
+#[test]
+fn vault_nav_no_positivo_revierte() {
+    for malo in [0_i128, -1, -NAV_UNO] {
+        let (h, nav, share) = con_vault(900, 0);
+        nav.poner(&malo, &T0);
+        let err = h.agg.try_lastprice(&share).err().unwrap().unwrap();
+        assert_eq!(
+            err,
+            soroban_sdk::Error::from_contract_error(Error::VaultNavNotPositive as u32),
+            "NAV {} no se rechazo",
+            malo
+        );
+    }
+}
+
+/// Los tres modos de precio son excluyentes: un activo tiene uno, nunca dos.
+#[test]
+fn vault_nav_es_excluyente_con_los_otros_modos() {
+    let (h, _nav, _share) = con_vault(900, 1_000);
+
+    // Al activo que YA tiene ruta no se le puede poner un vault.
+    let nav_id2 = h.env.register_contract(None, MockVaultOracle);
+    let err = h
+        .agg
+        .try_set_initial_vault_nav(
+            &h.xlm,
+            &VaultNav {
+                oracle: nav_id2,
+                decimals_in: 18,
+                max_age: 900,
+                max_up_bps: 1_000,
+            },
+        )
+        .err()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        err,
+        soroban_sdk::Error::from_contract_error(Error::AssetAlreadyPriced as u32)
+    );
 }

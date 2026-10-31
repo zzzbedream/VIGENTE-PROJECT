@@ -64,6 +64,21 @@ pub trait PriceOracle {
     fn decimals(env: Env) -> u32;
 }
 
+/// **Oraculo de NAV atestiguado de un vault.** Es la interfaz que expone el
+/// `nav_oracle` de Strata, leida de su contrato en testnet
+/// (`CBKVMUMI…63CO`) el 2026-10-30, no de su documentacion.
+///
+/// `ensure_consumable` es **su propia compuerta**: revierte si el NAV no se
+/// puede consumir —vencido por su politica de frescura o con el ripcord
+/// levantado—. Delegar en ella es mejor que reimplementar su nocion de
+/// consumibilidad, que incluye casos que no conocemos.
+#[contractclient(name = "VaultNavOracleClient")]
+pub trait VaultNavOracle {
+    fn nav_per_share(env: Env) -> i128;
+    fn attested_at(env: Env) -> u64;
+    fn ensure_consumable(env: Env);
+}
+
 // =============================================================================
 // ROUTING
 // =============================================================================
@@ -141,6 +156,33 @@ pub struct Route {
     pub max_deviation_bps: u32,
 }
 
+/// **Tercer modo de precio: shares de un vault con NAV atestiguado.**
+///
+/// A diferencia de `Route` —donde un upstream nos da un precio ya formado— y de
+/// `AccrualConfig` —donde el NAV lo calculamos nosotros desde una tasa— aca el
+/// NAV lo **atestigua un tercero** y nosotros lo validamos y lo reescalamos.
+///
+/// **La asimetria de la guarda es deliberada y es lo contrario de `AccrualConfig`.**
+/// Alla `nav_at` es monotona no decreciente por construccion, porque el numero
+/// es nuestro. Aca el numero es de un tercero, y frente a un tercero la guarda
+/// tiene que proteger al PRESTAMISTA:
+///
+/// - **subidas acotadas** por `max_up_bps` -> frena inflar colateral
+/// - **bajadas sin tope** -> el prestamista nunca puede hacerse el ciego
+#[derive(Clone, Debug, PartialEq)]
+#[contracttype]
+pub struct VaultNav {
+    /// El contrato que atestigua el NAV (p. ej. el `nav_oracle` de Strata).
+    pub oracle: Address,
+    /// Decimales en los que ese oraculo expresa el NAV. Strata usa 18.
+    pub decimals_in: u32,
+    /// **Nuestra** ventana de frescura, sobre `attested_at()`. Independiente
+    /// de la del tercero, que puede ser mucho mas laxa.
+    pub max_age: u64,
+    /// Tope de SUBIDA en bps contra la ultima lectura servida. 0 = sin tope.
+    pub max_up_bps: u32,
+}
+
 /// A queued route change awaiting its grace period.
 #[derive(Clone, Debug, PartialEq)]
 #[contracttype]
@@ -169,6 +211,9 @@ pub enum DataKey {
     /// activo -> AccrualConfig, para los activos que se DEVENGAN.
     /// Se consulta antes que `RouteOf`: un activo tiene una u otra, no las dos.
     AccrualOf(Asset),
+    /// activo -> VaultNav, para shares de un vault con NAV atestiguado por un
+    /// tercero. Tercer modo de precio, excluyente con los otros dos.
+    VaultNavOf(Asset),
     /// Two-step admin rotation.
     PendingAdmin,
 }
@@ -268,6 +313,20 @@ pub enum Error {
     /// `ahora < anchor_at` devuelve `nav_anchor` directo -- el precio salta de
     /// inmediato al NAV futuro. Un ancla es un valor OBSERVADO, nunca predicho.
     AnchorInFuture = 22,
+    /// El oraculo del vault dice que su NAV no se puede consumir: vencido por
+    /// SU politica, o con el ripcord levantado. Se propaga TIPADO y propio,
+    /// no el codigo ajeno, porque el consumidor es nuestro.
+    VaultNotConsumable = 23,
+    /// El NAV esta mas viejo que NUESTRO `max_age`. Es una guarda ADICIONAL:
+    /// no heredamos la politica de frescura del tercero.
+    VaultNavStale = 24,
+    /// El oraculo devolvio un NAV no positivo.
+    VaultNavNotPositive = 25,
+    /// El NAV subio mas que `max_up_bps` contra la ultima lectura servida.
+    /// **Las BAJADAS no tienen tope, a proposito.**
+    VaultNavAboveUpBand = 26,
+    /// `decimals_in` fuera de rango razonable.
+    VaultDecimalsOutOfRange = 27,
 }
 
 #[contract]
@@ -317,7 +376,9 @@ impl OracleAggregator {
         // una ruta sobre un activo que ya tenia devengo, y el activo quedaba
         // con dos caminos de precio que no tienen por que coincidir. Lo
         // encontro el test `un_activo_no_puede_tener_ruta_y_devengo`.
-        if env.storage().instance().has(&DataKey::AccrualOf(asset.clone())) {
+        if env.storage().instance().has(&DataKey::AccrualOf(asset.clone()))
+            || env.storage().instance().has(&DataKey::VaultNavOf(asset.clone()))
+        {
             panic_with_error!(&env, Error::AssetAlreadyPriced);
         }
         Self::validate_route(&env, &route);
@@ -345,6 +406,16 @@ impl OracleAggregator {
             .get::<DataKey, AccrualConfig>(&DataKey::AccrualOf(asset.clone()))
         {
             return Self::accrued_price(&env, &asset, &cfg);
+        }
+
+        // Shares de un vault con NAV atestiguado por un tercero. Tambien
+        // excluyente con los otros dos modos.
+        if let Some(cfg) = env
+            .storage()
+            .instance()
+            .get::<DataKey, VaultNav>(&DataKey::VaultNavOf(asset.clone()))
+        {
+            return Self::vault_nav_price(&env, &asset, &cfg);
         }
 
         let route: Route = env.storage().instance().get(&DataKey::RouteOf(asset.clone()))?;
@@ -508,6 +579,7 @@ impl OracleAggregator {
         // caminos de precio para el mismo activo y nada garantiza que coincidan.
         if env.storage().instance().has(&DataKey::RouteOf(asset.clone()))
             || env.storage().instance().has(&DataKey::AccrualOf(asset.clone()))
+            || env.storage().instance().has(&DataKey::VaultNavOf(asset.clone()))
         {
             panic_with_error!(&env, Error::AssetAlreadyPriced);
         }
@@ -759,6 +831,126 @@ impl OracleAggregator {
             }
             p
         }
+    }
+
+    /// **Precio de un share de vault, desde el NAV que atestigua un tercero.**
+    ///
+    /// Orden de las guardas, y cada una esta por una razon distinta:
+    ///
+    /// 1. **Su compuerta.** `ensure_consumable()` revierte si el NAV no se
+    ///    puede consumir por SU politica —vencido, o ripcord levantado—. Se
+    ///    delega en ella porque conoce casos que nosotros no.
+    /// 2. **Nuestra frescura.** `attested_at()` contra NUESTRO `max_age`. Es
+    ///    adicional a proposito: la frescura de Strata en testnet es de
+    ///    **86.400 s**, y veinticuatro horas de NAV viejo es demasiado para
+    ///    decidir un prestamo. **No heredamos la politica de un tercero.**
+    /// 3. **NAV positivo**, y reescalado sin caer a cero.
+    /// 4. **Tope de SUBIDA solamente.** Las bajadas pasan siempre.
+    fn vault_nav_price(env: &Env, asset: &Asset, cfg: &VaultNav) -> Option<PriceData> {
+        let oracle = VaultNavOracleClient::new(env, &cfg.oracle);
+
+        // (1) Su compuerta. Cualquier error se traduce a NUESTRO codigo: el
+        // consumidor es nuestro y no debe tener que interpretar codigos ajenos.
+        if oracle.try_ensure_consumable().is_err() {
+            panic_with_error!(env, Error::VaultNotConsumable);
+        }
+
+        // (2) Nuestra ventana de frescura.
+        let atestiguado = match oracle.try_attested_at() {
+            Ok(Ok(t)) => t,
+            _ => panic_with_error!(env, Error::VaultNotConsumable),
+        };
+        let now = env.ledger().timestamp();
+        if now.saturating_sub(atestiguado) > cfg.max_age {
+            panic_with_error!(env, Error::VaultNavStale);
+        }
+
+        // (3) NAV positivo y reescalado.
+        let nav = match oracle.try_nav_per_share() {
+            Ok(Ok(v)) => v,
+            _ => panic_with_error!(env, Error::VaultNotConsumable),
+        };
+        if nav <= 0 {
+            panic_with_error!(env, Error::VaultNavNotPositive);
+        }
+        let out_dec: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::Decimals)
+            .expect("not initialized");
+        let price = Self::rescale(env, nav, cfg.decimals_in, out_dec);
+        if price == 0 {
+            panic_with_error!(env, Error::PriceUnderflow);
+        }
+
+        // (4) Tope de subida contra la ultima lectura servida. **Asimetrico.**
+        if cfg.max_up_bps > 0 {
+            if let Some(last) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, i128>(&DataKey::LastGood(asset.clone()))
+            {
+                if last > 0 && price > last {
+                    let subida = price - last;
+                    if subida.saturating_mul(10_000) > last.saturating_mul(cfg.max_up_bps as i128) {
+                        panic_with_error!(env, Error::VaultNavAboveUpBand);
+                    }
+                }
+            }
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::LastGood(asset.clone()), &price);
+
+        // El timestamp es el de la atestiguacion, no el de ahora: el NAV es un
+        // hecho fechado por un tercero y mentir sobre su edad seria lo peor
+        // que podriamos hacerle a un consumidor que valida frescura.
+        Some(PriceData {
+            price,
+            timestamp: atestiguado,
+        })
+    }
+
+    /// Lista un share de vault. **Solo inicial**, como los otros dos modos.
+    pub fn set_initial_vault_nav(env: Env, asset: Asset, cfg: VaultNav) {
+        let admin = Self::require_admin(&env);
+        admin.require_auth();
+
+        if env.storage().instance().has(&DataKey::RouteOf(asset.clone()))
+            || env.storage().instance().has(&DataKey::AccrualOf(asset.clone()))
+            || env.storage().instance().has(&DataKey::VaultNavOf(asset.clone()))
+        {
+            panic_with_error!(&env, Error::AssetAlreadyPriced);
+        }
+        if cfg.decimals_in > 38 {
+            panic_with_error!(&env, Error::VaultDecimalsOutOfRange);
+        }
+        if cfg.max_age == 0 {
+            panic_with_error!(&env, Error::MaxAgeRequired);
+        }
+        if cfg.max_up_bps > MAX_DEVIATION_CEILING_BPS {
+            panic_with_error!(&env, Error::DeviationAboveCeiling);
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::VaultNavOf(asset.clone()), &cfg);
+        let mut assets: Vec<Asset> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Assets)
+            .unwrap_or(Vec::new(&env));
+        if !assets.contains(&asset) {
+            assets.push_back(asset.clone());
+            env.storage().instance().set(&DataKey::Assets, &assets);
+        }
+        env.storage().instance().extend_ttl(TTL, TTL);
+        env.events().publish((symbol_short!("vault_in"),), asset);
+    }
+
+    pub fn get_vault_nav(env: Env, asset: Asset) -> Option<VaultNav> {
+        env.storage().instance().get(&DataKey::VaultNavOf(asset))
     }
 
     /// Reject moves larger than `max_bps` against the last price we served.
