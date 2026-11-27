@@ -10,7 +10,7 @@ import { ImageResponse } from "next/og";
 // without changing the rendered image.
 export const dynamic = "force-dynamic";
 
-export const alt = "Vigente Protocol — credit without permission";
+export const alt = "Vigente Protocol — credit infrastructure for your platform";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -57,34 +57,34 @@ export default function OpengraphImage() {
         >
           <div
             style={{
-              fontSize: 96,
+              fontSize: 84,
               fontWeight: 500,
               letterSpacing: -3,
               lineHeight: 1,
             }}
           >
-            credit without permission
+            credit infrastructure for your platform
           </div>
           <div
             style={{
               fontSize: 28,
               fontWeight: 300,
               color: "rgba(255,255,255,0.75)",
-              maxWidth: 800,
+              maxWidth: 900,
               lineHeight: 1.3,
             }}
           >
-            k-of-n threshold credit oracle on Stellar Soroban. Verifiable
-            borrower reputation signed by an independent quorum, with zero
-            fintech in the trust path.
+            Borrow against tokenized T-bills and stablecoins instead of
+            selling them. Each borrower&apos;s limit comes from their on-chain
+            repayment history.
           </div>
         </div>
 
         {/* Bottom: honest stats */}
         <div style={{ display: "flex", gap: 64, alignItems: "flex-end" }}>
-          <Stat number="3 of 5" label="ed25519 threshold sigs" />
-          <Stat number="104" label="tests green" />
-          <Stat number="92 b" label="canonical mint message" />
+          <Stat number="60 · 75 · 85%" label="LTV by repayment history" />
+          <Stat number="48 h" label="timelock on price routes" />
+          <Stat number="3" label="contracts in the protocol" />
           <div
             style={{
               marginLeft: "auto",
@@ -93,7 +93,7 @@ export default function OpengraphImage() {
               alignSelf: "flex-end",
             }}
           >
-            live on stellar testnet
+            testnet · no external audit yet
           </div>
         </div>
       </div>

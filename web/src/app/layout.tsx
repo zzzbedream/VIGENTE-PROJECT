@@ -32,11 +32,11 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Vigente Protocol — reputation-powered credit on Stellar",
+    default: "Vigente Protocol — credit infrastructure for tokenized assets on Stellar",
     template: "%s · Vigente Protocol",
   },
   description:
-    "Borrow stablecoins against your assets on Stellar Soroban. On-time repayments — and consented income data — build a verifiable reputation that raises your limit and lowers your rate.",
+    "Credit infrastructure on Stellar Soroban: holders of tokenized T-bills and stablecoins borrow against them instead of selling. Each borrower's limit comes from their on-chain repayment history. Built for platforms and payment operators. Testnet only.",
   keywords: [
     "Stellar",
     "Soroban",
@@ -64,9 +64,9 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "Vigente Protocol",
-    title: "Vigente Protocol — reputation-powered credit on Stellar",
+    title: "Vigente Protocol — credit infrastructure for tokenized assets on Stellar",
     description:
-      "Borrow against your assets without selling them. Reputation — on-chain and consented off-chain — raises your LTV and lowers your rate. Credit primitive live on testnet.",
+      "Borrow against tokenized T-bills and stablecoins instead of selling them. Each borrower's limit comes from their on-chain repayment history. Built for platforms and payment operators. Live on testnet; no external audit yet.",
     url: SITE_URL,
     // Alineado con <html lang>: la landing abre en ingles. Antes decia es_419
     // mientras el documento declaraba `en`.
@@ -74,9 +74,11 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Vigente Protocol — reputation-powered credit on Stellar",
+    site: "@vigenteprotocol",
+    creator: "@vigenteprotocol",
+    title: "Vigente Protocol — credit infrastructure for tokenized assets on Stellar",
     description:
-      "Borrow against your assets without selling them. Reputation raises your LTV and lowers your rate. Live on Stellar testnet.",
+      "Borrow against tokenized T-bills and stablecoins instead of selling them. Limits come from on-chain repayment history. Live on Stellar testnet; no external audit yet.",
   },
 };
 

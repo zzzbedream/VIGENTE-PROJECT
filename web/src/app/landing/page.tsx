@@ -38,6 +38,8 @@ const mono = monoFont.className;
 const CONTRACT_ID = "CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD";
 const CONTRACT_URL = `https://stellar.expert/explorer/testnet/contract/${CONTRACT_ID}`;
 const CONTACT_EMAIL = "lucas.cifuentes@vigenteprotocol.tech";
+const X_HANDLE = "vigenteprotocol";
+const X_URL = `https://x.com/${X_HANDLE}`;
 const PUBKEY_RE = /^G[A-Z2-7]{55}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -1193,6 +1195,14 @@ function Footer() {
         <div className="flex flex-wrap items-center gap-5 text-[13px]">
           <a href={`mailto:${CONTACT_EMAIL}`} className="text-[#9AA3A0] transition-colors hover:text-[#E8ECEA]">
             {t.footContact}
+          </a>
+          <a
+            href={X_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#9AA3A0] transition-colors hover:text-[#E8ECEA]"
+          >
+            @{X_HANDLE} →
           </a>
           <Link href="/v3" className="text-[#9AA3A0] transition-colors hover:text-[#E8ECEA]">
             {t.footApp}
