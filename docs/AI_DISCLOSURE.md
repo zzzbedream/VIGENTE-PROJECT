@@ -56,8 +56,6 @@ Areas where AI was NOT a significant contributor:
 - Core Soroban contract logic (`contracts/vigente-badge/src/lib.rs`, `contracts/src/lib.rs`) — written by Founder with reference to Soroban docs and examples. AI used only for refactoring suggestions.
 - Cryptographic primitives (HMAC, SHA-256 hash calculations) — copied from well-known patterns, AI usage limited to syntax assistance.
 - Architectural decisions — made by Founder. AI provided alternatives and tradeoff analysis when asked.
-- Business plan reasoning — Founder + Commercial Lead. AI helped with phrasing and market data formatting only.
-- Partnership negotiations and LOI drafts — Founder and Commercial Lead directly. AI not involved in commercial conversations.
 - Git commits, deployments, and live transactions — all human-executed.
 
 ---
@@ -99,7 +97,6 @@ Rough estimate for the SCF reviewer's situational awareness:
 | Rust contracts (`contracts/`) | ~20% syntax assistance | ~80% original implementation by author |
 | Test code | ~40% scaffolding, ~60% manual assertion writing | — |
 | Configuration (env, package.json, Cargo.toml) | ~30% AI suggestions | ~70% manual |
-| Commercial work (LOIs, partnership messaging) | 0% AI | 100% human |
 
 These percentages are estimates based on the team's recollection. The codebase commit history is the authoritative source.
 
