@@ -1,5 +1,15 @@
 # SCF Resubmission — Evidence-Backed Answers to Every Rejection Point
 
+> **Historical document — August 2026.** This note accompanied our SCF #45 submission. It is kept
+> for the record and is not our current proposal: the ask, the hiring plan and the team structure
+> described here no longer apply.
+>
+> **Correction — 25 November 2026.** Earlier versions of this document said we had a signed
+> commercial agreement with Etherfuse and production API access. That was inaccurate. What exists
+> is an organisation approved in Etherfuse's sandbox, created by accepting their online terms;
+> nothing has been signed for production. The team is two people, and the protocol is three
+> contracts plus a test token. The affected passages are corrected in place below.
+
 > **Every claim in this document links to a verifiable artifact — a
 > transaction on stellar.expert, a commit in this repository, or a live
 > deployment.** Nothing here is a promise; promises are what got the first
@@ -38,22 +48,25 @@ a production app, and an isolated Blend pool running on our own SEP-40
 oracle. The grant funds only what is *not* built: mainnet hardening, audit
 prep, and ecosystem integrations.
 
-The team is structured as three seats — CEO (protocol & cryptography), CTO
-(contracts & mainnet path), COO (partnerships & GTM) — each registered on
-the SCF platform with KYC commitment. Profiles: [TEAM.md](TEAM.md).
+*(Corrected 25 Nov 2026 — this paragraph described three seats, one of them
+a partnerships role.)* The team is two people: the founder, who is the lead
+developer, and the CTO. Profiles: [TEAM.md](TEAM.md).
 
 **On execution risk.** This is a founder-led project and the commit history
 says so honestly: essentially all of it is the founder's, with two commits
-from a contributing engineer. We are not quoting a figure that moves with
+from a contributing engineer *(five as of November 2026)*. We are not quoting a figure that moves with
 every push — verify it yourself with `git shortlog -sne --all`, which
 prints four lines because each of us has committed under two name
 spellings, but there are two people in that history, not four.
 
-What the same history also shows is sustained execution: four contracts
-deployed and verifiable on testnet, a custom SEP-40 oracle aggregator, an
-isolated Blend pool activated with our own oracle in its immutable slot, an
-**internal** security review with documented remediation, and a signed commercial
-agreement with a Mexican tokenized-asset issuer with KYB approved.
+What the same history also shows is sustained execution: three contracts
+(plus a test token) deployed and verifiable on testnet, a custom SEP-40 oracle
+aggregator, an isolated Blend pool activated with our own oracle in its immutable
+slot, an **internal** security review with documented remediation, and an approved
+sandbox organisation with a Mexican tokenized-asset issuer *(corrected 25 Nov 2026:
+this line counted the test token as a fourth contract and described the sandbox
+access as an executed agreement; it was the issuer's online terms, accepted for
+sandbox access)*.
 
 The #41 review flagged execution risk for a solo builder. That risk was
 real. The response was to ship verifiable infrastructure instead of arguing
@@ -192,20 +205,24 @@ adds a liquidation fee so keepers are economically incentivized
 
 ### F. Partnerships — strictly what is real
 
-- **Signed:** a commercial agreement with **Etherfuse** — a tokenized-asset
-  issuer and fiat on/off-ramp — executed July 2026. Business verification
-  (KYB) approved; sandbox and production API access granted. This is a
-  counterparty that has completed diligence on us, not a letter of intent.
+- **Sandbox access, not an executed agreement** *(corrected 25 Nov 2026)*: an
+  organisation approved in the sandbox of **Etherfuse** — a tokenized-asset
+  issuer and fiat on/off-ramp — created in July–August 2026 by accepting their
+  online terms. No production agreement has been executed and production
+  onboarding has not been completed. The earlier wording here — an agreement
+  executed in July 2026, production API access, a counterparty that had
+  completed diligence on us — overstated it.
 - **Drafted, not signed:** a non-binding exploratory LOI with Payku exists as
-  a document and is pending signature. We do not count it as a partnership,
+  a document and is pending signature *(annotated 25 Nov 2026: it was never
+  signed)*. We do not count it as a partnership,
   because it is not one yet. The protocol is deliberately built so it does
   **not** depend on Payku or any fintech: the score comes from public Horizon
   data and the adapter is optional enrichment.
-- **In progress (dated, documented):** strategic-partner conversations
-  running on the live production app this week; Lobstr Partners
-  application and PaltaLabs (DeFindex) outreach are the COO's first-week
-  deliverables. The full pipeline lives in a public, weekly-updated
-  integration-conversations table — entities, status, last contact.
+- **In progress, as of August 2026** *(annotated 25 Nov 2026: the partnerships
+  role named here no longer exists, the public pipeline table this paragraph
+  mentioned is not in this repository, and the outreach described did not
+  produce a signed relationship)*: Lobstr Partners application and PaltaLabs
+  (DeFindex) outreach.
 - **Target customer, reframed:** the first segment is **Stellar DeFi
   protocols and DAO treasuries** — an audience that already exists
   on-chain and can consume `is_defaulted()`/`get_score()` today with
@@ -221,8 +238,10 @@ signed, it appears here with a date.
 **Confirmed.** MoneyGram is removed from the proposal entirely (it was
 never a confirmed partner). End users off-ramp loans through **wallets
 that already ship [SEP-24] anchors** — Lobstr, Beans App, Vibrant —
-requiring zero licensing on our side. This is Stellar composability used
-as intended. The live app already integrates the **Stellar Wallets Kit
+requiring no licence on our side for that cash-out leg *(annotated 25 Nov
+2026: that was our reading, not a legal opinion, and it covered the cash-out
+leg only; no legal review of the lending side has been done)*. This is
+Stellar composability used as intended. The live app already integrates the **Stellar Wallets Kit
 with 9 wallets** (Lobstr included) for onboarding.
 
 ---

@@ -7,6 +7,11 @@ Qué se probó y qué **no**, con la misma claridad. La relación comercial con 
 firmada y con KYB aprobado; este documento registra el estado **técnico** de la integración,
 que es distinto y está menos avanzado.
 
+> **Corrección — 25-nov-2026.** La frase anterior era inexacta. Lo que existe es una
+> organización aprobada en el **sandbox** del emisor, creada al aceptar sus términos en línea.
+> No hay nada firmado para producción, y el `approvedAt` de más abajo es el de esa organización
+> de sandbox.
+
 ---
 
 ## 1. Resultado en una línea
@@ -191,6 +196,12 @@ onboarding alojado es obligatorio también en ese caso?
 **No se ejecutó ninguna operación con fondos.** Sin onramp completado, sin órdenes, sin webhooks, sin
 registro de wallet institucional, sin verificación de firma HMAC, sin swap. Tampoco se probó
 producción: la credencial es de sandbox y los dos entornos no son intercambiables.
+
+> **Actualización — 25-nov-2026.** Este párrafo describe el estado al 15 de agosto. Desde
+> entonces se ejecutaron, **siempre en sandbox y testnet**, onramps de CETES (3-nov), onramps del
+> token en pesos (12-nov) y un swap entre ambos (14-nov). Sigue sin construirse el cliente de
+> producción —reintentos idempotentes y verificación de webhooks— y sigue sin probarse
+> producción.
 
 > This demonstrates authenticated access, organization identity with a provider-reported KYB
 > approval date, and asset discovery against the provider's sandbox — plus a concrete

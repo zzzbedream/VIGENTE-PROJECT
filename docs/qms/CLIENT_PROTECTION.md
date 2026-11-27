@@ -72,7 +72,7 @@ puede empujarlos a deuda impagable (patrón de las crisis de microfinanzas).
 - Decisiones financieras por unanimidad del equipo fundador; negociaciones de equity
   fuera del repo público.
 - **Falta:** política de gobernanza de datos y un responsable de protección al
-  cliente nombrado (puede ser el COO) antes del piloto.
+  cliente nombrado (hoy sería el fundador: el equipo es de dos personas) antes del piloto.
 
 ---
 

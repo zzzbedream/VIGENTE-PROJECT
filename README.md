@@ -5,6 +5,11 @@
 **Borrow against a tokenized asset instead of selling it — with a credit limit set by your
 on-chain history, not by a flat 150% rule that ignores it.**
 
+**Who it is for.** Platforms and payment operators that hold tokenized assets, or serve users who
+do: they integrate the credit engine instead of building one. **Testnet only** — no external
+audit, no mainnet, no outside users yet. What is and is not built is listed
+[below](#what-does-not-exist-yet).
+
 ## The problem, in three lines
 
 Someone holding a tokenized treasury bill who needs cash today has one option: **sell**. They
@@ -21,9 +26,11 @@ repeating addresses. If a document disagrees with this table, this table is righ
 
 | Contract | ID | What it does | Status |
 |---|---|---|---|
-| **`margin-controller`** | [`CAH2BHAE…C75W`](https://stellar.expert/explorer/testnet/contract/CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W) | Sets each user's LTV from their reputation, then forwards to the pool | **active** |
+| **`margin-controller`** | [`CCQDYAIN…NYJ6`](https://stellar.expert/explorer/testnet/contract/CCQDYAINLCBYBVMU4TAESACSMX4KTMSK3UFTHYIOLBIFBFPF2LCYNYJ6) | Sets each user's LTV from their reputation, then forwards to the pool. USDC debt | **current** (v4) |
+| `margin-controller`, peso debt | [`CARG2RUN…XT7G`](https://stellar.expert/explorer/testnet/contract/CARG2RUNATN53FU6AGIWD2UE4ZPOUOLNUDIUECO3DSZMUNBYUEOAXT7G) | Same binary as v4, configured with a peso token (MEXe, issuer sandbox) as the debt asset | **deployed, no loan made yet** |
+| `margin-controller`, previous | [`CAH2BHAE…C75W`](https://stellar.expert/explorer/testnet/contract/CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W) | v3. Still live, with test positions open; the ratio measurements in `audit/12` were taken here | **superseded 2026-10-28, still live** |
 | **`oracle-aggregator`** | [`CCG6EAGO…FQH4`](https://stellar.expert/explorer/testnet/contract/CCG6EAGO3VJIEP6DCY3WTNCNO4KCBQM2D6TXSAFOFRV67ZSBBXX2FQH4) | Our SEP-40 feed: per-asset routes, 48h timelock, staleness and deviation guards | **active** |
-| **Vigente pool** | [`CDYUHA3T…HNUI`](https://stellar.expert/explorer/testnet/contract/CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI) | Isolated Blend pool wired to our aggregator. XLM collateral / USDC debt | **`status: 0`** |
+| **Vigente pool** | [`CDYUHA3T…HNUI`](https://stellar.expert/explorer/testnet/contract/CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI) | Isolated Blend pool wired to our aggregator. Four reserves: USDC, XLM, CETES (issuer sandbox) and a test vault share we issued ourselves | **`status: 0`** |
 | **`vigente-badge` v3** | [`CDLLO7QE…HWVD`](https://stellar.expert/explorer/testnet/contract/CDLLO7QEPX2FGOF4VVEV7ISD7PL6FGEBO4N7XMGSIPVULOW43DZRHWVD) | Soulbound reputation. `mint` needs 3-of-5 ed25519 signatures verified on-chain | **active** |
 | Reflector | `CCYOZJCO…RN63` | Upstream price source — **third party**, not ours | — |
 
@@ -31,7 +38,7 @@ repeating addresses. If a document disagrees with this table, this table is righ
 
 Soroban contracts here have **no upgrade function** — there is no
 `update_current_contract_wasm` anywhere in this repo. That is a deliberate choice, and it
-has a price: every fix is a new deployment and a voluntary user migration. Four
+has a price: every fix is a new deployment and a voluntary user migration. Five
 generations is not churn, it is what that choice costs.
 
 | Gen | Address | Status | Why it was replaced |
@@ -39,16 +46,26 @@ generations is not churn, it is what that choice costs.
 | v0 | [`CAZ2JITV…S3FC`](https://stellar.expert/explorer/testnet/contract/CAZ2JITV36BJ5FO3UYM5XS32CISZ3JUCLW4GWYLGDUXHOGNJHELTS3FC) | historical | Findings from the 11-jul security review. Demo position exited cleanly before retirement |
 | v1 | [`CA4SFW73…CHDV`](https://stellar.expert/explorer/testnet/contract/CA4SFW7354P7AR6JQWLPNP4LUAH74KILBWMM2KFOJUJAOUM74XCMCHDV) | historical, still live | Ran on Blend's **canonical** pool. Replaced when we moved to our own pool so our aggregator could sit in the oracle slot. Kept live so earlier published evidence stays verifiable |
 | v2 | [`CCZNOV65…OCLJ`](https://stellar.expert/explorer/testnet/contract/CCZNOV65BYYMJP35CJDBRSUE5S6HRAW4R2MCB7LY4SVOXOHJKWK7OCLJ) | **superseded 2026-09-02**, still live | Closing **M-02** (`try_slash`), **M-03** (proportional liquidation) and **M-04** (per-user cap) required a new instance, because the contract cannot be upgraded. Built before the toolchain pin, so its build is **not reproducible**. Still holds **10 XLM that cannot be recovered** — finding N-01 |
-| **v3** | [`CAH2BHAE…C75W`](https://stellar.expert/explorer/testnet/contract/CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W) | **active** | Current. **Ledger hash equals the reproducible build** — see `contracts/deployed-wasm-hashes.json` |
+| v3 | [`CAH2BHAE…C75W`](https://stellar.expert/explorer/testnet/contract/CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W) | **superseded 2026-10-28**, still live | Closing **N-01** (untracked pool interest) and **N-02** (uncollectable protocol cut) required a new instance. Kept live: test positions are still open on it, and the ratio measurements in `audit/12` were taken here |
+| **v4** | [`CCQDYAIN…NYJ6`](https://stellar.expert/explorer/testnet/contract/CCQDYAINLCBYBVMU4TAESACSMX4KTMSK3UFTHYIOLBIFBFPF2LCYNYJ6) | **current** | Mandatory per-user cap at listing, typed errors, `sweep_interest` and `sweep_seized`. First generation to hold a tokenized government bond as collateral. Ledger hash `d6b5add0…`, verified equal to the reproducible build of its commit **on the machine that built it**, not across machines — see `contracts/deployed-wasm-hashes.json` and finding M-05. A second instance of the same binary, [`CARG2RUN…XT7G`](https://stellar.expert/explorer/testnet/contract/CARG2RUNATN53FU6AGIWD2UE4ZPOUOLNUDIUECO3DSZMUNBYUEOAXT7G), is configured for peso debt |
 
-The pool and the aggregator **did not change** across v2 → v3. The pool's immutable slot
-holds the *oracle*, not the controller, so only the controller address moved.
+The pool **did not change** across v2 → v4. The pool's immutable slot holds the *oracle*, not
+the controller, so only the controller address moved. The aggregator in that slot did not change
+either; since October it delegates the pricing of the tokenized bond to a second aggregator of
+ours, because the binary in the slot predates accrual pricing and cannot be replaced.
+
+**The source tree is ahead of v4.** Reporting an issuer freeze and covering recorded bad debt
+are written and tested, and not deployed.
 
 > **Reading older documents.** `audit/` and `docs/SCF_REBUTTAL.md` cite `CCZNOV65…` on
 > purpose: that is where those measurements were actually taken, and rewriting them would
 > falsify the record. An address in an audit document is evidence of where something was
 > measured, not a claim about what is active today. For what is active today, this table
-> is the only source.
+> is the only source. The same applies inside this README: the commands below read from v3
+> (`CAH2BHAE…`), and the transactions in the evidence table predate v4. The two demo accounts
+> have since withdrawn their collateral, so `max_borrow` returns 0 for both as of 25 November
+> 2026 — the ratio below is a record of what was measured, and the note under the commands
+> says how to reproduce it.
 
 ## The evidence
 
@@ -98,6 +115,8 @@ No keys needed for any of this. Substitute any funded testnet account for `<YOUR
 
 ```bash
 POOL=CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI
+# v3: where the comparison was measured. The current code is v4 (see the table); the same
+# commands work on either.
 CTRL=CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W
 
 # 1. The pool is active AND runs on our oracle → status 0, oracle CCG6EAGO…
@@ -149,14 +168,26 @@ to a feed we operate. Full design, including the off-chain half and the trust bo
 
 This section is what makes the rest of the document credible.
 
-- **Proportional liquidation.** `liquidate` currently seizes *all* collateral, and there is no
-  extraction path for seized funds. A borrower with 1,000 of collateral and 10 of debt would
-  lose everything. First deliverable of Tranche 1.
-- **Per-user exposure cap** — the only cap today is per asset.
+*(Updated 25 November 2026. Until then this list still said liquidation seized the whole
+position, that there was no per-user cap and that collateral was XLM only. All three had been
+built by then; the list was behind the code.)*
+
 - **Origination fee module** — `borrow` disburses the full amount, no deduction.
-- **Tokenized assets as collateral** — XLM only. Everything about RWA collateral is roadmap.
-- **Fiat ramp integration** — authenticated access to the provider works; the client is not
-  built.
+- **A loan in pesos.** The controller that lends a peso token is deployed and configured; its
+  reserve is not active and no loan has been made.
+- **A liquidation on the current controller.** Liquidation is proportional — at most half the
+  debt per call, and the rest of the collateral stays with the borrower — and a partial
+  liquidation ran on testnet on the previous instance
+  ([`2f4eae27`](https://stellar.expert/explorer/testnet/tx/2f4eae27e7ba653c9bb12e82c6d9f079d2e667304c6f6904c80b36a2d5f3f7c4):
+  health went from 99 to 120). None has run on the current one.
+- **Third-party tokenized assets beyond one issuer's sandbox.** CETES from the Etherfuse sandbox
+  is listed, priced and used as collateral on testnet. The other tokenized asset in the pool is a
+  test vault share we issued ourselves.
+- **A production fiat-ramp client.** A sandbox client runs on-ramp orders and a swap; idempotent
+  retries and webhook verification are not built.
+- **Issuer-freeze handling and bad-debt cover on-chain.** Written and tested; not deployed.
+- **Anything signed with an issuer.** What exists with Etherfuse is an organisation approved in
+  their sandbox, created by accepting their online terms. Nothing has been signed for production.
 - **dApp** — contracts and CLI only.
 - **An independent audit.** The security review to date was internal — the author's own,
   AI-assisted — with findings remediated on-chain. The full register, including open items
@@ -195,11 +226,14 @@ npm run validate-t1     # JSON status report for reviewers
 **Stellar testnet.** The credit cycle runs end to end on our own pool with our own oracle;
 evidence above and in [`audit/08_POOL_ACTIVATION.md`](audit/08_POOL_ACTIVATION.md).
 
-Grant funding covers, in order: **core hardening** (proportional liquidation, per-user caps,
-fee module, custody property tests) · **RWA collateral and the fiat ramp** (third-party SEP-40
-routing, first tokenized asset listed, ramp client, monitoring plan and threat model) ·
-**capped mainnet** (multisig and timelock, public SDK, and a pilot that publishes repayment
-rate **by reputation band** — the number that validates or refutes the whole thesis).
+Built since this section was first written, without funding: proportional liquidation,
+per-user caps, custody property tests, the first tokenized asset listed and priced, and a
+sandbox ramp client. Still ahead, in order: **a first pilot platform** — a named platform or
+payment operator running the engine on testnet for its own users or treasury · **the rest of
+the integration** (fee module, production ramp client, monitoring plan) · **capped mainnet**,
+only after an independent audit (multisig and timelock, a redesigned price guard, and a pilot
+that publishes repayment rate **by reputation band** — the number that validates or refutes
+the whole thesis).
 
 ## For integrators
 
@@ -223,7 +257,8 @@ live ABI: [`docs/integration/abi-v3.json`](docs/integration/abi-v3.json) · comp
 ## Team, license, disclosure
 
 Founder-led. Roles and the honest authorship distribution in [`docs/TEAM.md`](docs/TEAM.md) —
-verify with `git shortlog -sne --all`. Contact: zzzbedream@gmail.com
+verify with `git shortlog -sne --all`. Contact: zzzbedream@gmail.com ·
+X: [@vigenteprotocol](https://x.com/vigenteprotocol) · Site: [vigenteprotocol.tech](https://vigenteprotocol.tech)
 
 AI assistance disclosed per SCF Open Track requirements in
 [`docs/AI_DISCLOSURE.md`](docs/AI_DISCLOSURE.md). Threat model:
@@ -237,7 +272,7 @@ MIT — see [LICENSE](./LICENSE).
   <strong>Vigente Protocol</strong><br/>
   Reputation-priced credit for tokenized assets on Soroban<br/>
   <a href="audit/08_POOL_ACTIVATION.md">Evidence</a> ·
-  <a href="https://stellar.expert/explorer/testnet/contract/CAH2BHAEBYUCVQ4UQGNZKCLDD2KLP7GY3F2PWMNMXOZ7S54WLHG3C75W">Margin controller</a> ·
+  <a href="https://stellar.expert/explorer/testnet/contract/CCQDYAINLCBYBVMU4TAESACSMX4KTMSK3UFTHYIOLBIFBFPF2LCYNYJ6">Margin controller</a> ·
   <a href="https://stellar.expert/explorer/testnet/contract/CDYUHA3TPDCAP5FAJMVPMFDW35ZCPSUV2ND2K2G5EB3QYMUDERKPHNUI">Pool</a>
 </p>
 

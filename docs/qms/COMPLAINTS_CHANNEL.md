@@ -25,7 +25,7 @@ de [RELEASE_QUALITY_GATES.md](RELEASE_QUALITY_GATES.md)).
 | Medio / bajo | 3–5 días | 15–30 días |
 
 ## Responsable
-Responsable de protección al cliente (rol del COO hasta nombrar uno dedicado — CP8).
+Responsable de protección al cliente (el fundador, hasta nombrar uno dedicado — CP8).
 
 ## Estado
 🔴 Pendiente de activar. Disparador: primer usuario real con datos personales. Hasta

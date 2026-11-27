@@ -1,5 +1,41 @@
 # 12 — Findings closed (2026-09-02)
 
+> **Update — 25 November 2026.** This file is dated 2 September and is behind the code. The
+> body below is kept as the record; this block says what changed.
+>
+> - **Where the code runs now.** The current controller is deployed at `CCQDYAIN…` (USDC debt)
+>   and, as a second instance of the same binary, at `CARG2RUN…` (peso debt). `CAH2BHAE…`,
+>   called "active" below, is the previous instance. It is still live and has test positions
+>   open; the two accounts used for the ratio comparison below have since withdrawn their
+>   collateral.
+> - **N-01 and N-02 have fixes in that code, not yet exercised on-chain.** `sweep_interest` can
+>   be called by anyone and its only destination is a repayment against the pool.
+>   `sweep_seized` is admin-only and its only destination is the treasury address fixed at
+>   initialisation; neither takes a destination argument. Neither has been run in an on-chain
+>   transaction yet, and both findings remain open on `CAH2BHAE…`.
+> - **Still open:** **H-03** (deviation guard) and **M-07** (single-key admin). **Half closed:**
+>   M-01 and M-05, as recorded below.
+> - **New, opened 9 November 2026 — the tier ladder is not checked against the pool's reserve
+>   factors.** The controller validates each tier only against a global maximum. On this pool
+>   the tokenized-bond reserve has a 75 % collateral factor and the debt reserve a 95 %
+>   liability factor, a combined 71.25 % — below the 85 % the top tier allows. A top-tier
+>   borrower using that collateral could take the controller's aggregate position to the edge
+>   of what the pool accepts. The pool rejects a borrow that is unhealthy at the moment it is
+>   made, but a position at that edge has almost no buffer against a price move, and the pool
+>   could then liquidate the controller's aggregate position — which all its users share —
+>   before the controller's own threshold is reached. This breaks the invariant stated in the
+>   review report, that the ladder sits below the reserve factor. Not reached today: the only
+>   account that has posted that collateral is in the lowest tier (60 %). The fix — validate
+>   the ladder against the real reserve factors, or set it per asset — needs a new generation.
+> - **Written and tested, not deployed:** reporting an issuer freeze, and covering recorded bad
+>   debt.
+> - **Tests, run on 25 November 2026:** 192 across the three contracts — controller 99,
+>   aggregator 43, badge 45 + 5 smoke.
+> - **Operational note.** The testnet price feed stopped publishing the peso in mid-November.
+>   The aggregator returned no price rather than a stale one, so the peso-priced assets could
+>   not be valued until a fallback route is applied. That is H-03's "fails closed" behaviour,
+>   observed live.
+
 Follow-up to [`10_SECURITY_REVIEW_REPORT.md`](10_SECURITY_REVIEW_REPORT.md). One of the six
 SCF #45 rejection points was that our own review left open findings on the pool. This
 records which of them are now closed, with the commit, the tests and the transaction that

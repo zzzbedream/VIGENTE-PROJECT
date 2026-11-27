@@ -1,8 +1,14 @@
 # Team
 
-**Vigente is founder-led.** One person has written essentially all of the code; two others
-contribute in engineering support and commercial work. The founder is the sole shareholder —
-no other member holds equity in the project.
+**Vigente is founder-led, and it is two people.** One person has written essentially all of
+the code; one other person, the CTO, has contributed five commits plus design and review input.
+Both hold equity in the project; the founder is the majority shareholder.
+
+> **Correction — 25 November 2026.** Until today this document described three people,
+> including a Commercial Lead, and said a commercial agreement with Etherfuse had been signed.
+> Both were out of date or inaccurate. The team is two people. What exists with Etherfuse is an
+> organisation approved in their sandbox, created by accepting their online terms; nothing has
+> been signed for production.
 
 That is a smaller claim than this document used to make, and it is the accurate one. The SCF
 #41 review flagged execution risk for a solo builder, and the temptation is to answer it with
@@ -45,28 +51,14 @@ contracts, the isolated Blend pool and the credit cycle in
 
 **Role:** Backend and integrations, testing, UX engineering. Appointed CTO in August 2026.
 
-**Contribution to date:** two commits in the repository history, plus design and review input
-that does not appear as authorship. We are not going to describe that as co-development of the
-protocol, because it isn't.
+**Contribution to date:** five commits in the repository history, the last on 1 September 2026,
+plus design and review input that does not appear as authorship. We are not going to describe
+that as co-development of the protocol, because it isn't.
 
-**Scope in this grant:** frontend and integration surfaces, test-suite expansion, and the fiat
-ramp client — which is designed but not built.
+**Scope:** frontend and integration surfaces, test-suite expansion, and the fiat ramp client —
+a sandbox client exists today; the production client is not built.
 
-**Compensation:** grant disbursement for hours worked. No equity.
-
----
-
-## Commercial Lead — Mauricio Urra
-
-**Role:** Business development, commercial partnerships, pilot user acquisition.
-
-**Contribution to date:** no commits — the work is commercial, not code. The signed commercial
-agreement with Etherfuse and the partner pipeline are where this role shows up.
-
-**Scope in this grant:** partner conversations, pilot recruitment in the Chilean PyME segment,
-LP outreach, and Spanish-language commercial material.
-
-**Compensation:** grant disbursement for hours worked. No equity.
+**Compensation:** equity.
 
 ---
 
@@ -82,8 +74,8 @@ for contributor hours rather than backfilling an org chart.
 - **Communication:** async-first through the repository (issues, PRs) plus project chat, with a
   weekly sync.
 - **Technical decisions:** the founder has final authority.
-- **Commercial decisions:** the Commercial Lead leads, with founder input.
-- **Financial decisions** (grant disbursement, contractor hiring): founder, as sole
+- **Commercial decisions:** the founder.
+- **Financial decisions** (grant disbursement, contractor hiring): the founder, as majority
   shareholder.
 - **Conflict resolution:** documented discussion in repository issues. There is no external
   arbitrator; the team is small enough that adding one now would be theatre.
@@ -107,4 +99,4 @@ and we want to hear about it.
 
 ---
 
-*Last updated: 2026-08-09*
+*Last updated: 2026-11-25*
